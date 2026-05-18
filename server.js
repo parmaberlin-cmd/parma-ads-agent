@@ -77,7 +77,7 @@ app.get("/insights", async (req, res) => {
     if (!token) return res.status(500).json({ ok: false, error: "META_USER_ACCESS_TOKEN missing" });
     if (!account) return res.status(400).json({ ok: false, error: "account missing" });
 
-    const response = await axios.get(⁠ https://graph.facebook.com/v25.0/${account}/insights ⁠, {
+    const response = await axios.get(⁠`https://graph.facebook.com/v25.0/${account}/insights ⁠, {
       params: {
         access_token: token,
         level: "campaign",
