@@ -67,6 +67,29 @@ app.get("/campaigns", async (req, res) => {
     res.status(500).json({ ok: false, error: error.response?.data || error.message });
   }
 });
-app.listen(PORT, () => {
+app.get("/insights", async (req, res) => {
+  try {
+    const token = userToken();
+    const account = req.query.account;
+    const since = req.query.since || "2024-01-01";
+    const until = req.query.until || "today";
+
+    if (!token) return res.status(500).json({ ok: false, error: "META_USER_ACCESS_TOKEN missing" });
+    if (!account) return res.status(400).json({ ok: false, error: "account missing" });
+
+    const response = await axios.get(⁠ https://graph.facebook.com/v25.0/${account}/insights ⁠, {
+      params: {
+        access_token: token,
+        level: "campaign",
+        fields: "campaign_id,campaign_name,spend,impressions,reach,clicks,cpc,cpm,ctr,actions",
+        time_range: JSON.stringify({ since, until }),
+      },
+    });
+
+    res.json({ ok: true, insights: response.data });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.response?.data || error.message });
+  }
+});app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
