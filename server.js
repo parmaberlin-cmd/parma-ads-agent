@@ -76,7 +76,7 @@ app.get("/meta/campaigns", async (req, res) => {
     });
   }
 });
-app.post("/meta/campaign/:id/start", async (req, res) => {
+app.get("/meta/campaign/:id/start", async (req, res) => {
   try {
     const token = process.env.META_ACCESS_TOKEN;
     const campaignId = req.params.id;
