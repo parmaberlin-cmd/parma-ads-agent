@@ -97,7 +97,10 @@ app.get("/meta/campaign/:id/start", async (req, res) => {
     res.status(500).json({
       error: error.response?.data || error.message
     });
-  }app.get("/meta/campaign/:id/stop", async (req, res) => {
+  }
+});
+
+app.get("/meta/campaign/:id/stop", async (req, res) => {
   try {
     const token = process.env.META_ACCESS_TOKEN;
     const campaignId = req.params.id;
