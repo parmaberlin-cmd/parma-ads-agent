@@ -123,6 +123,6 @@ app.get("/meta/campaign/:id/stop", async (req, res) => {
     });
   }
 });
-});app.listen(PORT, () => {
+app.listen(PORT, () => {
   console.log(`Parma Ads Agent running on port ${PORT}`);
 });
