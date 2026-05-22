@@ -1,4 +1,4 @@
-const express = require("express");
+https://graph.facebook.com/v25.0/act_${process.env.META_AD_ACCOUNT_ID}https://graph.facebook.com/v25.0/act_${process.env.META_AD_ACCOUNT_ID}/campaignsconst express = require("express");
 const axios = require("axios");
 require("dotenv").config();
 
