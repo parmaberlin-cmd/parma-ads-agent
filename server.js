@@ -229,6 +229,89 @@ app.post("/tools/campaign/start", async (req, res) => {
       error: error.response?.data || error.message
     });
   }
+});app.get("/tools/test-ui", (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Parma Ads Agent</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          max-width: 800px;
+          margin: 40px auto;
+          padding: 20px;
+        }
+        button {
+          padding: 12px 20px;
+          margin: 10px;
+          font-size: 16px;
+          cursor: pointer;
+        }
+        input {
+          width: 100%;
+          padding: 10px;
+          font-size: 16px;
+          margin-bottom: 20px;
+        }
+        pre {
+          background: #f5f5f5;
+          padding: 20px;
+          overflow: auto;
+        }
+      </style>
+    </head>
+    <body>
+      <h1>Parma Ads Agent</h1>
+
+      <input id="campaignId" value="6262623468181" />
+
+      <button onclick="pauseCampaign()">Pause Campaign</button>
+      <button onclick="startCampaign()">Start Campaign</button>
+      <button onclick="loadCampaigns()">Load Campaigns</button>
+
+      <pre id="output">Ready.</pre>
+
+      <script>
+        async function pauseCampaign() {
+          const campaignId = document.getElementById('campaignId').value;
+
+          const res = await fetch('/tools/campaign/pause', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campaign_id: campaignId })
+          });
+
+          const data = await res.json();
+          document.getElementById('output').textContent =
+            JSON.stringify(data, null, 2);
+        }
+
+        async function startCampaign() {
+          const campaignId = document.getElementById('campaignId').value;
+
+          const res = await fetch('/tools/campaign/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campaign_id: campaignId })
+          });
+
+          const data = await res.json();
+          document.getElementById('output').textContent =
+            JSON.stringify(data, null, 2);
+        }
+
+        async function loadCampaigns() {
+          const res = await fetch('/tools/campaigns');
+          const data = await res.json();
+
+          document.getElementById('output').textContent =
+            JSON.stringify(data, null, 2);
+        }
+      </script>
+    </body>
+    </html>
+  `);
 });
 app.listen(PORT, () => {
   console.log(`Parma Ads Agent running on port ${PORT}`);
