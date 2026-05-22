@@ -3,6 +3,18 @@ const axios = require("axios");
 require("dotenv").config();
 
 const app = express();
+function requireApiKey(req, res, next) {
+  const apiKey = req.headers["x-api-key"];
+
+  if (!apiKey || apiKey !== process.env.PARMA_AGENT_API_KEY) {
+    return res.status(401).json({
+      success: false,
+      error: "Unauthorized"
+    });
+  }
+
+  next();
+}
 app.use(express.json());
 
 const PORT = process.env.PORT || 8080;
@@ -144,7 +156,7 @@ app.get("/meta/campaign/:id/stop", async (req, res) => {
       error: error.response?.data || error.message
     });
   }
-});app.get("/tools/campaigns", async (req, res) => {
+});app.get("/tools/campaigns", requireApiKey, async (req, res) => {
   try {
     const token = process.env.META_ACCESS_TOKEN;
     const adAccountId = process.env.META_AD_ACCOUNT_ID;
@@ -171,7 +183,7 @@ app.get("/meta/campaign/:id/stop", async (req, res) => {
   }
 });
 
-app.post("/tools/campaign/pause", async (req, res) => {
+app.post("/tools/campaign/pause", requireApiKey, async (req, res) => {
   try {
     const token = process.env.META_ACCESS_TOKEN;
     const campaignId = req.body.campaign_id;
@@ -201,7 +213,7 @@ app.post("/tools/campaign/pause", async (req, res) => {
   }
 });
 
-app.post("/tools/campaign/start", async (req, res) => {
+app.post("/tools/campaign/start", requireApiKey, async (req, res) => {
   try {
     const token = process.env.META_ACCESS_TOKEN;
     const campaignId = req.body.campaign_id;
