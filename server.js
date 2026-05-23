@@ -15,12 +15,13 @@ const META_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
 
 const metaClient = axios.create({
   baseURL: META_BASE_URL,
-  timeout: 15000,
+  timeout: 20000,
 });
 
 function requireApiKey(req, res, next) {
   const apiKey =
     req.headers["x-api-key"] ||
+    req.headers["X-Api-Key"] ||
     req.headers["authorization"]?.replace("Bearer ", "");
 
   if (!PARMA_AGENT_API_KEY) {
@@ -73,24 +74,158 @@ async function getCampaigns() {
   return response.data.data || [];
 }
 
+async function getCampaignById(campaignId) {
+  const response = await metaClient.get(`/${campaignId}`, {
+    params: {
+      access_token: META_ACCESS_TOKEN,
+      fields: "id,name,status,effective_status,objective,created_time,updated_time,daily_budget,lifetime_budget,buying_type,special_ad_categories",
+    },
+  });
+
+  return response.data;
+}
+
 async function campaignExists(campaignId) {
   const campaigns = await getCampaigns();
   return campaigns.some((campaign) => campaign.id === campaignId);
 }
 
 async function updateCampaignStatus(campaignId, status) {
-  const response = await metaClient.post(
-    `/${campaignId}`,
-    null,
-    {
-      params: {
-        access_token: META_ACCESS_TOKEN,
-        status,
-      },
-    }
-  );
+  const response = await metaClient.post(`/${campaignId}`, null, {
+    params: {
+      access_token: META_ACCESS_TOKEN,
+      status,
+    },
+  });
 
   return response.data;
+}
+
+async function getAdSets(campaignId) {
+  const response = await metaClient.get(`/${campaignId}/adsets`, {
+    params: {
+      access_token: META_ACCESS_TOKEN,
+      fields:
+        "id,name,status,effective_status,optimization_goal,billing_event,daily_budget,lifetime_budget,start_time,end_time,created_time,updated_time,targeting",
+      limit: 100,
+    },
+  });
+
+  return response.data.data || [];
+}
+
+async function getAdsForAdSet(adSetId) {
+  const response = await metaClient.get(`/${adSetId}/ads`, {
+    params: {
+      access_token: META_ACCESS_TOKEN,
+      fields:
+        "id,name,status,effective_status,created_time,updated_time,ad_review_feedback,creative{id,name,object_story_spec,thumbnail_url}",
+      limit: 100,
+    },
+  });
+
+  return response.data.data || [];
+}
+
+async function getCampaignInsights(campaignId) {
+  try {
+    const response = await metaClient.get(`/${campaignId}/insights`, {
+      params: {
+        access_token: META_ACCESS_TOKEN,
+        fields:
+          "spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,actions,cost_per_action_type,date_start,date_stop",
+        date_preset: "last_30d",
+        level: "campaign",
+        limit: 100,
+      },
+    });
+
+    return response.data.data || [];
+  } catch (error) {
+    return {
+      unavailable: true,
+      error: cleanMetaError(error),
+    };
+  }
+}
+
+async function getAdSetInsights(adSetId) {
+  try {
+    const response = await metaClient.get(`/${adSetId}/insights`, {
+      params: {
+        access_token: META_ACCESS_TOKEN,
+        fields:
+          "spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,actions,cost_per_action_type,date_start,date_stop",
+        date_preset: "last_30d",
+        level: "adset",
+        limit: 100,
+      },
+    });
+
+    return response.data.data || [];
+  } catch (error) {
+    return {
+      unavailable: true,
+      error: cleanMetaError(error),
+    };
+  }
+}
+
+async function getAdInsights(adId) {
+  try {
+    const response = await metaClient.get(`/${adId}/insights`, {
+      params: {
+        access_token: META_ACCESS_TOKEN,
+        fields:
+          "spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,actions,cost_per_action_type,date_start,date_stop",
+        date_preset: "last_30d",
+        level: "ad",
+        limit: 100,
+      },
+    });
+
+    return response.data.data || [];
+  } catch (error) {
+    return {
+      unavailable: true,
+      error: cleanMetaError(error),
+    };
+  }
+}
+
+async function getCampaignStructure(campaignId) {
+  const campaign = await getCampaignById(campaignId);
+  const campaignInsights = await getCampaignInsights(campaignId);
+  const adsets = await getAdSets(campaignId);
+
+  const adsetsWithAds = [];
+
+  for (const adset of adsets) {
+    const adsetInsights = await getAdSetInsights(adset.id);
+    const ads = await getAdsForAdSet(adset.id);
+
+    const adsWithInsights = [];
+
+    for (const ad of ads) {
+      const adInsights = await getAdInsights(ad.id);
+      adsWithInsights.push({
+        ...ad,
+        insights_last_30d: adInsights,
+      });
+    }
+
+    adsetsWithAds.push({
+      ...adset,
+      insights_last_30d: adsetInsights,
+      ads: adsWithInsights,
+    });
+  }
+
+  return {
+    campaign,
+    insights_last_30d: campaignInsights,
+    adsets: adsetsWithAds,
+  };
 }
 
 app.get("/", (req, res) => {
@@ -213,6 +348,27 @@ app.get("/meta/campaign/:id/start", async (req, res) => {
   }
 });
 
+app.get("/meta/campaign/:id/structure", async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+
+  const campaignId = req.params.id;
+
+  try {
+    const structure = await getCampaignStructure(campaignId);
+
+    res.json({
+      success: true,
+      campaign_id: campaignId,
+      structure,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: cleanMetaError(error),
+    });
+  }
+});
+
 app.get("/tools/campaigns", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
@@ -309,6 +465,44 @@ app.post("/tools/campaign/start", requireApiKey, async (req, res) => {
   }
 });
 
+app.post("/tools/campaign/structure", requireApiKey, async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+
+  const { campaign_id } = req.body;
+
+  if (!campaign_id) {
+    return res.status(400).json({
+      success: false,
+      error: "campaign_id is required",
+    });
+  }
+
+  try {
+    const exists = await campaignExists(campaign_id);
+
+    if (!exists) {
+      return res.status(404).json({
+        success: false,
+        error: "Campaign not found",
+        campaign_id,
+      });
+    }
+
+    const structure = await getCampaignStructure(campaign_id);
+
+    res.json({
+      success: true,
+      campaign_id,
+      structure,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: cleanMetaError(error),
+    });
+  }
+});
+
 app.get("/tools/test-ui", (req, res) => {
   res.send(`
 <!DOCTYPE html>
@@ -345,6 +539,9 @@ app.get("/tools/test-ui", (req, res) => {
     .start {
       background: #1b7f3a;
     }
+    .structure {
+      background: #2357c6;
+    }
     .campaign {
       background: white;
       border-radius: 10px;
@@ -360,6 +557,7 @@ app.get("/tools/test-ui", (req, res) => {
       padding: 12px;
       border-radius: 8px;
       display: none;
+      white-space: pre-wrap;
     }
     .success {
       background: #e3f7e9;
@@ -368,6 +566,14 @@ app.get("/tools/test-ui", (req, res) => {
     .error {
       background: #fde7e7;
       color: #8a1111;
+    }
+    pre {
+      background: #111;
+      color: #eee;
+      padding: 14px;
+      overflow-x: auto;
+      border-radius: 8px;
+      max-height: 500px;
     }
   </style>
 </head>
@@ -378,6 +584,7 @@ app.get("/tools/test-ui", (req, res) => {
 
   <div id="message" class="message"></div>
   <div id="campaigns"></div>
+  <pre id="debug" style="display:none;"></pre>
 
   <script>
     async function loadCampaigns() {
@@ -405,6 +612,7 @@ app.get("/tools/test-ui", (req, res) => {
             <p>Status: <span class="status">\${campaign.status} / \${campaign.effective_status}</span></p>
             <button class="pause" onclick="pauseCampaign('\${campaign.id}')">Pause</button>
             <button class="start" onclick="startCampaign('\${campaign.id}')">Start</button>
+            <button class="structure" onclick="showStructure('\${campaign.id}')">Structure</button>
           \`;
 
           container.appendChild(div);
@@ -422,6 +630,27 @@ app.get("/tools/test-ui", (req, res) => {
 
     async function startCampaign(id) {
       await callAction("/meta/campaign/" + id + "/start", "Campaign started");
+    }
+
+    async function showStructure(id) {
+      showMessage("Loading campaign structure...", true);
+
+      try {
+        const response = await fetch("/meta/campaign/" + id + "/structure");
+        const data = await response.json();
+
+        const debug = document.getElementById("debug");
+        debug.style.display = "block";
+        debug.textContent = JSON.stringify(data, null, 2);
+
+        if (data.success) {
+          showMessage("Structure loaded", true);
+        } else {
+          showMessage("Error loading structure", false);
+        }
+      } catch (err) {
+        showMessage("Network error while loading structure", false);
+      }
     }
 
     async function callAction(url, successMessage) {
