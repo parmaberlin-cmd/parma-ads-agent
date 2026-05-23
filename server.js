@@ -731,3 +731,31 @@ app.get("/tools/test-ui", (req, res) => {
 app.listen(PORT, () => {
 console.log("Parma Growth Operator running on port " + PORT);
 });
+app.get("/tools/campaign/:id/metrics", requireApiKey, async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+
+  const campaignId = req.params.id;
+
+  try {
+    const response = await metaClient.get(`/${campaignId}/insights`, {
+      params: {
+        access_token: META_ACCESS_TOKEN,
+        date_preset: "last_30d",
+        fields: "campaign_id,campaign_name,spend,impressions,reach,clicks,ctr,cpc,cpm,actions,cost_per_action_type",
+      },
+    });
+
+    res.json({
+      success: true,
+      campaign_id: campaignId,
+      period: "last_30d",
+      metrics: response.data.data || [],
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      campaign_id: campaignId,
+      error: cleanMetaError(error),
+    });
+  }
+});
