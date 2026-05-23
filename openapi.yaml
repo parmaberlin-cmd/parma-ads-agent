@@ -1,0 +1,116 @@
+openapi: 3.1.0
+info:
+  title: Parma Ads Agent
+  version: 1.0.0
+  description: API per leggere e controllare campagne Meta Ads
+
+servers:
+  - url: https://supportive-stillness-production-ec37.up.railway.app
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+
+  schemas:
+    Campaign:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        effective_status:
+          type: string
+        objective:
+          type: string
+
+    CampaignListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        campaigns:
+          type: array
+          items:
+            $ref: "#/components/schemas/Campaign"
+
+    CampaignActionRequest:
+      type: object
+      required:
+        - campaign_id
+      properties:
+        campaign_id:
+          type: string
+
+    CampaignActionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        campaign_id:
+          type: string
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /tools/campaigns:
+    get:
+      operationId: listCampaigns
+      summary: Lista campagne
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignListResponse"
+
+  /tools/campaign/pause:
+    post:
+      operationId: pauseCampaign
+      summary: Pausa campagna
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignActionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignActionResponse"
+
+  /tools/campaign/start:
+    post:
+      operationId: startCampaign
+      summary: Avvia campagna
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignActionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignActionResponse"
