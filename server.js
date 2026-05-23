@@ -7,8 +7,12 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN;
-const META_AD_ACCOUNT_ID = process.env.META_AD_ACCOUNT_ID;
+let META_AD_ACCOUNT_ID = process.env.META_AD_ACCOUNT_ID;
 const PARMA_AGENT_API_KEY = process.env.PARMA_AGENT_API_KEY;
+
+if (META_AD_ACCOUNT_ID && !META_AD_ACCOUNT_ID.startsWith("act_")) {
+  META_AD_ACCOUNT_ID = `act_${META_AD_ACCOUNT_ID}`;
+}
 
 const META_API_VERSION = "v19.0";
 const META_BASE_URL = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -21,7 +25,6 @@ const metaClient = axios.create({
 function requireApiKey(req, res, next) {
   const apiKey =
     req.headers["x-api-key"] ||
-    req.headers["X-Api-Key"] ||
     req.headers["authorization"]?.replace("Bearer ", "");
 
   if (!PARMA_AGENT_API_KEY) {
@@ -53,20 +56,21 @@ function checkMetaConfig(res) {
 }
 
 function cleanMetaError(error) {
-  if (error.response?.data) {
-    return error.response.data;
-  }
+  return error.response?.data || { message: error.message || "Unknown error" };
+}
 
-  return {
-    message: error.message || "Unknown Meta API error",
-  };
+function eurToMetaCents(eur) {
+  const value = Number(eur);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return Math.round(value * 100);
 }
 
 async function getCampaigns() {
   const response = await metaClient.get(`/${META_AD_ACCOUNT_ID}/campaigns`, {
     params: {
       access_token: META_ACCESS_TOKEN,
-      fields: "id,name,status,effective_status,objective,created_time,updated_time",
+      fields:
+        "id,name,status,effective_status,objective,created_time,updated_time,daily_budget,lifetime_budget,buying_type,special_ad_categories",
       limit: 100,
     },
   });
@@ -74,11 +78,12 @@ async function getCampaigns() {
   return response.data.data || [];
 }
 
-async function getCampaignById(campaignId) {
+async function getCampaign(campaignId) {
   const response = await metaClient.get(`/${campaignId}`, {
     params: {
       access_token: META_ACCESS_TOKEN,
-      fields: "id,name,status,effective_status,objective,created_time,updated_time,daily_budget,lifetime_budget,buying_type,special_ad_categories",
+      fields:
+        "id,name,status,effective_status,objective,created_time,updated_time,daily_budget,lifetime_budget,buying_type,special_ad_categories",
     },
   });
 
@@ -101,137 +106,127 @@ async function updateCampaignStatus(campaignId, status) {
   return response.data;
 }
 
-async function getAdSets(campaignId) {
-  const response = await metaClient.get(`/${campaignId}/adsets`, {
+async function getInsights(objectId, datePreset = "last_30d") {
+  const response = await metaClient.get(`/${objectId}/insights`, {
     params: {
       access_token: META_ACCESS_TOKEN,
+      date_preset: datePreset,
       fields:
-        "id,name,status,effective_status,optimization_goal,billing_event,daily_budget,lifetime_budget,start_time,end_time,created_time,updated_time,targeting",
-      limit: 100,
+        "spend,impressions,reach,clicks,ctr,cpc,cpm,frequency,actions,cost_per_action_type",
     },
   });
 
   return response.data.data || [];
-}
-
-async function getAdsForAdSet(adSetId) {
-  const response = await metaClient.get(`/${adSetId}/ads`, {
-    params: {
-      access_token: META_ACCESS_TOKEN,
-      fields:
-        "id,name,status,effective_status,created_time,updated_time,ad_review_feedback,creative{id,name,object_story_spec,thumbnail_url}",
-      limit: 100,
-    },
-  });
-
-  return response.data.data || [];
-}
-
-async function getCampaignInsights(campaignId) {
-  try {
-    const response = await metaClient.get(`/${campaignId}/insights`, {
-      params: {
-        access_token: META_ACCESS_TOKEN,
-        fields:
-          "spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,actions,cost_per_action_type,date_start,date_stop",
-        date_preset: "last_30d",
-        level: "campaign",
-        limit: 100,
-      },
-    });
-
-    return response.data.data || [];
-  } catch (error) {
-    return {
-      unavailable: true,
-      error: cleanMetaError(error),
-    };
-  }
-}
-
-async function getAdSetInsights(adSetId) {
-  try {
-    const response = await metaClient.get(`/${adSetId}/insights`, {
-      params: {
-        access_token: META_ACCESS_TOKEN,
-        fields:
-          "spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,actions,cost_per_action_type,date_start,date_stop",
-        date_preset: "last_30d",
-        level: "adset",
-        limit: 100,
-      },
-    });
-
-    return response.data.data || [];
-  } catch (error) {
-    return {
-      unavailable: true,
-      error: cleanMetaError(error),
-    };
-  }
-}
-
-async function getAdInsights(adId) {
-  try {
-    const response = await metaClient.get(`/${adId}/insights`, {
-      params: {
-        access_token: META_ACCESS_TOKEN,
-        fields:
-          "spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,actions,cost_per_action_type,date_start,date_stop",
-        date_preset: "last_30d",
-        level: "ad",
-        limit: 100,
-      },
-    });
-
-    return response.data.data || [];
-  } catch (error) {
-    return {
-      unavailable: true,
-      error: cleanMetaError(error),
-    };
-  }
 }
 
 async function getCampaignStructure(campaignId) {
-  const campaign = await getCampaignById(campaignId);
-  const campaignInsights = await getCampaignInsights(campaignId);
-  const adsets = await getAdSets(campaignId);
+  const campaign = await getCampaign(campaignId);
+  const campaignInsights = await getInsights(campaignId, "last_30d");
 
-  const adsetsWithAds = [];
+  const adsetsResponse = await metaClient.get(`/${campaignId}/adsets`, {
+    params: {
+      access_token: META_ACCESS_TOKEN,
+      fields:
+        "id,name,status,effective_status,daily_budget,lifetime_budget,bid_strategy,optimization_goal,billing_event,start_time,end_time,created_time,updated_time,targeting",
+      limit: 100,
+    },
+  });
+
+  const adsets = adsetsResponse.data.data || [];
+
+  const enrichedAdsets = [];
 
   for (const adset of adsets) {
-    const adsetInsights = await getAdSetInsights(adset.id);
-    const ads = await getAdsForAdSet(adset.id);
+    const adsetInsights = await getInsights(adset.id, "last_30d");
 
-    const adsWithInsights = [];
+    const adsResponse = await metaClient.get(`/${adset.id}/ads`, {
+      params: {
+        access_token: META_ACCESS_TOKEN,
+        fields:
+          "id,name,status,effective_status,created_time,updated_time,creative{id,name,object_story_spec,thumbnail_url}",
+        limit: 100,
+      },
+    });
+
+    const ads = adsResponse.data.data || [];
+
+    const enrichedAds = [];
 
     for (const ad of ads) {
-      const adInsights = await getAdInsights(ad.id);
-      adsWithInsights.push({
+      const adInsights = await getInsights(ad.id, "last_30d");
+      enrichedAds.push({
         ...ad,
         insights_last_30d: adInsights,
       });
     }
 
-    adsetsWithAds.push({
+    enrichedAdsets.push({
       ...adset,
       insights_last_30d: adsetInsights,
-      ads: adsWithInsights,
+      ads: enrichedAds,
     });
   }
 
   return {
     campaign,
     insights_last_30d: campaignInsights,
-    adsets: adsetsWithAds,
+    adsets: enrichedAdsets,
+  };
+}
+
+function buildDinnerBaselineTemplate() {
+  return {
+    success: true,
+    template_name: "Parma Dinner Walk-in Baseline",
+    business_goal: "Riempire la sera con traffico spontaneo locale e profittevole.",
+    principle:
+      "Baseline first: non contraddire decisioni operative già validate senza motivo economico chiaro.",
+    campaigns: [
+      {
+        name: "Parma Early Dinner Push",
+        time_window: "17:00–20:30",
+        default_budget_eur: 3.5,
+        goal: "Innescare la serata e riempire i primi tavoli.",
+      },
+      {
+        name: "Parma Late Dinner Push",
+        time_window: "20:30–closing",
+        default_budget_eur: 6,
+        goal: "Intercettare persone già fuori o decisioni spontanee tardive.",
+      },
+    ],
+    targeting_defaults: {
+      geo_radius_km: "3–5 km dal locale",
+      area: "Kreuzberg, Friedrichshain, Neukölln nord, Mitte sud",
+      age: "24–55",
+      placements: [
+        "Instagram Stories",
+        "Instagram Reels",
+        "Facebook Feed",
+        "Facebook Reels",
+      ],
+    },
+    creative_direction: [
+      "pizza calda / forno",
+      "vino versato",
+      "atmosfera serale",
+      "Kreuzberg summer evening",
+      "messaggio autentico, non discount cheap",
+    ],
+    guardrails: [
+      "No campagne fuori Germania",
+      "No radius enorme tipo 48 km",
+      "No budget alto senza conferma",
+      "No modifica di campagne recruiting per obiettivi dinner",
+      "No full autopilot publishing senza approvazione",
+    ],
   };
 }
 
 app.get("/", (req, res) => {
   res.json({
     success: true,
-    service: "Parma Ads Agent",
+    service: "Parma Growth Operator",
     status: "running",
   });
 });
@@ -271,43 +266,7 @@ app.get("/meta/campaigns", async (req, res) => {
 
   try {
     const campaigns = await getCampaigns();
-
-    res.json({
-      success: true,
-      campaigns,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: cleanMetaError(error),
-    });
-  }
-});
-
-app.get("/meta/campaign/:id/stop", async (req, res) => {
-  if (!checkMetaConfig(res)) return;
-
-  const campaignId = req.params.id;
-
-  try {
-    const exists = await campaignExists(campaignId);
-
-    if (!exists) {
-      return res.status(404).json({
-        success: false,
-        error: "Campaign not found",
-        campaign_id: campaignId,
-      });
-    }
-
-    const result = await updateCampaignStatus(campaignId, "PAUSED");
-
-    res.json({
-      success: true,
-      message: "Campaign paused",
-      campaign_id: campaignId,
-      meta_response: result,
-    });
+    res.json({ success: true, campaigns });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -323,7 +282,6 @@ app.get("/meta/campaign/:id/start", async (req, res) => {
 
   try {
     const exists = await campaignExists(campaignId);
-
     if (!exists) {
       return res.status(404).json({
         success: false,
@@ -348,17 +306,45 @@ app.get("/meta/campaign/:id/start", async (req, res) => {
   }
 });
 
-app.get("/meta/campaign/:id/structure", async (req, res) => {
+app.get("/meta/campaign/:id/stop", async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
   const campaignId = req.params.id;
 
   try {
-    const structure = await getCampaignStructure(campaignId);
+    const exists = await campaignExists(campaignId);
+    if (!exists) {
+      return res.status(404).json({
+        success: false,
+        error: "Campaign not found",
+        campaign_id: campaignId,
+      });
+    }
+
+    const result = await updateCampaignStatus(campaignId, "PAUSED");
 
     res.json({
       success: true,
+      message: "Campaign paused",
       campaign_id: campaignId,
+      meta_response: result,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: cleanMetaError(error),
+    });
+  }
+});
+
+app.get("/meta/campaign/:id/structure", async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+
+  try {
+    const structure = await getCampaignStructure(req.params.id);
+    res.json({
+      success: true,
+      campaign_id: req.params.id,
       structure,
     });
   } catch (error) {
@@ -374,50 +360,7 @@ app.get("/tools/campaigns", requireApiKey, async (req, res) => {
 
   try {
     const campaigns = await getCampaigns();
-
-    res.json({
-      success: true,
-      campaigns,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: cleanMetaError(error),
-    });
-  }
-});
-
-app.post("/tools/campaign/pause", requireApiKey, async (req, res) => {
-  if (!checkMetaConfig(res)) return;
-
-  const { campaign_id } = req.body;
-
-  if (!campaign_id) {
-    return res.status(400).json({
-      success: false,
-      error: "campaign_id is required",
-    });
-  }
-
-  try {
-    const exists = await campaignExists(campaign_id);
-
-    if (!exists) {
-      return res.status(404).json({
-        success: false,
-        error: "Campaign not found",
-        campaign_id,
-      });
-    }
-
-    const result = await updateCampaignStatus(campaign_id, "PAUSED");
-
-    res.json({
-      success: true,
-      message: "Campaign paused",
-      campaign_id,
-      meta_response: result,
-    });
+    res.json({ success: true, campaigns });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -440,7 +383,6 @@ app.post("/tools/campaign/start", requireApiKey, async (req, res) => {
 
   try {
     const exists = await campaignExists(campaign_id);
-
     if (!exists) {
       return res.status(404).json({
         success: false,
@@ -465,7 +407,7 @@ app.post("/tools/campaign/start", requireApiKey, async (req, res) => {
   }
 });
 
-app.post("/tools/campaign/structure", requireApiKey, async (req, res) => {
+app.post("/tools/campaign/pause", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
   const { campaign_id } = req.body;
@@ -479,7 +421,6 @@ app.post("/tools/campaign/structure", requireApiKey, async (req, res) => {
 
   try {
     const exists = await campaignExists(campaign_id);
-
     if (!exists) {
       return res.status(404).json({
         success: false,
@@ -488,6 +429,64 @@ app.post("/tools/campaign/structure", requireApiKey, async (req, res) => {
       });
     }
 
+    const result = await updateCampaignStatus(campaign_id, "PAUSED");
+
+    res.json({
+      success: true,
+      message: "Campaign paused",
+      campaign_id,
+      meta_response: result,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: cleanMetaError(error),
+    });
+  }
+});
+
+app.post("/tools/campaign/metrics", requireApiKey, async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+
+  const { campaign_id, date_preset } = req.body;
+
+  if (!campaign_id) {
+    return res.status(400).json({
+      success: false,
+      error: "campaign_id is required",
+    });
+  }
+
+  try {
+    const insights = await getInsights(campaign_id, date_preset || "last_30d");
+
+    res.json({
+      success: true,
+      campaign_id,
+      date_preset: date_preset || "last_30d",
+      insights,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: cleanMetaError(error),
+    });
+  }
+});
+
+app.post("/tools/campaign/structure", requireApiKey, async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+
+  const { campaign_id } = req.body;
+
+  if (!campaign_id) {
+    return res.status(400).json({
+      success: false,
+      error: "campaign_id is required",
+    });
+  }
+
+  try {
     const structure = await getCampaignStructure(campaign_id);
 
     res.json({
@@ -503,24 +502,79 @@ app.post("/tools/campaign/structure", requireApiKey, async (req, res) => {
   }
 });
 
+app.post("/tools/campaign/update-budget", requireApiKey, async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+
+  const { campaign_id, daily_budget_eur } = req.body;
+
+  if (!campaign_id) {
+    return res.status(400).json({
+      success: false,
+      error: "campaign_id is required",
+    });
+  }
+
+  const dailyBudgetCents = eurToMetaCents(daily_budget_eur);
+
+  if (!dailyBudgetCents) {
+    return res.status(400).json({
+      success: false,
+      error: "daily_budget_eur must be a positive number",
+    });
+  }
+
+  if (dailyBudgetCents > 2000) {
+    return res.status(400).json({
+      success: false,
+      error:
+        "Budget guardrail: daily budget above 20 EUR requires manual backend change",
+    });
+  }
+
+  try {
+    const response = await metaClient.post(`/${campaign_id}`, null, {
+      params: {
+        access_token: META_ACCESS_TOKEN,
+        daily_budget: dailyBudgetCents,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: "Campaign budget updated",
+      campaign_id,
+      daily_budget_eur,
+      daily_budget_meta_cents: dailyBudgetCents,
+      meta_response: response.data,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: cleanMetaError(error),
+    });
+  }
+});
+
+app.get("/tools/dinner-baseline-template", requireApiKey, (req, res) => {
+  res.json(buildDinnerBaselineTemplate());
+});
+
 app.get("/tools/test-ui", (req, res) => {
   res.send(`
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>Parma Ads Agent</title>
+  <title>Parma Growth Operator</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 900px;
+      max-width: 1000px;
       margin: 40px auto;
       padding: 20px;
       background: #f7f7f7;
     }
-    h1 {
-      color: #222;
-    }
+    h1 { color: #222; }
     button {
       padding: 8px 14px;
       margin: 4px;
@@ -530,18 +584,10 @@ app.get("/tools/test-ui", (req, res) => {
       color: white;
       font-weight: bold;
     }
-    .load {
-      background: #333;
-    }
-    .pause {
-      background: #b00020;
-    }
-    .start {
-      background: #1b7f3a;
-    }
-    .structure {
-      background: #2357c6;
-    }
+    .load { background: #333; }
+    .pause { background: #b00020; }
+    .start { background: #1b7f3a; }
+    .structure { background: #3454d1; }
     .campaign {
       background: white;
       border-radius: 10px;
@@ -549,36 +595,27 @@ app.get("/tools/test-ui", (req, res) => {
       margin: 16px 0;
       box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }
-    .status {
-      font-weight: bold;
-    }
+    .status { font-weight: bold; }
     .message {
       margin-top: 20px;
       padding: 12px;
       border-radius: 8px;
       display: none;
-      white-space: pre-wrap;
     }
-    .success {
-      background: #e3f7e9;
-      color: #145c2e;
-    }
-    .error {
-      background: #fde7e7;
-      color: #8a1111;
-    }
+    .success { background: #e3f7e9; color: #145c2e; }
+    .error { background: #fde7e7; color: #8a1111; }
     pre {
       background: #111;
       color: #eee;
-      padding: 14px;
-      overflow-x: auto;
+      padding: 16px;
       border-radius: 8px;
-      max-height: 500px;
+      overflow-x: auto;
+      white-space: pre-wrap;
     }
   </style>
 </head>
 <body>
-  <h1>Parma Ads Agent</h1>
+  <h1>Parma Growth Operator</h1>
 
   <button class="load" onclick="loadCampaigns()">Load Campaigns</button>
 
@@ -606,13 +643,19 @@ app.get("/tools/test-ui", (req, res) => {
           const div = document.createElement("div");
           div.className = "campaign";
 
+          const budget = campaign.daily_budget
+            ? (Number(campaign.daily_budget) / 100).toFixed(2) + " € / day"
+            : "No campaign budget";
+
           div.innerHTML = \`
             <h3>\${campaign.name}</h3>
             <p>ID: \${campaign.id}</p>
             <p>Status: <span class="status">\${campaign.status} / \${campaign.effective_status}</span></p>
+            <p>Objective: \${campaign.objective || "-"}</p>
+            <p>Budget: \${budget}</p>
             <button class="pause" onclick="pauseCampaign('\${campaign.id}')">Pause</button>
             <button class="start" onclick="startCampaign('\${campaign.id}')">Start</button>
-            <button class="structure" onclick="showStructure('\${campaign.id}')">Structure</button>
+            <button class="structure" onclick="loadStructure('\${campaign.id}')">Structure</button>
           \`;
 
           container.appendChild(div);
@@ -632,15 +675,15 @@ app.get("/tools/test-ui", (req, res) => {
       await callAction("/meta/campaign/" + id + "/start", "Campaign started");
     }
 
-    async function showStructure(id) {
+    async function loadStructure(id) {
       showMessage("Loading campaign structure...", true);
+      const debug = document.getElementById("debug");
+      debug.style.display = "block";
+      debug.textContent = "Loading...";
 
       try {
         const response = await fetch("/meta/campaign/" + id + "/structure");
         const data = await response.json();
-
-        const debug = document.getElementById("debug");
-        debug.style.display = "block";
         debug.textContent = JSON.stringify(data, null, 2);
 
         if (data.success) {
@@ -686,27 +729,5 @@ app.get("/tools/test-ui", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Parma Ads Agent running on port ${PORT}`);
-});
-app.get("/tools/campaign/:id/adsets", async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const response = await metaClient.get(`/${id}/adsets`, {
-      params: {
-        access_token: META_ACCESS_TOKEN,
-        fields: "id,name,status,effective_status,daily_budget,lifetime_budget,bid_strategy,optimization_goal"
-      }
-    });
-
-    res.json({
-      campaign_id: id,
-      adsets: response.data.data
-    });
-
-  } catch (error) {
-    res.status(500).json({
-      error: error.response?.data || error.message
-    });
-  }
+  console.log(\`Parma Growth Operator running on port \${PORT}\`);
 });
