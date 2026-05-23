@@ -729,5 +729,5 @@ app.get("/tools/test-ui", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(\`Parma Growth Operator running on port \${PORT}\`);
+console.log("Parma Growth Operator running on port " + PORT);
 });
