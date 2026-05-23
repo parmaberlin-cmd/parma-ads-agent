@@ -1,4 +1,4 @@
-const express = require("express");
+tools/testtest-uiconst express = require("express");
 const axios = require("axios");
 
 const app = express();
@@ -687,4 +687,26 @@ app.get("/tools/test-ui", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Parma Ads Agent running on port ${PORT}`);
+});
+app.get("/tools/campaign/:id/adsets", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const response = await metaClient.get(`/${id}/adsets`, {
+      params: {
+        access_token: META_ACCESS_TOKEN,
+        fields: "id,name,status,effective_status,daily_budget,lifetime_budget,bid_strategy,optimization_goal"
+      }
+    });
+
+    res.json({
+      campaign_id: id,
+      adsets: response.data.data
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      error: error.response?.data || error.message
+    });
+  }
 });
