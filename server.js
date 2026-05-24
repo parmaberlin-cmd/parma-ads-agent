@@ -759,3 +759,48 @@ app.get("/tools/campaign/:id/metrics", requireApiKey, async (req, res) => {
     });
   }
 });
+app.get("/auth/google", (req, res) => {
+  const params = new URLSearchParams({
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+    response_type: "code",
+    scope: "https://www.googleapis.com/auth/adwords",
+    access_type: "offline",
+    prompt: "consent",
+  });
+
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+});
+
+app.get("/auth/google/callback", async (req, res) => {
+  const code = req.query.code;
+
+  if (!code) {
+    return res.status(400).json({
+      success: false,
+      error: "Missing Google authorization code",
+    });
+  }
+
+  try {
+    const response = await axios.post("https://oauth2.googleapis.com/token", {
+      code,
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+      grant_type: "authorization_code",
+    });
+
+    res.json({
+      success: true,
+      message: "Google OAuth connected",
+      tokens: response.data,
+      next_step: "Copy the refresh_token into Railway as GOOGLE_REFRESH_TOKEN",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.response?.data || error.message,
+    });
+  }
+});
