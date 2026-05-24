@@ -804,3 +804,22 @@ app.get("/auth/google/callback", async (req, res) => {
     });
   }
 });
+app.get("/google/ads/test", async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      google_ads: {
+        developer_token_present: !!process.env.GOOGLE_DEVELOPER_TOKEN,
+        client_id_present: !!process.env.GOOGLE_CLIENT_ID,
+        client_secret_present: !!process.env.GOOGLE_CLIENT_SECRET,
+        refresh_token_present: !!process.env.GOOGLE_REFRESH_TOKEN,
+        redirect_uri_present: !!process.env.GOOGLE_REDIRECT_URI
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
