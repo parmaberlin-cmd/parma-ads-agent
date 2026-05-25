@@ -823,3 +823,38 @@ app.get("/google/ads/test", async (req, res) => {
     });
   }
 });
+const { GoogleAdsApi } = require("google-ads-api");
+
+app.get("/google/accounts", async (req, res) => {
+  try {
+    const client = new GoogleAdsApi({
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      developer_token: process.env.GOOGLE_DEVELOPER_TOKEN,
+    });
+
+    const customer = client.Customer({
+      customer_id: "7376153998",
+      refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+    });
+
+    const result = await customer.query(`
+      SELECT
+        customer.id,
+        customer.descriptive_name,
+        customer.currency_code
+      FROM customer
+    `);
+
+    res.json({
+      success: true,
+      accounts: result,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      details: error.response?.data || null,
+    });
+  }
+});
