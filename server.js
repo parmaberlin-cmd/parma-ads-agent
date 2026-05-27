@@ -858,3 +858,46 @@ app.get("/google/accounts", async (req, res) => {
     });
   }
 });
+app.get("/google/accounts", async (req, res) => {
+  try {
+    const tokenResponse = await axios.post("https://oauth2.googleapis.com/token", {
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+      grant_type: "refresh_token",
+    });
+
+    const accessToken = tokenResponse.data.access_token;
+    const customerId = "7376153998";
+
+    const response = await axios.post(
+      `https://googleads.googleapis.com/v19/customers/${customerId}/googleAds:search`,
+      {
+        query: `
+          SELECT
+            customer.id,
+            customer.descriptive_name,
+            customer.currency_code
+          FROM customer
+        `,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    res.json({
+      success: true,
+      account: response.data,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.response?.data || error.message,
+    });
+  }
+});
