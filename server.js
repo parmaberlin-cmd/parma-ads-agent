@@ -871,7 +871,7 @@ app.get("/google/accounts-direct", async (req, res) => {
     const customerId = "7376153998";
 
     const response = await axios.post(
-      `https://googleads.googleapis.com/v19/customers/${customerId}/googleAds:search`,
+      `https://googleads.googleapis.com/v24/customers/${customerId}/googleAds:search`,
       {
         query: `
           SELECT
