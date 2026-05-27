@@ -858,7 +858,7 @@ app.get("/google/accounts", async (req, res) => {
     });
   }
 });
-app.get("/google/accounts", async (req, res) => {
+app.get("/google/accounts-direct", async (req, res) => {
   try {
     const tokenResponse = await axios.post("https://oauth2.googleapis.com/token", {
       client_id: process.env.GOOGLE_CLIENT_ID,
