@@ -902,3 +902,6 @@ app.get("/google/accounts-direct", async (req, res) => {
     });
   }
 });
+app.get("/openapi.yaml", (req, res) => {
+  res.sendFile(path.join(__dirname, "openapi.yaml"));
+});
