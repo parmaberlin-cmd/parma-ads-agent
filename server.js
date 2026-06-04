@@ -761,14 +761,7 @@ app.get("/tools/campaign/:id/metrics", requireApiKey, async (req, res) => {
     });
   }
 });
-  success: true,
-  campaign_id: campaignId,
-  period: "maximum",
-  raw: response.data,
-  metrics: response.data.data || [],
-});
-  }
-});
+
 app.get("/auth/google", (req, res) => {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
