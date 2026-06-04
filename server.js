@@ -747,6 +747,14 @@ app.get("/tools/campaign/:id/metrics", requireApiKey, async (req, res) => {
     });
 
     res.json({
+        } catch (error) {
+    res.status(500).json({
+      success: false,
+      campaign_id: campaignId,
+      error: cleanMetaError(error),
+    });
+  }
+});
   success: true,
   campaign_id: campaignId,
   period: "maximum",
