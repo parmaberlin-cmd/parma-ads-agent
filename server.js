@@ -743,7 +743,7 @@ app.get("/tools/campaign/:id/metrics", requireApiKey, async (req, res) => {
         access_token: META_ACCESS_TOKEN,
         date_preset: "maximum",
         level: "campaign",
-        fields: "campaign_id,campaign_name,spend,impressions,reach,clicks,ctr,cpc,cpm,actions,cost_per_action_type",
+        fields: "spend,impressions,reach,clicks",
       },
     });
 
