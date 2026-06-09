@@ -43,6 +43,8 @@ paths:
     get:
       operationId: getCampaignMetrics
       summary: Get campaign metrics
+     security:
+        - ApiKeyAuth: []
       parameters:
         - name: id
           in: path
@@ -54,4 +56,9 @@ paths:
           description: OK
 
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
   schemas: {}
