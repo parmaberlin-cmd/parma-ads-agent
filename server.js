@@ -741,7 +741,7 @@ app.get("/tools/campaign/:id/metrics", requireApiKey, async (req, res) => {
 const response = await metaClient.get(`/${META_AD_ACCOUNT_ID}/insights`, {
   params: {
         access_token: META_ACCESS_TOKEN,
-        date_preset: "maximum",
+        date_preset: "last_30d",
         level: "campaign",
     filtering: JSON.stringify([{ field: "campaign.id", operator: "IN", value: [campaignId] }]),
         fields: "spend,impressions,reach,clicks",
