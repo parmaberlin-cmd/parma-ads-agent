@@ -751,7 +751,7 @@ const response = await metaClient.get(`/${META_AD_ACCOUNT_ID}/insights`, {
       res.json({
       success: true,
       campaign_id: campaignId,
-      period: "last_30d"
+      period: "last_30d",
       raw: response.data,
       metrics: response.data.data || [],
     });
