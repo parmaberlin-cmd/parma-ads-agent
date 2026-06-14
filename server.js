@@ -261,9 +261,7 @@ app.get("/meta/test", async (req, res) => {
     });
   }
 });
-
-app.get("/meta/campaigns", async (req, res) => {
-  app.get("/tools/dashboard", requireApiKey, async (req, res) => {
+app.get("/tools/dashboard", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
   try {
@@ -300,6 +298,8 @@ app.get("/meta/campaigns", async (req, res) => {
         api_key_required: true,
       },
     });
+app.get("/meta/campaigns", async (req, res) => {
+  
   } catch (error) {
     res.status(500).json({
       success: false,
