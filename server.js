@@ -261,6 +261,72 @@ app.get("/meta/test", async (req, res) => {
     });
   }
 });
+ 
+app.get("/tools/status", requireApiKey, async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+
+  try {
+    const campaigns = await getCampaigns();
+
+    const campaignsTotal = campaigns.length;
+    const activeCampaigns = campaigns.filter(
+      (campaign) => campaign.status === "ACTIVE" || campaign.effective_status === "ACTIVE"
+    );
+    const campaignsPaused = campaigns.filter(
+      (campaign) => campaign.status === "PAUSED" || campaign.effective_status === "PAUSED"
+    ).length;
+    const campaignsWithIssues = campaigns.filter(
+      (campaign) => campaign.effective_status === "WITH_ISSUES"
+    ).length;
+
+    const recommendations = [];
+
+    if (activeCampaigns.length === 0) {
+      recommendations.push("No active campaigns found");
+    }
+
+    if (campaignsWithIssues > 0) {
+      recommendations.push("Some campaigns have issues and require attention");
+    }
+
+    res.json({
+      success: true,
+      system: {
+        railway_online: true,
+        api_key_required: true,
+      },
+      meta: {
+        connected: true,
+        ad_account_id: META_AD_ACCOUNT_ID,
+        campaigns_total: campaignsTotal,
+        campaigns_active: activeCampaigns.length,
+        campaigns_paused: campaignsPaused,
+        campaigns_with_issues: campaignsWithIssues,
+        active_campaigns: activeCampaigns.map((campaign) => ({
+          id: campaign.id,
+          name: campaign.name,
+          status: campaign.status,
+          effective_status: campaign.effective_status,
+        })),
+      },
+      google: {
+        connected: Boolean(
+          process.env.GOOGLE_CLIENT_ID &&
+          process.env.GOOGLE_CLIENT_SECRET &&
+          process.env.GOOGLE_REFRESH_TOKEN
+        ),
+        conversion_tracking: "booking_completed configured in GA4 / Google Ads",
+      },
+      recommendations,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: cleanMetaError(error),
+    });
+  }
+});
+
 app.get("/tools/dashboard", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
