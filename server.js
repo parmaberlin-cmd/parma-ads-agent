@@ -298,7 +298,13 @@ app.get("/tools/dashboard", requireApiKey, async (req, res) => {
         api_key_required: true,
       },
     });
-app.get("/meta/campaigns", async (req, res) => {
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: cleanMetaError(error),
+    });
+  }
+});
   
   } catch (error) {
     res.status(500).json({
