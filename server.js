@@ -319,18 +319,6 @@ app.get("/meta/campaigns", async (req, res) => {
     });
   }
 });
-  if (!checkMetaConfig(res)) return;
-
-  try {
-    const campaigns = await getCampaigns();
-    res.json({ success: true, campaigns });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: cleanMetaError(error),
-    });
-  }
-});
 
 app.get("/meta/campaign/:id/start", async (req, res) => {
   if (!checkMetaConfig(res)) return;
