@@ -748,13 +748,19 @@ const response = await metaClient.get(`/${META_AD_ACCOUNT_ID}/insights`, {
       },
     });
 
-      res.json({
-      success: true,
-      campaign_id: campaignId,
-      period: "last_30d",
-      raw: response.data,
-      metrics: response.data.data || [],
-    });
+      const metrics = response.data.data || [];
+
+res.json({
+  success: true,
+  campaign_id: campaignId,
+  period: "last_30d",
+  status: metrics.length ? "has_data" : "no_data",
+  message: metrics.length
+    ? "Metrics found for this campaign"
+    : "No delivery or spend found for this campaign in the selected period",
+  raw: response.data,
+  metrics,
+});
   } catch (error) {
     res.status(500).json({
       success: false,
