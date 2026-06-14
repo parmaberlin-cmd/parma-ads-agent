@@ -305,14 +305,6 @@ app.get("/tools/dashboard", requireApiKey, async (req, res) => {
     });
   }
 });
-  
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: cleanMetaError(error),
-    });
-  }
-});
 
 app.get("/meta/campaigns", async (req, res) => {
   if (!checkMetaConfig(res)) return;
