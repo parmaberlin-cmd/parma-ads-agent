@@ -303,8 +303,8 @@ app.get("/tools/score", requireApiKey, async (req, res) => {
     score -= campaignsWithIssues * 5;
 
     if (campaignsWithIssues > 0) {
-      reasons.push(`${campaignsWithIssues} campaigns have issues`);
-    }
+  growthReasons.push(`${campaignsWithIssues} campaigns have issues`);
+}
 
     if (score < 0) score = 0;
 
