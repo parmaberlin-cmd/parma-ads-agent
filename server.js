@@ -536,6 +536,8 @@ app.get("/tools/status", requireApiKey, async (req, res) => {
     activeCampaigns.length * 15 -
     campaignsWithIssues * 5,
 
+ reasons: growthReasons,
+              
   status:
     100 -
       (activeCampaigns.length === 0 ? 40 : activeCampaigns.length === 1 ? 10 : 0) -
