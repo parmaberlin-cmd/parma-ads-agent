@@ -511,6 +511,24 @@ app.get("/tools/status", requireApiKey, async (req, res) => {
           effective_status: campaign.effective_status,
         })),
       },
+            growth: {
+        growth_score:
+          100 -
+          (activeCampaigns.length === 0 ? 40 : activeCampaigns.length === 1 ? 10 : 0) -
+          campaignsWithIssues * 5,
+        status:
+          100 -
+            (activeCampaigns.length === 0 ? 40 : activeCampaigns.length === 1 ? 10 : 0) -
+            campaignsWithIssues * 5 <
+          60
+            ? "needs_attention"
+            : 100 -
+                (activeCampaigns.length === 0 ? 40 : activeCampaigns.length === 1 ? 10 : 0) -
+                campaignsWithIssues * 5 <
+              80
+            ? "warning"
+            : "healthy",
+      },
       google: {
         connected: Boolean(
           process.env.GOOGLE_CLIENT_ID &&
