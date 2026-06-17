@@ -500,6 +500,20 @@ app.get("/tools/status", requireApiKey, async (req, res) => {
       (campaign) => campaign.effective_status === "WITH_ISSUES"
     ).length;
 
+const growthReasons = [];
+
+if (activeCampaigns.length === 1) {
+  growthReasons.push("Only one active campaign");
+}
+
+if (activeCampaigns.length > 0) {
+  growthReasons.push(`${activeCampaigns.length} active campaign(s) have no data`);
+}
+
+if (campaignsWithIssues.length > 0) {
+  growthReasons.push(`${campaignsWithIssues.length} campaigns have issues`);
+}
+    
     const recommendations = [];
 
     if (activeCampaigns.length === 0) {
