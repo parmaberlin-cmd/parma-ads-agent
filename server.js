@@ -262,6 +262,70 @@ app.get("/meta/test", async (req, res) => {
   }
 });
 
+app.get("/tools/score", requireApiKey, async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+
+  try {
+    const campaigns = await getCampaigns();
+
+    const campaignsTotal = campaigns.length;
+
+    const activeCampaigns = campaigns.filter(
+      (campaign) =>
+        campaign.status === "ACTIVE" ||
+        campaign.effective_status === "ACTIVE"
+    ).length;
+
+    const campaignsWithIssues = campaigns.filter(
+      (campaign) =>
+        campaign.effective_status === "WITH_ISSUES"
+    ).length;
+
+    let score = 100;
+    const reasons = [];
+
+    if (activeCampaigns === 0) {
+      score -= 40;
+      reasons.push("No active campaigns");
+    }
+
+    if (activeCampaigns === 1) {
+      score -= 10;
+      reasons.push("Only one active campaign");
+    }
+
+    score -= campaignsWithIssues * 5;
+
+    if (campaignsWithIssues > 0) {
+      reasons.push(`${campaignsWithIssues} campaigns have issues`);
+    }
+
+    if (score < 0) score = 0;
+
+    let status = "healthy";
+
+    if (score < 80) status = "warning";
+    if (score < 60) status = "needs_attention";
+    if (score < 40) status = "critical";
+
+    res.json({
+      success: true,
+      growth_score: score,
+      status,
+      reasons,
+      summary: {
+        campaigns_total: campaignsTotal,
+        campaigns_active: activeCampaigns,
+        campaigns_with_issues: campaignsWithIssues,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: cleanMetaError(error),
+    });
+  }
+});
 app.get("/tools/active-campaigns/report", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
