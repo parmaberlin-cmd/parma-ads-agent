@@ -225,19 +225,7 @@ function buildDinnerBaselineTemplate() {
 }
 
 app.get("/", (req, res) => {
-  const growthReasons = [];
-
-if (activeCampaigns.length === 1) {
-  growthReasons.push("Only one active campaign");
-}
-
-if (activeCampaigns.length > 0) {
-  growthReasons.push(`${activeCampaigns.length} active campaign(s) have no data`);
-}
-
-if (campaignsWithIssues.length > 0) {
-  growthReasons.push(`${campaignsWithIssues.length} campaigns have issues`);
-}
+  
   res.json({
     success: true,
     service: "Parma Growth Operator",
