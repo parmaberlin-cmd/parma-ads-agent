@@ -517,23 +517,27 @@ app.get("/tools/status", requireApiKey, async (req, res) => {
         })),
       },
             growth: {
-        growth_score:
-          100 -
+  growth_score:
+    100 -
+    (activeCampaigns.length === 0 ? 40 : activeCampaigns.length === 1 ? 10 : 0) -
+    activeCampaigns.length * 15 -
+    campaignsWithIssues * 5,
+
+  status:
+    100 -
+      (activeCampaigns.length === 0 ? 40 : activeCampaigns.length === 1 ? 10 : 0) -
+      activeCampaigns.length * 15 -
+      campaignsWithIssues * 5 <
+    60
+      ? "needs_attention"
+      : 100 -
           (activeCampaigns.length === 0 ? 40 : activeCampaigns.length === 1 ? 10 : 0) -
-          campaignsWithIssues * 5,
-        status:
-          100 -
-            (activeCampaigns.length === 0 ? 40 : activeCampaigns.length === 1 ? 10 : 0) -
-            campaignsWithIssues * 5 <
-          60
-            ? "needs_attention"
-            : 100 -
-                (activeCampaigns.length === 0 ? 40 : activeCampaigns.length === 1 ? 10 : 0) -
-                campaignsWithIssues * 5 <
-              80
-            ? "warning"
-            : "healthy",
-      },
+          activeCampaigns.length * 15 -
+          campaignsWithIssues * 5 <
+        80
+      ? "warning"
+      : "healthy",
+},
       google: {
         connected: Boolean(
           process.env.GOOGLE_CLIENT_ID &&
