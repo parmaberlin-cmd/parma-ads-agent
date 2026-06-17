@@ -275,6 +275,7 @@ app.get("/tools/score", requireApiKey, async (req, res) => {
         campaign.status === "ACTIVE" ||
         campaign.effective_status === "ACTIVE"
     ).length;
+    const campaignsWithoutData = activeCampaigns;
 
     const campaignsWithIssues = campaigns.filter(
       (campaign) =>
@@ -292,6 +293,10 @@ app.get("/tools/score", requireApiKey, async (req, res) => {
     if (activeCampaigns === 1) {
       score -= 10;
       reasons.push("Only one active campaign");
+    }
+    if (campaignsWithoutData > 0) {
+  score -= 15;
+  reasons.push(`${campaignsWithoutData} active campaigns have no data`);
     }
 
     score -= campaignsWithIssues * 5;
