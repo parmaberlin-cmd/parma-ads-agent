@@ -462,8 +462,8 @@ if (activeCampaigns.length > 0) {
   growthReasons.push(`${activeCampaigns.length} active campaign(s) have no data`);
 }
 
-if (campaignsWithIssues.length > 0) {
-  growthReasons.push(`${campaignsWithIssues.length} campaigns have issues`);
+if (campaignsWithIssues > 0) {
+  growthReasons.push(`${campaignsWithIssues} campaigns have issues`);
 }
     res.json({
       success: true,
