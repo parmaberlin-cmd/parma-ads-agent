@@ -262,6 +262,41 @@ app.get("/meta/test", async (req, res) => {
   }
 });
 
+app.get("/tools/active-campaigns/report", requireApiKey, async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+
+  try {
+    const campaigns = await getCampaigns();
+
+    const activeCampaigns = campaigns.filter(
+      (campaign) =>
+        campaign.status === "ACTIVE" ||
+        campaign.effective_status === "ACTIVE"
+    );
+
+    const report = activeCampaigns.map((campaign) => ({
+      id: campaign.id,
+      name: campaign.name,
+      status: campaign.status,
+      effective_status: campaign.effective_status,
+      metrics_status: "unknown",
+    }));
+
+    res.json({
+      success: true,
+      generated_at: new Date().toISOString(),
+      active_campaigns: report,
+      summary: {
+        active_campaigns: report.length,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: cleanMetaError(error),
+    });
+  }
+});
 app.get("/tools/recommendations", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
