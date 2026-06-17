@@ -261,7 +261,85 @@ app.get("/meta/test", async (req, res) => {
     });
   }
 });
- 
+
+app.get("/tools/recommendations", requireApiKey, async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+
+  try {
+    const campaigns = await getCampaigns();
+
+    const activeCampaigns = campaigns.filter(
+      (campaign) => campaign.status === "ACTIVE" || campaign.effective_status === "ACTIVE"
+    );
+
+    const campaignsWithIssues = campaigns.filter(
+      (campaign) => campaign.effective_status === "WITH_ISSUES"
+    );
+
+    const pausedCampaigns = campaigns.filter(
+      (campaign) => campaign.status === "PAUSED" || campaign.effective_status === "PAUSED"
+    );
+
+    const recommendations = [];
+
+    if (activeCampaigns.length === 0) {
+      recommendations.push({
+        priority: "high",
+        type: "meta_campaigns",
+        message: "No active Meta campaigns found. Consider activating a small test campaign.",
+      });
+    }
+
+    if (activeCampaigns.length === 1) {
+      recommendations.push({
+        priority: "medium",
+        type: "meta_campaigns",
+        message: "Only one Meta campaign is currently active. Review whether this is intentional.",
+      });
+    }
+
+    if (campaignsWithIssues.length > 0) {
+      recommendations.push({
+        priority: "high",
+        type: "meta_issues",
+        message: `${campaignsWithIssues.length} Meta campaigns have issues and require attention.`,
+        campaign_ids: campaignsWithIssues.map((campaign) => campaign.id),
+      });
+    }
+
+    const pausedSalesCampaigns = pausedCampaigns.filter(
+      (campaign) =>
+        campaign.objective === "OUTCOME_SALES" ||
+        campaign.objective === "CONVERSIONS"
+    );
+
+    if (pausedSalesCampaigns.length > 0) {
+      recommendations.push({
+        priority: "medium",
+        type: "sales_opportunity",
+        message: `${pausedSalesCampaigns.length} sales/conversion campaigns are paused. Review whether one should be reactivated for a controlled test.`,
+        campaign_ids: pausedSalesCampaigns.map((campaign) => campaign.id),
+      });
+    }
+
+    res.json({
+      success: true,
+      generated_at: new Date().toISOString(),
+      recommendations,
+      summary: {
+        campaigns_total: campaigns.length,
+        campaigns_active: activeCampaigns.length,
+        campaigns_paused: pausedCampaigns.length,
+        campaigns_with_issues: campaignsWithIssues.length,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: cleanMetaError(error),
+    });
+  }
+});
 app.get("/tools/status", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
