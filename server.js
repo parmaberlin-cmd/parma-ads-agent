@@ -274,16 +274,32 @@ app.get("/tools/active-campaigns/report", requireApiKey, async (req, res) => {
         campaign.effective_status === "ACTIVE"
     );
 
-    const report = activeCampaigns.map((campaign) => ({
+    const report = await Promise.all(
+  activeCampaigns.map(async (campaign) => {
+    const response = await metaClient.get(`/${META_AD_ACCOUNT_ID}/insights`, {
+      params: {
+        access_token: META_ACCESS_TOKEN,
+        date_preset: "last_30d",
+        level: "campaign",
+        filtering: JSON.stringify([
+          { field: "campaign.id", operator: "IN", value: [campaign.id] },
+        ]),
+        fields: "spend,impressions,reach,clicks",
+      },
+    });
+
+    const metrics = response.data.data || [];
+
+    return {
       id: campaign.id,
       name: campaign.name,
       status: campaign.status,
       effective_status: campaign.effective_status,
-      metrics_status:
-  campaign.id === "6262623468181"
-    ? "no_data"
-    : "unknown",
-    }));
+      metrics_status: metrics.length ? "has_data" : "no_data",
+      metrics,
+    };
+  })
+);
 
     res.json({
       success: true,
