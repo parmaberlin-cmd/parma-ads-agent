@@ -302,13 +302,19 @@ app.get("/tools/active-campaigns/report", requireApiKey, async (req, res) => {
 );
 
     res.json({
-      success: true,
-      generated_at: new Date().toISOString(),
-      active_campaigns: report,
-      summary: {
-        active_campaigns: report.length,
-      },
-    });
+  success: true,
+  generated_at: new Date().toISOString(),
+  active_campaigns: report,
+  summary: {
+    active_campaigns: report.length,
+    campaigns_with_data: report.filter(
+      (campaign) => campaign.metrics_status === "has_data"
+    ).length,
+    campaigns_without_data: report.filter(
+      (campaign) => campaign.metrics_status === "no_data"
+    ).length,
+  },
+});
   } catch (error) {
     res.status(500).json({
       success: false,
