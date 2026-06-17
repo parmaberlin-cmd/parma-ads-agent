@@ -428,7 +428,7 @@ app.get("/tools/recommendations", requireApiKey, async (req, res) => {
       });
     }
 
-    if (campaignsWithIssues.length > 0) {
+   if (campaignsWithIssues > 0) {
       recommendations.push({
         priority: "high",
         type: "meta_issues",
