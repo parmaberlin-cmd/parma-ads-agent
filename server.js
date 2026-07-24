@@ -224,6 +224,103 @@ function buildDinnerBaselineTemplate() {
   };
 }
 
+
+function normalizeGoogleCustomerId(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function checkGoogleConfig(res) {
+  const required = [
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_DEVELOPER_TOKEN",
+    "GOOGLE_REFRESH_TOKEN",
+    "GOOGLE_CUSTOMER_ID",
+  ];
+
+  const missing = required.filter((name) => !process.env[name]);
+
+  if (missing.length > 0) {
+    res.status(500).json({
+      success: false,
+      error: "Google Ads configuration missing",
+      missing_variables: missing,
+    });
+    return false;
+  }
+
+  return true;
+}
+
+function getGoogleCustomer() {
+  const client = new GoogleAdsApi({
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    client_secret: process.env.GOOGLE_CLIENT_SECRET,
+    developer_token: process.env.GOOGLE_DEVELOPER_TOKEN,
+  });
+
+  const config = {
+    customer_id: normalizeGoogleCustomerId(process.env.GOOGLE_CUSTOMER_ID),
+    refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+  };
+
+  const loginCustomerId = normalizeGoogleCustomerId(
+    process.env.GOOGLE_LOGIN_CUSTOMER_ID
+  );
+
+  if (loginCustomerId) {
+    config.login_customer_id = loginCustomerId;
+  }
+
+  return client.Customer(config);
+}
+
+function cleanGoogleError(error) {
+  return {
+    message: error?.message || "Unknown Google Ads error",
+    errors: error?.errors || null,
+    details: error?.response?.data || null,
+  };
+}
+
+async function getGoogleCampaignMetrics(campaignId, days = 30) {
+  const customer = getGoogleCustomer();
+  const safeCampaignId = normalizeGoogleCustomerId(campaignId);
+  const safeDays = Math.min(Math.max(Number(days) || 30, 1), 90);
+
+  const rows = await customer.query(`
+    SELECT
+      campaign.id,
+      campaign.name,
+      campaign.status,
+      campaign.advertising_channel_type,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.ctr,
+      metrics.average_cpc,
+      metrics.conversions,
+      metrics.conversions_value
+    FROM campaign
+    WHERE campaign.id = ${safeCampaignId}
+      AND segments.date DURING LAST_${safeDays}_DAYS
+  `);
+
+  return rows.map((row) => ({
+    campaign_id: String(row.campaign.id),
+    campaign_name: row.campaign.name,
+    status: row.campaign.status,
+    channel_type: row.campaign.advertising_channel_type,
+    impressions: Number(row.metrics.impressions || 0),
+    clicks: Number(row.metrics.clicks || 0),
+    cost_eur: Number(row.metrics.cost_micros || 0) / 1_000_000,
+    ctr: Number(row.metrics.ctr || 0),
+    average_cpc_eur: Number(row.metrics.average_cpc || 0) / 1_000_000,
+    conversions: Number(row.metrics.conversions || 0),
+    conversion_value: Number(row.metrics.conversions_value || 0),
+  }));
+}
+
 app.get("/", (req, res) => {
   
   res.json({
@@ -1098,42 +1195,115 @@ app.get("/tools/test-ui", (req, res) => {
   `);
 });
 
-app.listen(PORT, () => {
-console.log("Parma Growth Operator running on port " + PORT);
-});
-app.get("/tools/campaign/:id/metrics", requireApiKey, async (req, res) => {
-  if (!checkMetaConfig(res)) return;
 
-  const campaignId = req.params.id;
+app.get("/tools/google/test", requireApiKey, async (req, res) => {
+  if (!checkGoogleConfig(res)) return;
 
   try {
-const response = await metaClient.get(`/${META_AD_ACCOUNT_ID}/insights`, {
-  params: {
-        access_token: META_ACCESS_TOKEN,
-        date_preset: "last_30d",
-        level: "campaign",
-    filtering: JSON.stringify([{ field: "campaign.id", operator: "IN", value: [campaignId] }]),
-        fields: "spend,impressions,reach,clicks",
-      },
+    const customer = getGoogleCustomer();
+    const rows = await customer.query(`
+      SELECT
+        customer.id,
+        customer.descriptive_name,
+        customer.currency_code,
+        customer.time_zone
+      FROM customer
+      LIMIT 1
+    `);
+
+    res.json({
+      success: true,
+      connected: true,
+      account: rows[0] || null,
     });
-
-      const metrics = response.data.data || [];
-
-res.json({
-  success: true,
-  campaign_id: campaignId,
-  period: "last_30d",
-  status: metrics.length ? "has_data" : "no_data",
-  message: metrics.length
-    ? "Metrics found for this campaign"
-    : "No delivery or spend found for this campaign in the selected period",
-  raw: response.data,
-  metrics,
-});
   } catch (error) {
     res.status(500).json({
       success: false,
-      campaign_id: campaignId,
+      connected: false,
+      error: cleanGoogleError(error),
+    });
+  }
+});
+
+app.get("/tools/google/campaign/:id/metrics", requireApiKey, async (req, res) => {
+  if (!checkGoogleConfig(res)) return;
+
+  try {
+    const days = req.query.days || 30;
+    const metrics = await getGoogleCampaignMetrics(req.params.id, days);
+
+    res.json({
+      success: true,
+      source: "google_ads",
+      campaign_id: normalizeGoogleCustomerId(req.params.id),
+      period_days: Math.min(Math.max(Number(days) || 30, 1), 90),
+      status: metrics.length ? "has_data" : "no_data",
+      message: metrics.length
+        ? "Google Ads metrics found"
+        : "No Google Ads delivery or spend found for this campaign in the selected period",
+      metrics,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      source: "google_ads",
+      campaign_id: normalizeGoogleCustomerId(req.params.id),
+      error: cleanGoogleError(error),
+    });
+  }
+});
+
+/*
+ * Backward-compatible route.
+ * It now reads GOOGLE ADS, not Meta.
+ */
+app.get("/tools/campaign/:id/metrics", requireApiKey, async (req, res) => {
+  if (!checkGoogleConfig(res)) return;
+
+  try {
+    const days = req.query.days || 30;
+    const metrics = await getGoogleCampaignMetrics(req.params.id, days);
+
+    res.json({
+      success: true,
+      source: "google_ads",
+      campaign_id: normalizeGoogleCustomerId(req.params.id),
+      period_days: Math.min(Math.max(Number(days) || 30, 1), 90),
+      status: metrics.length ? "has_data" : "no_data",
+      message: metrics.length
+        ? "Google Ads metrics found"
+        : "No Google Ads delivery or spend found for this campaign in the selected period",
+      metrics,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      source: "google_ads",
+      campaign_id: normalizeGoogleCustomerId(req.params.id),
+      error: cleanGoogleError(error),
+    });
+  }
+});
+
+app.get("/tools/meta/campaign/:id/metrics", requireApiKey, async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+
+  try {
+    const insights = await getInsights(req.params.id, req.query.date_preset || "last_30d");
+
+    res.json({
+      success: true,
+      source: "meta_ads",
+      campaign_id: req.params.id,
+      date_preset: req.query.date_preset || "last_30d",
+      status: insights.length ? "has_data" : "no_data",
+      insights,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      source: "meta_ads",
+      campaign_id: req.params.id,
       error: cleanMetaError(error),
     });
   }
@@ -1283,4 +1453,8 @@ app.get("/google/accounts-direct", async (req, res) => {
 });
 app.get("/openapi.yaml", (req, res) => {
   res.sendFile(path.join(__dirname, "openapi.yaml"));
+});
+
+app.listen(PORT, () => {
+  console.log(`Parma Growth Operator running on port ${PORT}`);
 });
