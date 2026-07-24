@@ -1,14 +1,10 @@
 openapi: 3.1.0
-
 info:
   title: Parma Growth Operator
-  version: 1.0.0
-
+  version: 1.1.0
 servers:
   - url: https://supportive-stillness-production-ec37.up.railway.app
-
 paths:
-
   /health:
     get:
       operationId: healthCheck
@@ -16,34 +12,75 @@ paths:
       responses:
         "200":
           description: OK
-
-  /meta/campaigns:
+  /tools/status:
     get:
-      operationId: listCampaigns
-      summary: List Meta campaigns
+      operationId: getStatus
+      summary: Get Parma Growth Operator status
+      security:
+        - ApiKeyAuth: []
       responses:
         "200":
           description: OK
-
-  /meta/campaign/{id}/structure:
+  /tools/google/test:
     get:
-      operationId: getCampaignStructure
-      summary: Get campaign structure
+      operationId: testGoogleAds
+      summary: Test the real Google Ads API connection
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: OK
+  /tools/google/campaign/{id}/metrics:
+    get:
+      operationId: getGoogleCampaignMetrics
+      summary: Get Google Ads campaign metrics
+      security:
+        - ApiKeyAuth: []
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 90
+            default: 30
       responses:
         "200":
           description: OK
-
   /tools/campaign/{id}/metrics:
     get:
       operationId: getCampaignMetrics
-      summary: Get campaign metrics
-     security:
+      summary: Backward-compatible Google Ads campaign metrics endpoint
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 90
+            default: 30
+      responses:
+        "200":
+          description: OK
+  /tools/meta/campaign/{id}/metrics:
+    get:
+      operationId: getMetaCampaignMetrics
+      summary: Get Meta Ads campaign metrics
+      security:
         - ApiKeyAuth: []
       parameters:
         - name: id
@@ -54,11 +91,9 @@ paths:
       responses:
         "200":
           description: OK
-
 components:
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
       in: header
       name: x-api-key
-  schemas: {}
