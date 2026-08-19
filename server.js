@@ -1,6 +1,7 @@
 const express = require("express");
 const path = require("path");
 const axios = require("axios");
+const { GoogleAdsApi } = require("google-ads-api");
 
 const app = express();
 app.use(express.json());
@@ -229,6 +230,34 @@ function normalizeGoogleCustomerId(value) {
   return String(value || "").replace(/\D/g, "");
 }
 
+function parseGoogleCampaignId(value) {
+  const campaignId = String(value || "").trim();
+  return /^\d{1,20}$/.test(campaignId) ? campaignId : null;
+}
+
+function parseGoogleDays(value) {
+  const days = Number(value ?? 30);
+  return Number.isInteger(days) && days >= 1 && days <= 90 ? days : null;
+}
+
+function formatGoogleDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function getGoogleDateRange(days) {
+  const end = new Date();
+  end.setUTCHours(0, 0, 0, 0);
+  end.setUTCDate(end.getUTCDate() - 1);
+
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - (days - 1));
+
+  return {
+    start: formatGoogleDate(start),
+    end: formatGoogleDate(end),
+  };
+}
+
 function checkGoogleConfig(res) {
   const required = [
     "GOOGLE_CLIENT_ID",
@@ -276,17 +305,21 @@ function getGoogleCustomer() {
 }
 
 function cleanGoogleError(error) {
+  const firstError = Array.isArray(error?.errors) ? error.errors[0] : null;
+
   return {
-    message: error?.message || "Unknown Google Ads error",
-    errors: error?.errors || null,
-    details: error?.response?.data || null,
+    message:
+      firstError?.message ||
+      error?.message ||
+      "Google Ads request failed",
+    code: firstError?.error_code || null,
+    request_id: error?.request_id || null,
   };
 }
 
-async function getGoogleCampaignMetrics(campaignId, days = 30) {
+async function getGoogleCampaignMetrics(campaignId, days) {
   const customer = getGoogleCustomer();
-  const safeCampaignId = normalizeGoogleCustomerId(campaignId);
-  const safeDays = Math.min(Math.max(Number(days) || 30, 1), 90);
+  const { start, end } = getGoogleDateRange(days);
 
   const rows = await customer.query(`
     SELECT
@@ -302,8 +335,8 @@ async function getGoogleCampaignMetrics(campaignId, days = 30) {
       metrics.conversions,
       metrics.conversions_value
     FROM campaign
-    WHERE campaign.id = ${safeCampaignId}
-      AND segments.date DURING LAST_${safeDays}_DAYS
+    WHERE campaign.id = ${campaignId}
+      AND segments.date BETWEEN '${start}' AND '${end}'
   `);
 
   return rows.map((row) => ({
@@ -1225,18 +1258,37 @@ app.get("/tools/google/test", requireApiKey, async (req, res) => {
   }
 });
 
-app.get("/tools/google/campaign/:id/metrics", requireApiKey, async (req, res) => {
+async function handleGoogleCampaignMetrics(req, res) {
   if (!checkGoogleConfig(res)) return;
 
+  const campaignId = parseGoogleCampaignId(req.params.id);
+  const days = parseGoogleDays(req.query.days);
+
+  if (!campaignId) {
+    return res.status(400).json({
+      success: false,
+      source: "google_ads",
+      error: "campaign id must contain 1 to 20 digits",
+    });
+  }
+
+  if (!days) {
+    return res.status(400).json({
+      success: false,
+      source: "google_ads",
+      campaign_id: campaignId,
+      error: "days must be an integer between 1 and 90",
+    });
+  }
+
   try {
-    const days = req.query.days || 30;
-    const metrics = await getGoogleCampaignMetrics(req.params.id, days);
+    const metrics = await getGoogleCampaignMetrics(campaignId, days);
 
     res.json({
       success: true,
       source: "google_ads",
-      campaign_id: normalizeGoogleCustomerId(req.params.id),
-      period_days: Math.min(Math.max(Number(days) || 30, 1), 90),
+      campaign_id: campaignId,
+      period_days: days,
       status: metrics.length ? "has_data" : "no_data",
       message: metrics.length
         ? "Google Ads metrics found"
@@ -1247,43 +1299,27 @@ app.get("/tools/google/campaign/:id/metrics", requireApiKey, async (req, res) =>
     res.status(500).json({
       success: false,
       source: "google_ads",
-      campaign_id: normalizeGoogleCustomerId(req.params.id),
+      campaign_id: campaignId,
       error: cleanGoogleError(error),
     });
   }
-});
+}
+
+app.get(
+  "/tools/google/campaign/:id/metrics",
+  requireApiKey,
+  handleGoogleCampaignMetrics
+);
 
 /*
  * Backward-compatible route.
- * It now reads GOOGLE ADS, not Meta.
+ * It now reads Google Ads, not Meta.
  */
-app.get("/tools/campaign/:id/metrics", requireApiKey, async (req, res) => {
-  if (!checkGoogleConfig(res)) return;
-
-  try {
-    const days = req.query.days || 30;
-    const metrics = await getGoogleCampaignMetrics(req.params.id, days);
-
-    res.json({
-      success: true,
-      source: "google_ads",
-      campaign_id: normalizeGoogleCustomerId(req.params.id),
-      period_days: Math.min(Math.max(Number(days) || 30, 1), 90),
-      status: metrics.length ? "has_data" : "no_data",
-      message: metrics.length
-        ? "Google Ads metrics found"
-        : "No Google Ads delivery or spend found for this campaign in the selected period",
-      metrics,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      source: "google_ads",
-      campaign_id: normalizeGoogleCustomerId(req.params.id),
-      error: cleanGoogleError(error),
-    });
-  }
-});
+app.get(
+  "/tools/campaign/:id/metrics",
+  requireApiKey,
+  handleGoogleCampaignMetrics
+);
 
 app.get("/tools/meta/campaign/:id/metrics", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
@@ -1309,148 +1345,21 @@ app.get("/tools/meta/campaign/:id/metrics", requireApiKey, async (req, res) => {
   }
 });
 
-app.get("/auth/google", (req, res) => {
-  const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID,
-    redirect_uri: process.env.GOOGLE_REDIRECT_URI,
-    response_type: "code",
-    scope: "https://www.googleapis.com/auth/adwords",
-    access_type: "offline",
-    prompt: "consent",
+const disabledGoogleSetupRoutes = [
+  "/auth/google",
+  "/auth/google/callback",
+  "/google/ads/test",
+  "/google/accounts",
+  "/google/accounts-direct",
+];
+
+app.get(disabledGoogleSetupRoutes, (req, res) => {
+  res.status(410).json({
+    success: false,
+    error: "Legacy Google setup endpoint disabled",
   });
-
-  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
 });
 
-app.get("/auth/google/callback", async (req, res) => {
-  const code = req.query.code;
-
-  if (!code) {
-    return res.status(400).json({
-      success: false,
-      error: "Missing Google authorization code",
-    });
-  }
-
-  try {
-    const response = await axios.post("https://oauth2.googleapis.com/token", {
-      code,
-      client_id: process.env.GOOGLE_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: process.env.GOOGLE_REDIRECT_URI,
-      grant_type: "authorization_code",
-    });
-
-    res.json({
-      success: true,
-      message: "Google OAuth connected",
-      tokens: response.data,
-      next_step: "Copy the refresh_token into Railway as GOOGLE_REFRESH_TOKEN",
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.response?.data || error.message,
-    });
-  }
-});
-app.get("/google/ads/test", async (req, res) => {
-  try {
-    res.json({
-      success: true,
-      google_ads: {
-        developer_token_present: !!process.env.GOOGLE_DEVELOPER_TOKEN,
-        client_id_present: !!process.env.GOOGLE_CLIENT_ID,
-        client_secret_present: !!process.env.GOOGLE_CLIENT_SECRET,
-        refresh_token_present: !!process.env.GOOGLE_REFRESH_TOKEN,
-        redirect_uri_present: !!process.env.GOOGLE_REDIRECT_URI
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-const { GoogleAdsApi } = require("google-ads-api");
-
-app.get("/google/accounts", async (req, res) => {
-  try {
-    const client = new GoogleAdsApi({
-      client_id: process.env.GOOGLE_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET,
-      developer_token: process.env.GOOGLE_DEVELOPER_TOKEN,
-    });
-
-    const customer = client.Customer({
-      customer_id: "7376153998",
-      refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
-    });
-
-    const result = await customer.query(`
-      SELECT
-        customer.id,
-        customer.descriptive_name,
-        customer.currency_code
-      FROM customer
-    `);
-
-    res.json({
-      success: true,
-      accounts: result,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      details: error.response?.data || null,
-    });
-  }
-});
-app.get("/google/accounts-direct", async (req, res) => {
-  try {
-    const tokenResponse = await axios.post("https://oauth2.googleapis.com/token", {
-      client_id: process.env.GOOGLE_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET,
-      refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
-      grant_type: "refresh_token",
-    });
-
-    const accessToken = tokenResponse.data.access_token;
-    const customerId = "7376153998";
-
-    const response = await axios.post(
-      `https://googleads.googleapis.com/v24/customers/${customerId}/googleAds:search`,
-      {
-        query: `
-          SELECT
-            customer.id,
-            customer.descriptive_name,
-            customer.currency_code
-          FROM customer
-        `,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "developer-token": process.env.GOOGLE_DEVELOPER_TOKEN,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    res.json({
-      success: true,
-      account: response.data,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.response?.data || error.message,
-    });
-  }
-});
 app.get("/openapi.yaml", (req, res) => {
   res.sendFile(path.join(__dirname, "openapi.yaml"));
 });
