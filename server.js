@@ -46,6 +46,13 @@ function requireApiKey(req, res, next) {
   next();
 }
 
+function disableAdWrites(req, res) {
+  return res.status(403).json({
+    success: false,
+    error: "Ad write operations are disabled pending explicit human approval",
+  });
+}
+
 function checkMetaConfig(res) {
   if (!META_ACCESS_TOKEN || !META_AD_ACCOUNT_ID) {
     res.status(500).json({
@@ -370,7 +377,7 @@ app.get("/health", (req, res) => {
   });
 });
 
-app.get("/meta/test", async (req, res) => {
+app.get("/meta/test", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
   try {
@@ -761,7 +768,7 @@ app.get("/tools/dashboard", requireApiKey, async (req, res) => {
   }
 });
 
-app.get("/meta/campaigns", async (req, res) => {
+app.get("/meta/campaigns", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
   try {
@@ -775,7 +782,7 @@ app.get("/meta/campaigns", async (req, res) => {
   }
 });
 
-app.get("/meta/campaign/:id/start", async (req, res) => {
+app.get("/meta/campaign/:id/start", requireApiKey, disableAdWrites, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
   const campaignId = req.params.id;
@@ -806,7 +813,7 @@ app.get("/meta/campaign/:id/start", async (req, res) => {
   }
 });
 
-app.get("/meta/campaign/:id/stop", async (req, res) => {
+app.get("/meta/campaign/:id/stop", requireApiKey, disableAdWrites, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
   const campaignId = req.params.id;
@@ -837,7 +844,7 @@ app.get("/meta/campaign/:id/stop", async (req, res) => {
   }
 });
 
-app.get("/meta/campaign/:id/structure", async (req, res) => {
+app.get("/meta/campaign/:id/structure", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
   try {
@@ -869,7 +876,7 @@ app.get("/tools/campaigns", requireApiKey, async (req, res) => {
   }
 });
 
-app.post("/tools/campaign/start", requireApiKey, async (req, res) => {
+app.post("/tools/campaign/start", requireApiKey, disableAdWrites, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
   const { campaign_id } = req.body;
@@ -907,7 +914,7 @@ app.post("/tools/campaign/start", requireApiKey, async (req, res) => {
   }
 });
 
-app.post("/tools/campaign/pause", requireApiKey, async (req, res) => {
+app.post("/tools/campaign/pause", requireApiKey, disableAdWrites, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
   const { campaign_id } = req.body;
@@ -1002,7 +1009,7 @@ app.post("/tools/campaign/structure", requireApiKey, async (req, res) => {
   }
 });
 
-app.post("/tools/campaign/update-budget", requireApiKey, async (req, res) => {
+app.post("/tools/campaign/update-budget", requireApiKey, disableAdWrites, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
   const { campaign_id, daily_budget_eur } = req.body;
@@ -1059,7 +1066,7 @@ app.get("/tools/dinner-baseline-template", requireApiKey, (req, res) => {
   res.json(buildDinnerBaselineTemplate());
 });
 
-app.get("/tools/test-ui", (req, res) => {
+app.get("/tools/test-ui", requireApiKey, disableAdWrites, (req, res) => {
   res.send(`
 <!DOCTYPE html>
 <html>
