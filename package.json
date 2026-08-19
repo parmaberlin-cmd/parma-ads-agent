@@ -10,6 +10,6 @@
     "axios": "^1.7.2",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "google-ads-api": "^20.0.0"
+    "google-ads-api": "^24.1.0"
   }
 }
