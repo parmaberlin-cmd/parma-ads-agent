@@ -111,6 +111,7 @@ paths:
         "200":
           description: OK
 components:
+  schemas: {}
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
