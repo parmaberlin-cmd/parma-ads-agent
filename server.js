@@ -178,6 +178,13 @@ async function getCampaignInsights(datePreset) {
   });
 }
 
+async function getAdSetCollection() {
+  return getMetaCollection(`/${META_AD_ACCOUNT_ID}/adsets`, {
+    fields:
+      "id,campaign_id,status,effective_status,start_time,end_time,created_time,updated_time",
+  });
+}
+
 async function getCampaign(campaignId) {
   const response = await metaClient.get(`/${campaignId}`, {
     params: {
@@ -803,16 +810,20 @@ async function handleOverviewReport(req, res) {
   }
 
   try {
-    const [campaignCollection, insightCollection] = await Promise.all([
+    const [campaignCollection, insightCollection, adSetCollection] = await Promise.all([
       getCampaignCollection(),
       getCampaignInsights(datePreset),
+      getAdSetCollection(),
     ]);
     const metaOverview = buildMetaOverview(
       campaignCollection.data,
-      insightCollection.data
+      insightCollection.data,
+      adSetCollection.data
     );
     const partialData =
-      campaignCollection.truncated || insightCollection.truncated;
+      campaignCollection.truncated ||
+      insightCollection.truncated ||
+      adSetCollection.truncated;
 
     res.json({
       success: true,
@@ -838,8 +849,10 @@ async function handleOverviewReport(req, res) {
         meta_pages: {
           campaigns: campaignCollection.pages,
           insights: insightCollection.pages,
+          adsets: adSetCollection.pages,
         },
         caveats: [
+          "Campaign delivery status is verified against ad set schedules; an enabled campaign with only expired ad sets is reported as completed, not active",
           "reach_sum can count the same person in more than one campaign",
           "Meta action types are returned separately and are not combined into a conversion total until the business conversion definition is approved",
           "This report does not call Google Ads; use the protected Google test and campaign metrics endpoints to verify live access",

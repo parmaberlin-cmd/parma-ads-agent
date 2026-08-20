@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const {
   buildGoogleReadiness,
   buildMetaOverview,
+  classifyCampaignDelivery,
   normalizeMetaInsight,
 } = require("../reporting");
 
@@ -38,13 +39,18 @@ test("builds weighted totals and identifies campaigns without data", () => {
         reach: "800",
         clicks: "20",
       },
-    ]
+    ],
+    null
   );
 
   assert.deepEqual(result.campaign_counts, {
     total: 2,
-    active: 1,
+    active: 0,
+    active_unverified: 1,
+    completed: 0,
     paused: 1,
+    scheduled: 0,
+    not_delivering: 0,
     with_issues: 0,
     with_data: 1,
     without_data: 1,
@@ -70,8 +76,93 @@ test("uses effective Meta status instead of configured status when present", () 
   );
 
   assert.equal(result.campaign_counts.active, 0);
+  assert.equal(result.campaign_counts.active_unverified, 0);
   assert.equal(result.campaign_counts.paused, 0);
   assert.equal(result.campaign_counts.with_issues, 1);
+});
+
+test("classifies an enabled campaign with an expired ad set as completed", () => {
+  const now = new Date("2026-08-20T12:00:00Z");
+  const campaign = {
+    id: "7",
+    status: "ACTIVE",
+    effective_status: "ACTIVE",
+  };
+  const adsets = [
+    {
+      campaign_id: "7",
+      status: "ACTIVE",
+      effective_status: "ACTIVE",
+      start_time: "2026-07-01T00:00:00Z",
+      end_time: "2026-08-01T00:00:00Z",
+    },
+  ];
+
+  assert.equal(classifyCampaignDelivery(campaign, adsets, now), "completed");
+
+  const result = buildMetaOverview([campaign], [], adsets, now);
+  assert.equal(result.campaign_counts.active, 0);
+  assert.equal(result.campaign_counts.completed, 1);
+  assert.equal(result.campaigns[0].delivery_status, "completed");
+});
+
+test("classifies a campaign as active only with a currently deliverable ad set", () => {
+  const now = new Date("2026-08-20T12:00:00Z");
+  const campaign = {
+    id: "8",
+    status: "ACTIVE",
+    effective_status: "ACTIVE",
+  };
+  const adsets = [
+    {
+      campaign_id: "8",
+      status: "ACTIVE",
+      effective_status: "ACTIVE",
+      start_time: "2026-08-01T00:00:00Z",
+      end_time: "2026-09-01T00:00:00Z",
+    },
+  ];
+
+  assert.equal(classifyCampaignDelivery(campaign, adsets, now), "active");
+});
+
+test("does not call a campaign completed when only some ad sets have ended", () => {
+  const now = new Date("2026-08-20T12:00:00Z");
+  const campaign = {
+    id: "9",
+    status: "ACTIVE",
+    effective_status: "ACTIVE",
+  };
+  const adsets = [
+    {
+      campaign_id: "9",
+      status: "ACTIVE",
+      effective_status: "ACTIVE",
+      end_time: "2026-08-01T00:00:00Z",
+    },
+    {
+      campaign_id: "9",
+      status: "PAUSED",
+      effective_status: "PAUSED",
+      end_time: null,
+    },
+  ];
+
+  assert.equal(classifyCampaignDelivery(campaign, adsets, now), "not_delivering");
+});
+
+test("recognizes a configured paused campaign even with a derived Meta status", () => {
+  assert.equal(
+    classifyCampaignDelivery(
+      {
+        id: "10",
+        status: "PAUSED",
+        effective_status: "CAMPAIGN_PAUSED",
+      },
+      []
+    ),
+    "paused"
+  );
 });
 
 test("does not claim Google API access from configuration alone", () => {

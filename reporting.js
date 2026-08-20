@@ -44,7 +44,63 @@ function hasEffectiveStatus(campaign, expectedStatus) {
   return campaign.status === expectedStatus;
 }
 
-function buildMetaOverview(campaigns = [], insights = []) {
+function parseMetaDate(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function classifyCampaignDelivery(campaign, adsets, now = new Date()) {
+  if (campaign.effective_status === "WITH_ISSUES") return "with_issues";
+  if (
+    campaign.status === "PAUSED" ||
+    campaign.effective_status === "PAUSED" ||
+    campaign.effective_status === "CAMPAIGN_PAUSED"
+  ) {
+    return "paused";
+  }
+
+  if (!hasEffectiveStatus(campaign, "ACTIVE")) return "not_delivering";
+
+  // When child delivery data is unavailable, preserve Meta's campaign-level
+  // status but make the lower-confidence source explicit in the report.
+  if (!Array.isArray(adsets)) return "active_unverified";
+
+  const campaignAdsets = adsets.filter(
+    (adset) => String(adset.campaign_id || "") === String(campaign.id || "")
+  );
+
+  const activeNow = campaignAdsets.some((adset) => {
+    if (!hasEffectiveStatus(adset, "ACTIVE")) return false;
+    const startsAt = parseMetaDate(adset.start_time);
+    const endsAt = parseMetaDate(adset.end_time);
+    return (!startsAt || startsAt <= now) && (!endsAt || endsAt >= now);
+  });
+  if (activeNow) return "active";
+
+  const scheduled = campaignAdsets.some((adset) => {
+    const startsAt = parseMetaDate(adset.start_time);
+    return hasEffectiveStatus(adset, "ACTIVE") && startsAt && startsAt > now;
+  });
+  if (scheduled) return "scheduled";
+
+  const completed =
+    campaignAdsets.length > 0 &&
+    campaignAdsets.every((adset) => {
+      const endsAt = parseMetaDate(adset.end_time);
+      return endsAt && endsAt < now;
+    });
+  if (completed) return "completed";
+
+  return "not_delivering";
+}
+
+function buildMetaOverview(
+  campaigns = [],
+  insights = [],
+  adsets = null,
+  now = new Date()
+) {
   const normalizedInsights = insights.map(normalizeMetaInsight);
   const insightsByCampaignId = new Map(
     normalizedInsights.map((insight) => [insight.campaign_id, insight])
@@ -53,12 +109,14 @@ function buildMetaOverview(campaigns = [], insights = []) {
   const campaignRows = campaigns.map((campaign) => {
     const campaignId = String(campaign.id || "");
     const insight = insightsByCampaignId.get(campaignId) || null;
+    const deliveryStatus = classifyCampaignDelivery(campaign, adsets, now);
 
     return {
       id: campaignId,
       name: campaign.name || null,
       status: campaign.status || null,
       effective_status: campaign.effective_status || null,
+      delivery_status: deliveryStatus,
       objective: campaign.objective || null,
       data_status: insight ? "has_data" : "no_data",
       metrics: insight,
@@ -87,22 +145,19 @@ function buildMetaOverview(campaigns = [], insights = []) {
     ? round((totals.spend_eur / totals.impressions) * 1000, 4)
     : 0;
 
-  const active = campaigns.filter((campaign) =>
-    hasEffectiveStatus(campaign, "ACTIVE")
-  ).length;
-  const paused = campaigns.filter((campaign) =>
-    hasEffectiveStatus(campaign, "PAUSED")
-  ).length;
-  const withIssues = campaigns.filter(
-    (campaign) => campaign.effective_status === "WITH_ISSUES"
-  ).length;
+  const countDeliveryStatus = (status) =>
+    campaignRows.filter((campaign) => campaign.delivery_status === status).length;
 
   return {
     campaign_counts: {
       total: campaigns.length,
-      active,
-      paused,
-      with_issues: withIssues,
+      active: countDeliveryStatus("active"),
+      active_unverified: countDeliveryStatus("active_unverified"),
+      completed: countDeliveryStatus("completed"),
+      paused: countDeliveryStatus("paused"),
+      scheduled: countDeliveryStatus("scheduled"),
+      not_delivering: countDeliveryStatus("not_delivering"),
+      with_issues: countDeliveryStatus("with_issues"),
       with_data: campaignRows.filter((campaign) => campaign.data_status === "has_data")
         .length,
       without_data: campaignRows.filter(
@@ -144,5 +199,6 @@ function buildGoogleReadiness(environment = process.env) {
 module.exports = {
   buildGoogleReadiness,
   buildMetaOverview,
+  classifyCampaignDelivery,
   normalizeMetaInsight,
 };
