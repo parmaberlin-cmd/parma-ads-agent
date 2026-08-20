@@ -4,6 +4,7 @@ const axios = require("axios");
 const { randomUUID } = require("crypto");
 const { GoogleAdsApi } = require("google-ads-api");
 const { buildGoogleReadiness, buildMetaOverview } = require("./reporting");
+const { buildMetaDinnerProposal } = require("./proposals");
 
 const app = express();
 app.use(express.json({ limit: "100kb" }));
@@ -118,6 +119,25 @@ const allowedMetaDatePresets = new Set([
 function parseMetaDatePreset(value) {
   const preset = String(value || "last_30d").trim();
   return allowedMetaDatePresets.has(preset) ? preset : null;
+}
+
+function parseProposalBudget(value) {
+  const budget = Number(value ?? 6);
+  return Number.isFinite(budget) && budget >= 3 && budget <= 20
+    ? Math.round(budget * 100) / 100
+    : null;
+}
+
+function parseProposalDuration(value) {
+  const duration = Number(value ?? 14);
+  return Number.isInteger(duration) && duration >= 7 && duration <= 30
+    ? duration
+    : null;
+}
+
+function parseProposalGoal(value) {
+  const goal = String(value || "dinner_visits").trim();
+  return new Set(["dinner_visits", "reservations"]).has(goal) ? goal : null;
 }
 
 function eurToMetaCents(eur) {
@@ -1175,6 +1195,50 @@ app.post("/tools/campaign/update-budget", requireApiKey, disableAdWrites, async 
 
 app.get("/tools/dinner-baseline-template", requireApiKey, (req, res) => {
   res.json(buildDinnerBaselineTemplate());
+});
+
+app.get("/tools/meta/proposal/dinner", requireApiKey, async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+
+  const dailyBudgetEur = parseProposalBudget(req.query.daily_budget_eur);
+  const durationDays = parseProposalDuration(req.query.duration_days);
+  const goal = parseProposalGoal(req.query.goal);
+
+  if (dailyBudgetEur === null || durationDays === null || goal === null) {
+    return res.status(400).json({
+      success: false,
+      error:
+        "daily_budget_eur must be 3–20, duration_days must be 7–30, and goal must be dinner_visits or reservations",
+    });
+  }
+
+  try {
+    const [campaignCollection, insightCollection, adSetCollection] =
+      await Promise.all([
+        getCampaignCollection(),
+        getCampaignInsights("last_30d"),
+        getAdSetCollection(),
+      ]);
+    const metaOverview = buildMetaOverview(
+      campaignCollection.data,
+      insightCollection.data,
+      adSetCollection.data
+    );
+
+    res.json(
+      buildMetaDinnerProposal({
+        metaOverview,
+        dailyBudgetEur,
+        durationDays,
+        goal,
+      })
+    );
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: cleanMetaError(error),
+    });
+  }
 });
 
 app.get("/tools/test-ui", requireApiKey, disableAdWrites, (req, res) => {

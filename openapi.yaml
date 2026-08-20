@@ -110,6 +110,41 @@ paths:
       responses:
         "200":
           description: OK
+  /tools/meta/proposal/dinner:
+    get:
+      operationId: getMetaDinnerProposal
+      summary: Prepare a read-only Meta dinner campaign proposal for human review
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: daily_budget_eur
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 3
+            maximum: 20
+            default: 6
+        - name: duration_days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 7
+            maximum: 30
+            default: 14
+        - name: goal
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [dinner_visits, reservations]
+            default: dinner_visits
+      responses:
+        "200":
+          description: Draft proposal based on current Meta state; no ads are created
+        "400":
+          description: Invalid proposal parameters
 components:
   schemas: {}
   securitySchemes:
