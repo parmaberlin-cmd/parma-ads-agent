@@ -33,6 +33,17 @@ function requireIsoDate(value, label) {
   return date;
 }
 
+function requireDsaDeclaration(value, label) {
+  const declaration = String(value || "").trim();
+  if (declaration.length < 2 || declaration.length > 100) {
+    throw new TypeError(`${label} must contain between 2 and 100 characters`);
+  }
+  if (/[\r\n\t]/.test(declaration)) {
+    throw new TypeError(`${label} must be a single line`);
+  }
+  return declaration;
+}
+
 function toMetaCents(eur) {
   const amount = Number(eur);
   if (!Number.isFinite(amount) || amount < 3 || amount > 20) {
@@ -308,6 +319,8 @@ function buildPausedReservationDraft({
   dailyBudgetEur = 6,
   durationDays = 14,
   startsAt,
+  dsaBeneficiary,
+  dsaPayor,
   destinationUrl = RESERVATION_URL,
 }) {
   if (destinationUrl !== RESERVATION_URL) {
@@ -329,6 +342,11 @@ function buildPausedReservationDraft({
   );
   const normalizedLatitude = requireCoordinate(latitude, "latitude", -90, 90);
   const normalizedLongitude = requireCoordinate(longitude, "longitude", -180, 180);
+  const normalizedDsaBeneficiary = requireDsaDeclaration(
+    dsaBeneficiary,
+    "dsaBeneficiary"
+  );
+  const normalizedDsaPayor = requireDsaDeclaration(dsaPayor, "dsaPayor");
   const start = requireIsoDate(startsAt, "startsAt");
   const end = new Date(start.getTime() + durationDays * 24 * 60 * 60 * 1000);
   const dailyBudgetCents = toMetaCents(dailyBudgetEur);
@@ -365,6 +383,8 @@ function buildPausedReservationDraft({
       start_time: start.toISOString(),
       end_time: end.toISOString(),
       destination_type: "WEBSITE",
+      dsa_beneficiary: normalizedDsaBeneficiary,
+      dsa_payor: normalizedDsaPayor,
       pacing_type: ["day_parting"],
       adset_schedule: [
         {

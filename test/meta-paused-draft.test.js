@@ -20,6 +20,8 @@ function validInput(overrides = {}) {
     latitude: 52.5,
     longitude: 13.44,
     startsAt: "2026-08-24T09:00:00.000Z",
+    dsaBeneficiary: "PARMA DI VINI BENEDETTI",
+    dsaPayor: "PARMA DI VINI BENEDETTI",
     ...overrides,
   };
 }
@@ -33,6 +35,8 @@ test("builds the approved reservation campaign as a capped paused-only draft", (
   assert.equal(draft.campaign.objective, "OUTCOME_TRAFFIC");
   assert.equal(draft.campaign.is_adset_budget_sharing_enabled, false);
   assert.equal(draft.adSet.optimization_goal, "LINK_CLICKS");
+  assert.equal(draft.adSet.dsa_beneficiary, "PARMA DI VINI BENEDETTI");
+  assert.equal(draft.adSet.dsa_payor, "PARMA DI VINI BENEDETTI");
   assert.equal(draft.adSet.lifetime_budget, 8400);
   assert.equal("daily_budget" in draft.adSet, false);
   assert.deepEqual(draft.adSet.pacing_type, ["day_parting"]);
@@ -74,6 +78,17 @@ test("rejects invalid Meta identifiers and unsafe budgets", () => {
   assert.throws(
     () => buildPausedReservationDraft(validInput({ dailyBudgetEur: 25 })),
     /dailyBudgetEur must be between/
+  );
+});
+
+test("requires explicit EU DSA beneficiary and payor declarations", () => {
+  assert.throws(
+    () => buildPausedReservationDraft(validInput({ dsaBeneficiary: "" })),
+    /dsaBeneficiary must contain/
+  );
+  assert.throws(
+    () => buildPausedReservationDraft(validInput({ dsaPayor: "" })),
+    /dsaPayor must contain/
   );
 });
 
