@@ -4,7 +4,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js"
+    "check": "node --check server.js && node --check reporting.js",
+    "test": "node --test"
   },
   "dependencies": {
     "axios": "^1.7.2",

@@ -21,6 +21,25 @@ paths:
       responses:
         "200":
           description: OK
+  /tools/report/overview:
+    get:
+      operationId: getOverviewReport
+      summary: Get the consolidated read-only advertising report
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: date_preset
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [last_7d, last_14d, last_30d, last_90d]
+            default: last_30d
+      responses:
+        "200":
+          description: Consolidated Meta metrics and Google reader readiness
+        "400":
+          description: Invalid date preset
   /tools/google/test:
     get:
       operationId: testGoogleAds

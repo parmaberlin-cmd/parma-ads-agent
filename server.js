@@ -3,6 +3,7 @@ const path = require("path");
 const axios = require("axios");
 const { randomUUID } = require("crypto");
 const { GoogleAdsApi } = require("google-ads-api");
+const { buildGoogleReadiness, buildMetaOverview } = require("./reporting");
 
 const app = express();
 app.use(express.json({ limit: "100kb" }));
@@ -125,17 +126,56 @@ function eurToMetaCents(eur) {
   return Math.round(value * 100);
 }
 
-async function getCampaigns() {
-  const response = await metaClient.get(`/${META_AD_ACCOUNT_ID}/campaigns`, {
-    params: {
-      access_token: META_ACCESS_TOKEN,
-      fields:
-        "id,name,status,effective_status,objective,created_time,updated_time,daily_budget,lifetime_budget,buying_type,special_ad_categories",
-      limit: 100,
-    },
-  });
+async function getMetaCollection(endpoint, params, maxPages = 20) {
+  const data = [];
+  let after = null;
+  let pageCount = 0;
+  let hasMore = false;
 
-  return response.data.data || [];
+  do {
+    const response = await metaClient.get(endpoint, {
+      params: {
+        ...params,
+        access_token: META_ACCESS_TOKEN,
+        limit: 100,
+        ...(after ? { after } : {}),
+      },
+    });
+
+    data.push(...(response.data.data || []));
+    pageCount += 1;
+
+    const nextCursor = response.data.paging?.cursors?.after || null;
+    hasMore = Boolean(response.data.paging?.next && nextCursor);
+    after = hasMore ? nextCursor : null;
+  } while (hasMore && pageCount < maxPages);
+
+  return {
+    data,
+    pages: pageCount,
+    truncated: hasMore,
+  };
+}
+
+async function getCampaignCollection() {
+  return getMetaCollection(`/${META_AD_ACCOUNT_ID}/campaigns`, {
+    fields:
+      "id,name,status,effective_status,objective,created_time,updated_time,daily_budget,lifetime_budget,buying_type,special_ad_categories",
+  });
+}
+
+async function getCampaigns() {
+  const collection = await getCampaignCollection();
+  return collection.data;
+}
+
+async function getCampaignInsights(datePreset) {
+  return getMetaCollection(`/${META_AD_ACCOUNT_ID}/insights`, {
+    date_preset: datePreset,
+    level: "campaign",
+    fields:
+      "campaign_id,campaign_name,spend,impressions,reach,clicks,ctr,cpc,cpm,frequency,actions,cost_per_action_type",
+  });
 }
 
 async function getCampaign(campaignId) {
@@ -749,41 +789,61 @@ app.get("/tools/status", requireApiKey, async (req, res) => {
   }
 });
 
-app.get("/tools/dashboard", requireApiKey, async (req, res) => {
+async function handleOverviewReport(req, res) {
   if (!checkMetaConfig(res)) return;
 
-  try {
-    const campaigns = await getCampaigns();
+  const datePreset = parseMetaDatePreset(req.query.date_preset);
 
-    const campaignsTotal = campaigns.length;
-    const campaignsActive = campaigns.filter(
-      (campaign) => campaign.status === "ACTIVE" || campaign.effective_status === "ACTIVE"
-    ).length;
-    const campaignsPaused = campaigns.filter(
-      (campaign) => campaign.status === "PAUSED" || campaign.effective_status === "PAUSED"
-    ).length;
+  if (!datePreset) {
+    return res.status(400).json({
+      success: false,
+      error:
+        "date_preset must be one of: last_7d, last_14d, last_30d, last_90d",
+    });
+  }
+
+  try {
+    const [campaignCollection, insightCollection] = await Promise.all([
+      getCampaignCollection(),
+      getCampaignInsights(datePreset),
+    ]);
+    const metaOverview = buildMetaOverview(
+      campaignCollection.data,
+      insightCollection.data
+    );
+    const partialData =
+      campaignCollection.truncated || insightCollection.truncated;
 
     res.json({
       success: true,
-      meta: {
-        connected: true,
-        ad_account_id: META_AD_ACCOUNT_ID,
-        campaigns_total: campaignsTotal,
-        campaigns_active: campaignsActive,
-        campaigns_paused: campaignsPaused,
-        campaigns,
-      },
-      google: {
-        connected: Boolean(
-          process.env.GOOGLE_CLIENT_ID &&
-          process.env.GOOGLE_CLIENT_SECRET &&
-          process.env.GOOGLE_REFRESH_TOKEN
-        ),
-        conversion_tracking: "booking_completed configured in GA4 / Google Ads",
+      generated_at: new Date().toISOString(),
+      period: {
+        source: "meta_date_preset",
+        value: datePreset,
       },
       system: {
         railway_online: true,
         api_key_required: true,
+        report_mode: "read_only",
+        ad_writes_enabled: false,
+      },
+      meta: {
+        connected: true,
+        ad_account_id: META_AD_ACCOUNT_ID,
+        ...metaOverview,
+      },
+      google: buildGoogleReadiness(),
+      data_quality: {
+        status: partialData ? "partial" : "complete_for_returned_scope",
+        meta_pages: {
+          campaigns: campaignCollection.pages,
+          insights: insightCollection.pages,
+        },
+        caveats: [
+          "reach_sum can count the same person in more than one campaign",
+          "Meta action types are returned separately and are not combined into a conversion total until the business conversion definition is approved",
+          "This report does not call Google Ads; use the protected Google test and campaign metrics endpoints to verify live access",
+        ],
       },
     });
   } catch (error) {
@@ -792,7 +852,10 @@ app.get("/tools/dashboard", requireApiKey, async (req, res) => {
       error: cleanMetaError(error),
     });
   }
-});
+}
+
+app.get("/tools/report/overview", requireApiKey, handleOverviewReport);
+app.get("/tools/dashboard", requireApiKey, handleOverviewReport);
 
 app.get("/meta/campaigns", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
