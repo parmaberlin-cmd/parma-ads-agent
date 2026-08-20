@@ -92,16 +92,6 @@ test("discovers the connected Page, Instagram account and approved Reel without 
   const transport = {
     get: async (path, params) => {
       calls.push({ path, params });
-      if (path === "/act_404/instagram_accounts") {
-        return {
-          data: [
-            {
-              id: "502",
-              username: "parma.divinibenedetti",
-            },
-          ],
-        };
-      }
       if (path === "/act_404/promote_pages") {
         return {
           data: [
@@ -145,6 +135,51 @@ test("discovers the connected Page, Instagram account and approved Reel without 
     contains_access_token: false,
   });
   assert.equal(calls.some((call) => "access_token" in call.params), false);
+  assert.equal(
+    calls.some((call) => call.path === "/act_404/instagram_accounts"),
+    false
+  );
+});
+
+test("falls back to the ad-account Instagram edge when Page username metadata is absent", async () => {
+  const transport = {
+    get: async (path) => {
+      if (path === "/act_404/promote_pages") {
+        return {
+          data: [
+            {
+              id: "501",
+              instagram_business_account: { id: "502" },
+            },
+          ],
+        };
+      }
+      if (path === "/act_404/instagram_accounts") {
+        return {
+          data: [{ id: "502", username: "parma.divinibenedetti" }],
+        };
+      }
+      return {
+        data: [
+          {
+            id: "503",
+            media_type: "VIDEO",
+            permalink: "https://www.instagram.com/reel/C9M7_b6MayR/",
+          },
+        ],
+      };
+    },
+  };
+
+  const result = await discoverInstagramReelAssets({
+    transport,
+    adAccountId: "act_404",
+    reelPermalink: "https://www.instagram.com/reel/C9M7_b6MayR/",
+  });
+
+  assert.equal(result.page_id, "501");
+  assert.equal(result.instagram_user_id, "502");
+  assert.equal(result.source_instagram_media_id, "503");
 });
 
 test("fails clearly when the expected Instagram account is not connected", async () => {
