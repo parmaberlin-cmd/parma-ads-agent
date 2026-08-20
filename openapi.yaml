@@ -145,6 +145,27 @@ paths:
           description: Draft proposal based on current Meta state; no ads are created
         "400":
           description: Invalid proposal parameters
+  /tools/meta/draft-assets:
+    get:
+      operationId: inspectMetaDinnerDraftAssets
+      summary: Verify the connected Parma Instagram account and approved Reel in read-only mode
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: reel_permalink
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+            example: https://www.instagram.com/reel/C9M7_b6MayR/
+      responses:
+        "200":
+          description: Non-secret Meta Page, Instagram account and Reel identifiers
+        "400":
+          description: Invalid Instagram Reel URL
+        "500":
+          description: The connected Page, Instagram account or Reel could not be verified
 components:
   schemas: {}
   securitySchemes:
