@@ -31,6 +31,7 @@ test("builds the approved reservation campaign as a capped paused-only draft", (
   assert.equal(draft.adSet.status, "PAUSED");
   assert.equal(draft.ad.status, "PAUSED");
   assert.equal(draft.campaign.objective, "OUTCOME_TRAFFIC");
+  assert.equal(draft.campaign.is_adset_budget_sharing_enabled, false);
   assert.equal(draft.adSet.optimization_goal, "LINK_CLICKS");
   assert.equal(draft.adSet.lifetime_budget, 8400);
   assert.equal("daily_budget" in draft.adSet, false);
