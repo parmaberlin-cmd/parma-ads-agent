@@ -76,6 +76,7 @@ function getInstagramReelCode(permalink) {
 
 async function discoverInstagramReelAssets({
   transport,
+  adAccountId,
   instagramUsername = "parma.divinibenedetti",
   reelPermalink,
   maxPages = 10,
@@ -87,26 +88,58 @@ async function discoverInstagramReelAssets({
     throw new TypeError("maxPages must be an integer between 1 and 20");
   }
 
+  const normalizedAdAccountId = String(adAccountId || "").trim();
+  if (!/^act_\d{1,30}$/.test(normalizedAdAccountId)) {
+    throw new TypeError("adAccountId must use the act_<digits> format");
+  }
+
   const reelCode = getInstagramReelCode(reelPermalink);
   const expectedUsername = String(instagramUsername || "").trim().toLowerCase();
-  const pageCollection = await transport.get("/me/accounts", {
-    fields: "id,name,instagram_business_account{id,username}",
-    limit: 100,
-  });
+  const instagramCollection = await transport.get(
+    `/${normalizedAdAccountId}/instagram_accounts`,
+    {
+      fields: "id,username",
+      limit: 100,
+    }
+  );
+  const instagramAccount = (instagramCollection?.data || []).find(
+    (candidate) =>
+      String(candidate?.username || "").trim().toLowerCase() === expectedUsername
+  );
+
+  if (!instagramAccount) {
+    throw new Error(
+      `No Instagram account @${expectedUsername} is associated with ${normalizedAdAccountId}`
+    );
+  }
+
+  const instagramUserId = requireNumericId(
+    instagramAccount.id,
+    "discovered Instagram user id"
+  );
+  const pageCollection = await transport.get(
+    `/${normalizedAdAccountId}/promote_pages`,
+    {
+      fields: "id,name,instagram_business_account{id,username}",
+      limit: 100,
+    }
+  );
   const page = (pageCollection?.data || []).find((candidate) => {
-    const username = candidate?.instagram_business_account?.username;
-    return String(username || "").trim().toLowerCase() === expectedUsername;
+    const connectedInstagram = candidate?.instagram_business_account;
+    return (
+      String(connectedInstagram?.id || "") === instagramUserId ||
+      String(connectedInstagram?.username || "").trim().toLowerCase() ===
+        expectedUsername
+    );
   });
 
   if (!page) {
-    throw new Error(`No connected Meta Page found for @${expectedUsername}`);
+    throw new Error(
+      `No promotable Meta Page linked to @${expectedUsername} was found for ${normalizedAdAccountId}`
+    );
   }
 
   const pageId = requireNumericId(page.id, "discovered page id");
-  const instagramUserId = requireNumericId(
-    page.instagram_business_account.id,
-    "discovered Instagram user id"
-  );
   let after = null;
   let pagesChecked = 0;
   let matchedMedia = null;

@@ -909,6 +909,7 @@ app.get("/tools/meta/draft-assets", requireApiKey, async (req, res) => {
   try {
     const assets = await discoverInstagramReelAssets({
       transport: metaReadTransport,
+      adAccountId: META_AD_ACCOUNT_ID,
       instagramUsername: "parma.divinibenedetti",
       reelPermalink: req.query.reel_permalink,
     });

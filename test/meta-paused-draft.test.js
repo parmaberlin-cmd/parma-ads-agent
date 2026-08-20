@@ -92,7 +92,17 @@ test("discovers the connected Page, Instagram account and approved Reel without 
   const transport = {
     get: async (path, params) => {
       calls.push({ path, params });
-      if (path === "/me/accounts") {
+      if (path === "/act_404/instagram_accounts") {
+        return {
+          data: [
+            {
+              id: "502",
+              username: "parma.divinibenedetti",
+            },
+          ],
+        };
+      }
+      if (path === "/act_404/promote_pages") {
         return {
           data: [
             {
@@ -120,6 +130,7 @@ test("discovers the connected Page, Instagram account and approved Reel without 
 
   const result = await discoverInstagramReelAssets({
     transport,
+    adAccountId: "act_404",
     reelPermalink:
       "https://www.instagram.com/reel/C9M7_b6MayR/?igsh=cTZmeXNtb3pjbG13",
   });
@@ -144,9 +155,10 @@ test("fails clearly when the expected Instagram account is not connected", async
   await assert.rejects(
     discoverInstagramReelAssets({
       transport,
+      adAccountId: "act_404",
       reelPermalink: "https://www.instagram.com/reel/C9M7_b6MayR/",
     }),
-    /No connected Meta Page found/
+    /No Instagram account/
   );
 });
 
