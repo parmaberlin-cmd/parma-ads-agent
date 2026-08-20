@@ -302,7 +302,7 @@ async function discoverInstagramReelAssets({
 function buildPausedReservationDraft({
   pageId,
   instagramUserId,
-  adVideoId,
+  sourceInstagramMediaId,
   latitude,
   longitude,
   dailyBudgetEur = 6,
@@ -323,13 +323,17 @@ function buildPausedReservationDraft({
     instagramUserId,
     "instagramUserId"
   );
-  const normalizedAdVideoId = requireNumericId(adVideoId, "adVideoId");
+  const normalizedSourceInstagramMediaId = requireNumericId(
+    sourceInstagramMediaId,
+    "sourceInstagramMediaId"
+  );
   const normalizedLatitude = requireCoordinate(latitude, "latitude", -90, 90);
   const normalizedLongitude = requireCoordinate(longitude, "longitude", -180, 180);
   const start = requireIsoDate(startsAt, "startsAt");
   const end = new Date(start.getTime() + durationDays * 24 * 60 * 60 * 1000);
   const dailyBudgetCents = toMetaCents(dailyBudgetEur);
   const maximumTotalBudgetCents = dailyBudgetCents * durationDays;
+  const startDate = start.toISOString().slice(0, 10);
 
   const draft = {
     policy: {
@@ -345,14 +349,14 @@ function buildPausedReservationDraft({
       maximum_total_eur: maximumTotalBudgetCents / 100,
     },
     campaign: {
-      name: "Parma | Reservations | Kreuzberg | Controlled test",
+      name: `Parma | Reservations | Kreuzberg | ${startDate}`,
       objective: "OUTCOME_TRAFFIC",
       buying_type: "AUCTION",
       special_ad_categories: [],
       status: "PAUSED",
     },
     adSet: {
-      name: "Parma | 3 km | 23-60 | Reservations",
+      name: `Parma | 3 km | 23-60 | Reservations | ${startDate}`,
       billing_event: "IMPRESSIONS",
       optimization_goal: "LINK_CLICKS",
       bid_strategy: "LOWEST_COST_WITHOUT_CAP",
@@ -360,6 +364,14 @@ function buildPausedReservationDraft({
       start_time: start.toISOString(),
       end_time: end.toISOString(),
       destination_type: "WEBSITE",
+      pacing_type: ["day_parting"],
+      adset_schedule: [
+        {
+          start_minute: 17 * 60,
+          end_minute: 23 * 60,
+          days: [0, 1, 2, 3, 4, 5, 6],
+        },
+      ],
       targeting: {
         age_min: 23,
         age_max: 60,
@@ -373,25 +385,19 @@ function buildPausedReservationDraft({
             },
           ],
         },
-        publisher_platforms: ["facebook", "instagram"],
+        publisher_platforms: ["instagram"],
+        instagram_positions: ["stream", "story", "reels"],
       },
       status: "PAUSED",
     },
     creative: {
       name: "Parma | Existing Reel video | Reservations",
-      object_story_spec: {
-        page_id: normalizedPageId,
-        instagram_user_id: normalizedInstagramUserId,
-        video_data: {
-          video_id: normalizedAdVideoId,
-          message:
-            "Sauerteigpizza, Bio-Zutaten und echtes Handwerk in Kreuzberg. Jeden Abend von 17 bis 23 Uhr bei Parma in der Wrangelstraße 90.",
-          title: "Pizzaabend in Kreuzberg",
-          call_to_action: {
-            type: "BOOK_NOW",
-            value: { link: RESERVATION_URL },
-          },
-        },
+      object_id: normalizedPageId,
+      instagram_user_id: normalizedInstagramUserId,
+      source_instagram_media_id: normalizedSourceInstagramMediaId,
+      call_to_action: {
+        type: "BOOK_NOW",
+        value: { link: RESERVATION_URL },
       },
     },
     ad: {

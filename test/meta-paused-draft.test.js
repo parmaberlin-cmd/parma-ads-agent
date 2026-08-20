@@ -16,7 +16,7 @@ function validInput(overrides = {}) {
   return {
     pageId: "101",
     instagramUserId: "202",
-    adVideoId: "303",
+    sourceInstagramMediaId: "303",
     latitude: 52.5,
     longitude: 13.44,
     startsAt: "2026-08-24T09:00:00.000Z",
@@ -34,15 +34,24 @@ test("builds the approved reservation campaign as a capped paused-only draft", (
   assert.equal(draft.adSet.optimization_goal, "LINK_CLICKS");
   assert.equal(draft.adSet.lifetime_budget, 8400);
   assert.equal("daily_budget" in draft.adSet, false);
+  assert.deepEqual(draft.adSet.pacing_type, ["day_parting"]);
+  assert.deepEqual(draft.adSet.adset_schedule, [
+    { start_minute: 1020, end_minute: 1380, days: [0, 1, 2, 3, 4, 5, 6] },
+  ]);
+  assert.deepEqual(draft.adSet.targeting.publisher_platforms, ["instagram"]);
   assert.equal(draft.budget.maximum_total_eur, 84);
   assert.equal(
-    draft.creative.object_story_spec.video_data.call_to_action.value.link,
+    draft.creative.call_to_action.value.link,
     RESERVATION_URL
   );
   assert.equal(
-    draft.creative.object_story_spec.video_data.call_to_action.type,
+    draft.creative.call_to_action.type,
     "BOOK_NOW"
   );
+  assert.equal(draft.creative.object_id, "101");
+  assert.equal(draft.creative.instagram_user_id, "202");
+  assert.equal(draft.creative.source_instagram_media_id, "303");
+  assert.equal("object_story_spec" in draft.creative, false);
   assert.doesNotThrow(() => assertPausedOnly(draft));
 });
 

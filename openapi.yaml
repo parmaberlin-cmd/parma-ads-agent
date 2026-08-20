@@ -166,6 +166,64 @@ paths:
           description: Invalid Instagram Reel URL
         "500":
           description: The connected Page, Instagram account or Reel could not be verified
+  /tools/meta/reservation-draft/preview:
+    get:
+      operationId: previewPausedMetaReservationDraft
+      summary: Preview the fixed Parma reservations campaign as a paused-only Meta draft
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: starts_at
+          in: query
+          required: true
+          description: Campaign start date-time including timezone; must be in the future
+          schema:
+            type: string
+            format: date-time
+            example: 2026-08-24T17:00:00+02:00
+      responses:
+        "200":
+          description: Read-only preview; no Meta object is created
+        "400":
+          description: Invalid or past start date-time
+        "500":
+          description: Meta assets could not be prepared
+  /tools/meta/reservation-draft/create:
+    post:
+      operationId: createPausedMetaReservationDraft
+      summary: Create the approved Parma reservations campaign as PAUSED Meta objects only
+      description: This operation never activates delivery or spend. It is blocked unless the server write gate is temporarily enabled and the exact human-approval phrase is supplied.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [starts_at, approval_token]
+              properties:
+                starts_at:
+                  type: string
+                  format: date-time
+                  description: Campaign start date-time including timezone; must be in the future
+                  example: 2026-08-24T17:00:00+02:00
+                approval_token:
+                  type: string
+                  enum: [CREATE_PARMA_META_DRAFT_PAUSED_ONLY]
+                  description: Exact scoped phrase confirming creation of paused draft objects only
+      responses:
+        "201":
+          description: Campaign, ad set, creative and ad created and verified PAUSED
+        "400":
+          description: Invalid request
+        "403":
+          description: Server write gate disabled or approval phrase missing
+        "409":
+          description: A draft already exists for the selected start date
+        "502":
+          description: Partial paused draft; returned object IDs require inspection
 components:
   schemas: {}
   securitySchemes:
