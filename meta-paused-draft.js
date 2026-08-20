@@ -95,90 +95,127 @@ async function discoverInstagramReelAssets({
 
   const reelCode = getInstagramReelCode(reelPermalink);
   const expectedUsername = String(instagramUsername || "").trim().toLowerCase();
-  const pageCollection = await transport.get(
-    `/${normalizedAdAccountId}/promote_pages`,
-    {
-      fields: "id,name,instagram_business_account{id,username}",
-      limit: 100,
-    }
-  );
-  const candidatePages = [...(pageCollection?.data || [])];
-  let page = candidatePages.find((candidate) => {
-    const connectedInstagram = candidate?.instagram_business_account;
-    return String(connectedInstagram?.username || "").trim().toLowerCase() ===
-      expectedUsername;
-  });
+  const candidatePages = [];
+  const discoveryFailures = [];
+  const classifyFailure = (stage, error) => {
+    const graphError = error?.response?.data?.error || error;
+    const code = Number(graphError?.code);
+    const message = String(graphError?.message || "").toLowerCase();
+    const reason =
+      [10, 100, 200, 294].includes(code) || message.includes("permission")
+        ? "permission_denied"
+        : "unavailable";
+    discoveryFailures.push(`${stage}=${reason}`);
+  };
 
-  let instagramAccount = page?.instagram_business_account || null;
+  let page = null;
+  let instagramAccount = null;
 
   // Business-owned assets are the canonical discovery path for system-user
   // tokens. Derive the Business from the configured ad account so no Business
   // identifier needs to be stored or exposed separately.
-  if (!instagramAccount) {
+  let businessId = null;
+  try {
+    const adAccount = await transport.get(`/${normalizedAdAccountId}`, {
+      fields: "business{id}",
+    });
+    if (adAccount?.business?.id) {
+      businessId = requireNumericId(
+        adAccount.business.id,
+        "discovered Meta Business id"
+      );
+    }
+  } catch (error) {
+    classifyFailure("ad_account_business", error);
+  }
+
+  if (businessId) {
     try {
-      const adAccount = await transport.get(`/${normalizedAdAccountId}`, {
-        fields: "business{id}",
-      });
-      const rawBusinessId = adAccount?.business?.id;
-      if (rawBusinessId) {
-        const businessId = requireNumericId(
-          rawBusinessId,
-          "discovered Meta Business id"
-        );
-        const [ownedInstagramCollection, ownedPageCollection] = await Promise.all([
-          transport.get(`/${businessId}/owned_instagram_accounts`, {
-            fields: "id,username",
-            limit: 100,
-          }),
-          transport.get(`/${businessId}/owned_pages`, {
-            fields: "id,name,instagram_business_account{id,username}",
-            limit: 100,
-          }),
-        ]);
-
-        instagramAccount = (ownedInstagramCollection?.data || []).find(
-          (candidate) =>
-            String(candidate?.username || "").trim().toLowerCase() ===
-            expectedUsername
-        );
-        candidatePages.push(...(ownedPageCollection?.data || []));
-
-        if (instagramAccount) {
-          const ownedInstagramId = requireNumericId(
-            instagramAccount.id,
-            "discovered Instagram user id"
-          );
-          page = candidatePages.find((candidate) => {
-            const connectedInstagram = candidate?.instagram_business_account;
-            return (
-              String(connectedInstagram?.id || "") === ownedInstagramId ||
-              String(connectedInstagram?.username || "").trim().toLowerCase() ===
-                expectedUsername
-            );
-          });
+      const ownedInstagramCollection = await transport.get(
+        `/${businessId}/owned_instagram_accounts`,
+        {
+          fields: "id,username",
+          limit: 100,
         }
-      }
-    } catch {
-      // Continue to the compatibility edge below. A failure on one read-only
-      // discovery path must not prevent the other supported path from running.
+      );
+      instagramAccount = (ownedInstagramCollection?.data || []).find(
+        (candidate) =>
+          String(candidate?.username || "").trim().toLowerCase() ===
+          expectedUsername
+      );
+    } catch (error) {
+      classifyFailure("business_instagram", error);
+    }
+
+    try {
+      const ownedPageCollection = await transport.get(`/${businessId}/owned_pages`, {
+        fields: "id,name,instagram_business_account{id,username}",
+        limit: 100,
+      });
+      candidatePages.push(...(ownedPageCollection?.data || []));
+    } catch (error) {
+      classifyFailure("business_pages", error);
     }
   }
 
-  // Some Meta system-user tokens can read the Page connection but do not expose
-  // the ad account's instagram_accounts edge. Prefer the Page-owned identity and
-  // retain the ad-account edge only as a compatibility fallback.
-  if (!instagramAccount) {
-    const instagramCollection = await transport.get(
-      `/${normalizedAdAccountId}/instagram_accounts`,
-      {
-        fields: "id,username",
-        limit: 100,
+  if (instagramAccount) {
+    const ownedInstagramId = requireNumericId(
+      instagramAccount.id,
+      "discovered Instagram user id"
+    );
+    page = candidatePages.find((candidate) => {
+      const connectedInstagram = candidate?.instagram_business_account;
+      return (
+        String(connectedInstagram?.id || "") === ownedInstagramId ||
+        String(connectedInstagram?.username || "").trim().toLowerCase() ===
+          expectedUsername
+      );
+    });
+  }
+
+  // A promotable Page is a compatibility path, not a prerequisite. Some
+  // system-user tokens intentionally lack the Page advertising permission.
+  if (!instagramAccount || !page) {
+    try {
+      const pageCollection = await transport.get(
+        `/${normalizedAdAccountId}/promote_pages`,
+        {
+          fields: "id,name,instagram_business_account{id,username}",
+          limit: 100,
+        }
+      );
+      candidatePages.push(...(pageCollection?.data || []));
+      const promotedPage = candidatePages.find((candidate) => {
+        const connectedInstagram = candidate?.instagram_business_account;
+        return String(connectedInstagram?.username || "").trim().toLowerCase() ===
+          expectedUsername;
+      });
+      if (!page && promotedPage) page = promotedPage;
+      if (!instagramAccount && promotedPage) {
+        instagramAccount = promotedPage.instagram_business_account;
       }
-    );
-    instagramAccount = (instagramCollection?.data || []).find(
-      (candidate) =>
-        String(candidate?.username || "").trim().toLowerCase() === expectedUsername
-    );
+    } catch (error) {
+      classifyFailure("promote_pages", error);
+    }
+  }
+
+  if (!instagramAccount) {
+    try {
+      const instagramCollection = await transport.get(
+        `/${normalizedAdAccountId}/instagram_accounts`,
+        {
+          fields: "id,username",
+          limit: 100,
+        }
+      );
+      instagramAccount = (instagramCollection?.data || []).find(
+          (candidate) =>
+            String(candidate?.username || "").trim().toLowerCase() ===
+            expectedUsername
+      );
+    } catch (error) {
+      classifyFailure("ad_account_instagram", error);
+    }
 
     if (instagramAccount) {
       const fallbackInstagramId = requireNumericId(
@@ -197,8 +234,11 @@ async function discoverInstagramReelAssets({
   }
 
   if (!instagramAccount) {
+    const diagnostics = discoveryFailures.length
+      ? ` (${discoveryFailures.join("; ")})`
+      : "";
     throw new Error(
-      `No Instagram account @${expectedUsername} is connected to a promotable Meta Page or ${normalizedAdAccountId}`
+      `No Instagram account @${expectedUsername} was discoverable through assigned Business, Page, or ad account assets${diagnostics}`
     );
   }
 
@@ -208,8 +248,11 @@ async function discoverInstagramReelAssets({
   );
 
   if (!page) {
+    const diagnostics = discoveryFailures.length
+      ? ` (${discoveryFailures.join("; ")})`
+      : "";
     throw new Error(
-      `No promotable Meta Page linked to @${expectedUsername} was found for ${normalizedAdAccountId}`
+      `No Meta Page linked to @${expectedUsername} was discoverable through assigned Business or promotable Page assets${diagnostics}`
     );
   }
 

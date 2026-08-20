@@ -240,7 +240,46 @@ test("discovers Instagram and its Page from Business-owned assets for a system-u
     calls.some((call) => call.path === "/act_404/instagram_accounts"),
     false
   );
+  assert.equal(
+    calls.some((call) => call.path === "/act_404/promote_pages"),
+    false
+  );
   assert.equal(calls.some((call) => "access_token" in call.params), false);
+});
+
+test("reports sanitized permission stages without leaking Graph error details", async () => {
+  const permissionError = {
+    response: {
+      data: {
+        error: {
+          code: 200,
+          message: "Permissions error containing a private diagnostic",
+        },
+      },
+    },
+  };
+  const transport = {
+    get: async (path) => {
+      if (path === "/act_404") return { business: { id: "601" } };
+      throw permissionError;
+    },
+  };
+
+  await assert.rejects(
+    discoverInstagramReelAssets({
+      transport,
+      adAccountId: "act_404",
+      reelPermalink: "https://www.instagram.com/reel/C9M7_b6MayR/",
+    }),
+    (error) => {
+      assert.match(error.message, /business_instagram=permission_denied/);
+      assert.match(error.message, /business_pages=permission_denied/);
+      assert.match(error.message, /promote_pages=permission_denied/);
+      assert.match(error.message, /ad_account_instagram=permission_denied/);
+      assert.doesNotMatch(error.message, /private diagnostic/);
+      return true;
+    }
+  );
 });
 
 test("fails clearly when the expected Instagram account is not connected", async () => {
