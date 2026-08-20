@@ -5,6 +5,7 @@ const { randomUUID } = require("crypto");
 const { GoogleAdsApi } = require("google-ads-api");
 const { buildGoogleReadiness, buildMetaOverview } = require("./reporting");
 const { buildMetaDinnerProposal } = require("./proposals");
+const { discoverInstagramReelAssets } = require("./meta-paused-draft");
 
 const app = express();
 app.use(express.json({ limit: "100kb" }));
@@ -49,6 +50,18 @@ const metaClient = axios.create({
   baseURL: META_BASE_URL,
   timeout: 20000,
 });
+
+const metaReadTransport = {
+  async get(endpoint, params = {}) {
+    const response = await metaClient.get(endpoint, {
+      params: {
+        ...params,
+        access_token: META_ACCESS_TOKEN,
+      },
+    });
+    return response.data;
+  },
+};
 
 function requireApiKey(req, res, next) {
   const apiKey =
@@ -889,6 +902,33 @@ async function handleOverviewReport(req, res) {
 
 app.get("/tools/report/overview", requireApiKey, handleOverviewReport);
 app.get("/tools/dashboard", requireApiKey, handleOverviewReport);
+
+app.get("/tools/meta/draft-assets", requireApiKey, async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+
+  try {
+    const assets = await discoverInstagramReelAssets({
+      transport: metaReadTransport,
+      instagramUsername: "parma.divinibenedetti",
+      reelPermalink: req.query.reel_permalink,
+    });
+
+    res.json({
+      success: true,
+      mode: "read_only",
+      assets,
+      ad_writes_enabled: false,
+    });
+  } catch (error) {
+    const isInputError = error instanceof TypeError;
+    res.status(isInputError ? 400 : 500).json({
+      success: false,
+      error: isInputError
+        ? { message: error.message, type: "validation_error" }
+        : cleanMetaError(error),
+    });
+  }
+});
 
 app.get("/meta/campaigns", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;

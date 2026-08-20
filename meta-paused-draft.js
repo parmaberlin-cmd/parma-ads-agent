@@ -1,0 +1,362 @@
+const APPROVAL_TOKEN = "CREATE_PARMA_META_DRAFT_PAUSED_ONLY";
+const RESERVATION_URL = "https://www.parmaberlin.de/reservations";
+
+class PartialMetaDraftError extends Error {
+  constructor(message, created, cause) {
+    super(message, { cause });
+    this.name = "PartialMetaDraftError";
+    this.created = { ...created };
+  }
+}
+
+function requireNumericId(value, label) {
+  const id = String(value || "").trim();
+  if (!/^\d{1,30}$/.test(id)) {
+    throw new TypeError(`${label} must contain 1 to 30 digits`);
+  }
+  return id;
+}
+
+function requireCoordinate(value, label, minimum, maximum) {
+  const coordinate = Number(value);
+  if (!Number.isFinite(coordinate) || coordinate < minimum || coordinate > maximum) {
+    throw new TypeError(`${label} must be between ${minimum} and ${maximum}`);
+  }
+  return coordinate;
+}
+
+function requireIsoDate(value, label) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new TypeError(`${label} must be a valid date`);
+  }
+  return date;
+}
+
+function toMetaCents(eur) {
+  const amount = Number(eur);
+  if (!Number.isFinite(amount) || amount < 3 || amount > 20) {
+    throw new TypeError("dailyBudgetEur must be between 3 and 20");
+  }
+  return Math.round(amount * 100);
+}
+
+function assertPausedOnly(value, path = "draft") {
+  if (typeof value === "string" && value.toUpperCase() === "ACTIVE") {
+    throw new Error(`${path} must never contain ACTIVE status`);
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertPausedOnly(item, `${path}[${index}]`));
+    return;
+  }
+
+  if (value && typeof value === "object") {
+    Object.entries(value).forEach(([key, item]) =>
+      assertPausedOnly(item, `${path}.${key}`)
+    );
+  }
+}
+
+function getInstagramReelCode(permalink) {
+  let url;
+  try {
+    url = new URL(permalink);
+  } catch {
+    throw new TypeError("reelPermalink must be a valid Instagram Reel URL");
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  const match = url.pathname.match(/^\/reel\/([A-Za-z0-9_-]+)\/?$/);
+  if (!(hostname === "instagram.com" || hostname === "www.instagram.com") || !match) {
+    throw new TypeError("reelPermalink must be a valid Instagram Reel URL");
+  }
+  return match[1];
+}
+
+async function discoverInstagramReelAssets({
+  transport,
+  instagramUsername = "parma.divinibenedetti",
+  reelPermalink,
+  maxPages = 10,
+}) {
+  if (!transport || typeof transport.get !== "function") {
+    throw new TypeError("transport must provide a get function");
+  }
+  if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 20) {
+    throw new TypeError("maxPages must be an integer between 1 and 20");
+  }
+
+  const reelCode = getInstagramReelCode(reelPermalink);
+  const expectedUsername = String(instagramUsername || "").trim().toLowerCase();
+  const pageCollection = await transport.get("/me/accounts", {
+    fields: "id,name,instagram_business_account{id,username}",
+    limit: 100,
+  });
+  const page = (pageCollection?.data || []).find((candidate) => {
+    const username = candidate?.instagram_business_account?.username;
+    return String(username || "").trim().toLowerCase() === expectedUsername;
+  });
+
+  if (!page) {
+    throw new Error(`No connected Meta Page found for @${expectedUsername}`);
+  }
+
+  const pageId = requireNumericId(page.id, "discovered page id");
+  const instagramUserId = requireNumericId(
+    page.instagram_business_account.id,
+    "discovered Instagram user id"
+  );
+  let after = null;
+  let pagesChecked = 0;
+  let matchedMedia = null;
+
+  do {
+    const collection = await transport.get(`/${instagramUserId}/media`, {
+      fields: "id,media_type,permalink,timestamp",
+      limit: 100,
+      ...(after ? { after } : {}),
+    });
+    pagesChecked += 1;
+    matchedMedia = (collection?.data || []).find((media) => {
+      try {
+        return getInstagramReelCode(media.permalink) === reelCode;
+      } catch {
+        return false;
+      }
+    });
+    if (matchedMedia) break;
+
+    after = collection?.paging?.cursors?.after || null;
+    if (!collection?.paging?.next) after = null;
+  } while (after && pagesChecked < maxPages);
+
+  if (!matchedMedia) {
+    throw new Error(`Reel ${reelCode} was not found in the connected Instagram media`);
+  }
+
+  return {
+    page_id: pageId,
+    instagram_user_id: instagramUserId,
+    source_instagram_media_id: requireNumericId(
+      matchedMedia.id,
+      "discovered Instagram media id"
+    ),
+    instagram_username: expectedUsername,
+    reel_code: reelCode,
+    pages_checked: pagesChecked,
+    contains_access_token: false,
+  };
+}
+
+function buildPausedReservationDraft({
+  pageId,
+  instagramUserId,
+  adVideoId,
+  latitude,
+  longitude,
+  dailyBudgetEur = 6,
+  durationDays = 14,
+  startsAt,
+  destinationUrl = RESERVATION_URL,
+}) {
+  if (destinationUrl !== RESERVATION_URL) {
+    throw new TypeError(`destinationUrl must be exactly ${RESERVATION_URL}`);
+  }
+
+  if (!Number.isInteger(durationDays) || durationDays < 7 || durationDays > 30) {
+    throw new TypeError("durationDays must be an integer between 7 and 30");
+  }
+
+  const normalizedPageId = requireNumericId(pageId, "pageId");
+  const normalizedInstagramUserId = requireNumericId(
+    instagramUserId,
+    "instagramUserId"
+  );
+  const normalizedAdVideoId = requireNumericId(adVideoId, "adVideoId");
+  const normalizedLatitude = requireCoordinate(latitude, "latitude", -90, 90);
+  const normalizedLongitude = requireCoordinate(longitude, "longitude", -180, 180);
+  const start = requireIsoDate(startsAt, "startsAt");
+  const end = new Date(start.getTime() + durationDays * 24 * 60 * 60 * 1000);
+  const dailyBudgetCents = toMetaCents(dailyBudgetEur);
+  const maximumTotalBudgetCents = dailyBudgetCents * durationDays;
+
+  const draft = {
+    policy: {
+      mode: "paused_draft_only",
+      may_activate: false,
+      may_publish_active_ad: false,
+      destination_allowlist: [RESERVATION_URL],
+      approval_token_required: APPROVAL_TOKEN,
+    },
+    budget: {
+      daily_eur: dailyBudgetCents / 100,
+      duration_days: durationDays,
+      maximum_total_eur: maximumTotalBudgetCents / 100,
+    },
+    campaign: {
+      name: "Parma | Reservations | Kreuzberg | Controlled test",
+      objective: "OUTCOME_TRAFFIC",
+      buying_type: "AUCTION",
+      special_ad_categories: [],
+      status: "PAUSED",
+    },
+    adSet: {
+      name: "Parma | 3 km | 23-60 | Reservations",
+      billing_event: "IMPRESSIONS",
+      optimization_goal: "LINK_CLICKS",
+      bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+      lifetime_budget: maximumTotalBudgetCents,
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+      destination_type: "WEBSITE",
+      targeting: {
+        age_min: 23,
+        age_max: 60,
+        geo_locations: {
+          custom_locations: [
+            {
+              latitude: normalizedLatitude,
+              longitude: normalizedLongitude,
+              radius: 3,
+              distance_unit: "kilometer",
+            },
+          ],
+        },
+        publisher_platforms: ["facebook", "instagram"],
+      },
+      status: "PAUSED",
+    },
+    creative: {
+      name: "Parma | Existing Reel video | Reservations",
+      object_story_spec: {
+        page_id: normalizedPageId,
+        instagram_user_id: normalizedInstagramUserId,
+        video_data: {
+          video_id: normalizedAdVideoId,
+          message:
+            "Sauerteigpizza, Bio-Zutaten und echtes Handwerk in Kreuzberg. Jeden Abend von 17 bis 23 Uhr bei Parma in der Wrangelstraße 90.",
+          title: "Pizzaabend in Kreuzberg",
+          call_to_action: {
+            type: "BOOK_NOW",
+            value: { link: RESERVATION_URL },
+          },
+        },
+      },
+    },
+    ad: {
+      name: "Parma | Reel | Jetzt reservieren",
+      status: "PAUSED",
+    },
+  };
+
+  assertPausedOnly(draft);
+  return draft;
+}
+
+async function createPausedReservationDraft({
+  transport,
+  adAccountId,
+  draft,
+  approvalToken,
+}) {
+  if (approvalToken !== APPROVAL_TOKEN) {
+    throw new Error("Exact paused-draft approval token is required");
+  }
+  if (!transport || typeof transport.post !== "function" || typeof transport.get !== "function") {
+    throw new TypeError("transport must provide post and get functions");
+  }
+
+  const accountId = String(adAccountId || "").trim();
+  if (!/^act_\d{1,30}$/.test(accountId)) {
+    throw new TypeError("adAccountId must use the act_<digits> format");
+  }
+
+  assertPausedOnly(draft);
+  const created = {};
+
+  try {
+    const campaign = await transport.post(`/${accountId}/campaigns`, draft.campaign);
+    created.campaign_id = requireNumericId(campaign?.id, "created campaign id");
+
+    const adSet = await transport.post(`/${accountId}/adsets`, {
+      ...draft.adSet,
+      campaign_id: created.campaign_id,
+    });
+    created.adset_id = requireNumericId(adSet?.id, "created ad set id");
+
+    const creative = await transport.post(`/${accountId}/adcreatives`, draft.creative);
+    created.creative_id = requireNumericId(creative?.id, "created creative id");
+
+    const ad = await transport.post(`/${accountId}/ads`, {
+      ...draft.ad,
+      adset_id: created.adset_id,
+      creative: { creative_id: created.creative_id },
+    });
+    created.ad_id = requireNumericId(ad?.id, "created ad id");
+
+    let verificationEntries = await Promise.all(
+      [created.campaign_id, created.adset_id, created.ad_id].map(async (id) => {
+        const object = await transport.get(`/${id}`, { fields: "id,status,effective_status" });
+        return [id, object];
+      })
+    );
+    let verification = Object.fromEntries(verificationEntries);
+    const unexpectedStatuses = Object.entries(verification).filter(
+      ([, object]) => object?.status !== "PAUSED"
+    );
+
+    if (unexpectedStatuses.length > 0) {
+      await Promise.all(
+        unexpectedStatuses.map(([id]) =>
+          transport.post(`/${id}`, { status: "PAUSED" })
+        )
+      );
+      verificationEntries = await Promise.all(
+        [created.campaign_id, created.adset_id, created.ad_id].map(async (id) => {
+          const object = await transport.get(`/${id}`, {
+            fields: "id,status,effective_status",
+          });
+          return [id, object];
+        })
+      );
+      verification = Object.fromEntries(verificationEntries);
+    }
+
+    const stillUnsafe = Object.entries(verification).filter(
+      ([, object]) => object?.status !== "PAUSED"
+    );
+    if (stillUnsafe.length > 0) {
+      throw new Error(
+        `Meta objects were not verified as PAUSED after emergency pause: ${stillUnsafe
+          .map(([id]) => id)
+          .join(",")}`
+      );
+    }
+
+    return {
+      success: true,
+      mode: "paused_draft_only",
+      created,
+      verification,
+      activates_spend: false,
+    };
+  } catch (error) {
+    throw new PartialMetaDraftError(
+      "Paused Meta draft creation did not complete; inspect the returned object IDs before any further action",
+      created,
+      error
+    );
+  }
+}
+
+module.exports = {
+  APPROVAL_TOKEN,
+  RESERVATION_URL,
+  PartialMetaDraftError,
+  assertPausedOnly,
+  discoverInstagramReelAssets,
+  getInstagramReelCode,
+  buildPausedReservationDraft,
+  createPausedReservationDraft,
+};
