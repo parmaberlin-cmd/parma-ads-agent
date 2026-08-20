@@ -182,6 +182,67 @@ test("falls back to the ad-account Instagram edge when Page username metadata is
   assert.equal(result.source_instagram_media_id, "503");
 });
 
+test("discovers Instagram and its Page from Business-owned assets for a system-user token", async () => {
+  const calls = [];
+  const transport = {
+    get: async (path, params) => {
+      calls.push({ path, params });
+      if (path === "/act_404/promote_pages") {
+        return { data: [{ id: "501", name: "Parma" }] };
+      }
+      if (path === "/act_404") {
+        return { business: { id: "601" } };
+      }
+      if (path === "/601/owned_instagram_accounts") {
+        return {
+          data: [{ id: "502", username: "parma.divinibenedetti" }],
+        };
+      }
+      if (path === "/601/owned_pages") {
+        return {
+          data: [
+            {
+              id: "501",
+              name: "Parma",
+              instagram_business_account: {
+                id: "502",
+                username: "parma.divinibenedetti",
+              },
+            },
+          ],
+        };
+      }
+      if (path === "/502/media") {
+        return {
+          data: [
+            {
+              id: "503",
+              media_type: "VIDEO",
+              permalink: "https://www.instagram.com/reel/C9M7_b6MayR/",
+            },
+          ],
+        };
+      }
+      throw new Error(`unexpected path ${path}`);
+    },
+  };
+
+  const result = await discoverInstagramReelAssets({
+    transport,
+    adAccountId: "act_404",
+    reelPermalink: "https://www.instagram.com/reel/C9M7_b6MayR/",
+  });
+
+  assert.equal(result.page_id, "501");
+  assert.equal(result.instagram_user_id, "502");
+  assert.equal(result.source_instagram_media_id, "503");
+  assert.equal(
+    calls.some((call) => call.path === "/act_404/instagram_accounts"),
+    false
+  );
+  assert.equal(calls.some((call) => "access_token" in call.params), false);
+});
+
 test("fails clearly when the expected Instagram account is not connected", async () => {
   const transport = {
     get: async () => ({ data: [] }),

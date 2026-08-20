@@ -102,13 +102,67 @@ async function discoverInstagramReelAssets({
       limit: 100,
     }
   );
-  let page = (pageCollection?.data || []).find((candidate) => {
+  const candidatePages = [...(pageCollection?.data || [])];
+  let page = candidatePages.find((candidate) => {
     const connectedInstagram = candidate?.instagram_business_account;
     return String(connectedInstagram?.username || "").trim().toLowerCase() ===
       expectedUsername;
   });
 
   let instagramAccount = page?.instagram_business_account || null;
+
+  // Business-owned assets are the canonical discovery path for system-user
+  // tokens. Derive the Business from the configured ad account so no Business
+  // identifier needs to be stored or exposed separately.
+  if (!instagramAccount) {
+    try {
+      const adAccount = await transport.get(`/${normalizedAdAccountId}`, {
+        fields: "business{id}",
+      });
+      const rawBusinessId = adAccount?.business?.id;
+      if (rawBusinessId) {
+        const businessId = requireNumericId(
+          rawBusinessId,
+          "discovered Meta Business id"
+        );
+        const [ownedInstagramCollection, ownedPageCollection] = await Promise.all([
+          transport.get(`/${businessId}/owned_instagram_accounts`, {
+            fields: "id,username",
+            limit: 100,
+          }),
+          transport.get(`/${businessId}/owned_pages`, {
+            fields: "id,name,instagram_business_account{id,username}",
+            limit: 100,
+          }),
+        ]);
+
+        instagramAccount = (ownedInstagramCollection?.data || []).find(
+          (candidate) =>
+            String(candidate?.username || "").trim().toLowerCase() ===
+            expectedUsername
+        );
+        candidatePages.push(...(ownedPageCollection?.data || []));
+
+        if (instagramAccount) {
+          const ownedInstagramId = requireNumericId(
+            instagramAccount.id,
+            "discovered Instagram user id"
+          );
+          page = candidatePages.find((candidate) => {
+            const connectedInstagram = candidate?.instagram_business_account;
+            return (
+              String(connectedInstagram?.id || "") === ownedInstagramId ||
+              String(connectedInstagram?.username || "").trim().toLowerCase() ===
+                expectedUsername
+            );
+          });
+        }
+      }
+    } catch {
+      // Continue to the compatibility edge below. A failure on one read-only
+      // discovery path must not prevent the other supported path from running.
+    }
+  }
 
   // Some Meta system-user tokens can read the Page connection but do not expose
   // the ad account's instagram_accounts edge. Prefer the Page-owned identity and
@@ -131,7 +185,7 @@ async function discoverInstagramReelAssets({
         instagramAccount.id,
         "discovered Instagram user id"
       );
-      page = (pageCollection?.data || []).find((candidate) => {
+      page = candidatePages.find((candidate) => {
         const connectedInstagram = candidate?.instagram_business_account;
         return (
           String(connectedInstagram?.id || "") === fallbackInstagramId ||
