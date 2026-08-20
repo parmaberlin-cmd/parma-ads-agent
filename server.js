@@ -46,6 +46,8 @@ let META_AD_ACCOUNT_ID = process.env.META_AD_ACCOUNT_ID;
 const PARMA_AGENT_API_KEY = process.env.PARMA_AGENT_API_KEY;
 const META_PAUSED_DRAFT_WRITES_ENABLED =
   process.env.META_PAUSED_DRAFT_WRITES_ENABLED === "true";
+const META_AD_DSA_BENEFICIARY = process.env.META_AD_DSA_BENEFICIARY;
+const META_AD_DSA_PAYOR = process.env.META_AD_DSA_PAYOR;
 
 if (META_AD_ACCOUNT_ID && !META_AD_ACCOUNT_ID.startsWith("act_")) {
   META_AD_ACCOUNT_ID = `act_${META_AD_ACCOUNT_ID}`;
@@ -989,6 +991,8 @@ async function preparePausedReservationDraft(startsAt) {
     dailyBudgetEur: 6,
     durationDays: 14,
     startsAt,
+    dsaBeneficiary: META_AD_DSA_BENEFICIARY,
+    dsaPayor: META_AD_DSA_PAYOR,
   });
 }
 
@@ -1013,6 +1017,10 @@ function summarizePausedReservationDraft(draft) {
       radius_km: 3,
       age_min: 23,
       age_max: 60,
+    },
+    eu_transparency: {
+      beneficiary_configured: Boolean(draft.adSet.dsa_beneficiary),
+      payor_configured: Boolean(draft.adSet.dsa_payor),
     },
     placements: {
       platform: "instagram",
