@@ -5,7 +5,13 @@ const { randomUUID } = require("crypto");
 const { GoogleAdsApi } = require("google-ads-api");
 const { buildGoogleReadiness, buildMetaOverview } = require("./reporting");
 const { buildMetaDinnerProposal } = require("./proposals");
-const { discoverInstagramReelAssets } = require("./meta-paused-draft");
+const {
+  APPROVAL_TOKEN: META_PAUSED_DRAFT_APPROVAL_TOKEN,
+  PartialMetaDraftError,
+  buildPausedReservationDraft,
+  createPausedReservationDraft,
+  discoverInstagramReelAssets,
+} = require("./meta-paused-draft");
 
 const app = express();
 app.use(express.json({ limit: "100kb" }));
@@ -38,6 +44,8 @@ const PORT = process.env.PORT || 3000;
 const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN;
 let META_AD_ACCOUNT_ID = process.env.META_AD_ACCOUNT_ID;
 const PARMA_AGENT_API_KEY = process.env.PARMA_AGENT_API_KEY;
+const META_PAUSED_DRAFT_WRITES_ENABLED =
+  process.env.META_PAUSED_DRAFT_WRITES_ENABLED === "true";
 
 if (META_AD_ACCOUNT_ID && !META_AD_ACCOUNT_ID.startsWith("act_")) {
   META_AD_ACCOUNT_ID = `act_${META_AD_ACCOUNT_ID}`;
@@ -57,6 +65,27 @@ const metaReadTransport = {
       params: {
         ...params,
         access_token: META_ACCESS_TOKEN,
+      },
+    });
+    return response.data;
+  },
+};
+
+const metaWriteTransport = {
+  ...metaReadTransport,
+  async post(endpoint, payload = {}) {
+    const form = new URLSearchParams();
+    Object.entries(payload).forEach(([key, value]) => {
+      form.set(
+        key,
+        value && typeof value === "object" ? JSON.stringify(value) : String(value)
+      );
+    });
+    form.set("access_token", META_ACCESS_TOKEN);
+
+    const response = await metaClient.post(endpoint, form, {
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
       },
     });
     return response.data;
@@ -927,6 +956,167 @@ app.get("/tools/meta/draft-assets", requireApiKey, async (req, res) => {
       error: isInputError
         ? { message: error.message, type: "validation_error" }
         : cleanMetaError(error),
+    });
+  }
+});
+
+const PARMA_REEL_PERMALINK =
+  "https://www.instagram.com/reel/C9M7_b6MayR/";
+const PARMA_LATITUDE = 52.499492;
+const PARMA_LONGITUDE = 13.4399793;
+
+function parseFutureMetaStart(value) {
+  const start = new Date(String(value || ""));
+  if (Number.isNaN(start.getTime())) return null;
+  if (start.getTime() <= Date.now() + 15 * 60 * 1000) return null;
+  return start.toISOString();
+}
+
+async function preparePausedReservationDraft(startsAt) {
+  const assets = await discoverInstagramReelAssets({
+    transport: metaReadTransport,
+    adAccountId: META_AD_ACCOUNT_ID,
+    instagramUsername: "parma.divinibenedetti",
+    reelPermalink: PARMA_REEL_PERMALINK,
+  });
+
+  return buildPausedReservationDraft({
+    pageId: assets.page_id,
+    instagramUserId: assets.instagram_user_id,
+    sourceInstagramMediaId: assets.source_instagram_media_id,
+    latitude: PARMA_LATITUDE,
+    longitude: PARMA_LONGITUDE,
+    dailyBudgetEur: 6,
+    durationDays: 14,
+    startsAt,
+  });
+}
+
+function summarizePausedReservationDraft(draft) {
+  return {
+    mode: draft.policy.mode,
+    ready_to_create: true,
+    creates_paused_objects_only: true,
+    activates_spend: false,
+    campaign: {
+      name: draft.campaign.name,
+      objective: draft.campaign.objective,
+      status: draft.campaign.status,
+    },
+    budget: draft.budget,
+    schedule: {
+      starts_at: draft.adSet.start_time,
+      ends_at: draft.adSet.end_time,
+      local_delivery: "Monday-Sunday, 17:00-23:00 in the ad account timezone",
+    },
+    audience: {
+      radius_km: 3,
+      age_min: 23,
+      age_max: 60,
+    },
+    placements: {
+      platform: "instagram",
+      positions: draft.adSet.targeting.instagram_positions,
+    },
+    creative: {
+      instagram_account_verified: true,
+      reel_verified: true,
+      existing_reel_reused: true,
+      call_to_action: "BOOK_NOW",
+      destination: draft.creative.call_to_action.value.link,
+    },
+    write_gate_enabled: META_PAUSED_DRAFT_WRITES_ENABLED,
+  };
+}
+
+app.get("/tools/meta/reservation-draft/preview", requireApiKey, async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+
+  const startsAt = parseFutureMetaStart(req.query.starts_at);
+  if (!startsAt) {
+    return res.status(400).json({
+      success: false,
+      error: "starts_at must be a valid ISO date-time at least 15 minutes in the future",
+    });
+  }
+
+  try {
+    const draft = await preparePausedReservationDraft(startsAt);
+    res.json({
+      success: true,
+      mode: "read_only_preview",
+      ...summarizePausedReservationDraft(draft),
+    });
+  } catch (error) {
+    res.status(error instanceof TypeError ? 400 : 500).json({
+      success: false,
+      error: cleanMetaError(error),
+    });
+  }
+});
+
+app.post("/tools/meta/reservation-draft/create", requireApiKey, async (req, res) => {
+  if (!checkMetaConfig(res)) return;
+  if (!META_PAUSED_DRAFT_WRITES_ENABLED) {
+    return res.status(403).json({
+      success: false,
+      error: "Paused Meta draft creation is disabled by the server write gate",
+    });
+  }
+  if (req.body?.approval_token !== META_PAUSED_DRAFT_APPROVAL_TOKEN) {
+    return res.status(403).json({
+      success: false,
+      error: "Exact paused-draft approval token is required",
+    });
+  }
+
+  const startsAt = parseFutureMetaStart(req.body?.starts_at);
+  if (!startsAt) {
+    return res.status(400).json({
+      success: false,
+      error: "starts_at must be a valid ISO date-time at least 15 minutes in the future",
+    });
+  }
+
+  try {
+    const draft = await preparePausedReservationDraft(startsAt);
+    const existingCampaigns = await getCampaignCollection();
+    const duplicate = (existingCampaigns?.data || []).find(
+      (campaign) => campaign?.name === draft.campaign.name
+    );
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        error: "A Meta campaign draft already exists for this start date",
+      });
+    }
+
+    const result = await createPausedReservationDraft({
+      transport: metaWriteTransport,
+      adAccountId: META_AD_ACCOUNT_ID,
+      draft,
+      approvalToken: req.body.approval_token,
+    });
+
+    res.status(201).json({
+      success: true,
+      mode: result.mode,
+      created: result.created,
+      statuses: Object.values(result.verification).map((object) => ({
+        status: object?.status || null,
+        effective_status: object?.effective_status || null,
+      })),
+      activates_spend: false,
+      next_required_action:
+        "Inspect the paused draft in Meta Ads Manager; activation requires a separate future approval and remains disabled",
+    });
+  } catch (error) {
+    const partial = error instanceof PartialMetaDraftError;
+    res.status(partial ? 502 : error instanceof TypeError ? 400 : 500).json({
+      success: false,
+      error: cleanMetaError(partial ? error.cause : error),
+      ...(partial ? { partial_paused_objects: error.created } : {}),
+      activates_spend: false,
     });
   }
 });
