@@ -1,10 +1,34 @@
 const express = require("express");
 const path = require("path");
 const axios = require("axios");
+const { randomUUID } = require("crypto");
 const { GoogleAdsApi } = require("google-ads-api");
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "100kb" }));
+
+app.use((req, res, next) => {
+  const requestId = randomUUID();
+  const startedAt = Date.now();
+
+  req.requestId = requestId;
+  res.setHeader("x-request-id", requestId);
+
+  res.on("finish", () => {
+    console.log(
+      JSON.stringify({
+        event: "http_request",
+        request_id: requestId,
+        method: req.method,
+        path: req.route?.path || req.path,
+        status: res.statusCode,
+        duration_ms: Date.now() - startedAt,
+      })
+    );
+  });
+
+  next();
+});
 
 const PORT = process.env.PORT || 3000;
 
@@ -65,7 +89,34 @@ function checkMetaConfig(res) {
 }
 
 function cleanMetaError(error) {
-  return error.response?.data || { message: error.message || "Unknown error" };
+  const metaError = error?.response?.data?.error;
+
+  return {
+    message:
+      metaError?.message ||
+      error?.message ||
+      "Meta Ads request failed",
+    type: metaError?.type || null,
+    code: metaError?.code || null,
+    subcode: metaError?.error_subcode || null,
+  };
+}
+
+function parseMetaObjectId(value) {
+  const objectId = String(value || "").trim();
+  return /^\d{1,30}$/.test(objectId) ? objectId : null;
+}
+
+const allowedMetaDatePresets = new Set([
+  "last_7d",
+  "last_14d",
+  "last_30d",
+  "last_90d",
+]);
+
+function parseMetaDatePreset(value) {
+  const preset = String(value || "last_30d").trim();
+  return allowedMetaDatePresets.has(preset) ? preset : null;
 }
 
 function eurToMetaCents(eur) {
@@ -405,19 +456,13 @@ app.get("/tools/score", requireApiKey, async (req, res) => {
 
   try {
     const campaigns = await getCampaigns();
-
-    const campaignsTotal = campaigns.length;
-
     const activeCampaigns = campaigns.filter(
       (campaign) =>
         campaign.status === "ACTIVE" ||
         campaign.effective_status === "ACTIVE"
     ).length;
-    const campaignsWithoutData = activeCampaigns;
-
     const campaignsWithIssues = campaigns.filter(
-      (campaign) =>
-        campaign.effective_status === "WITH_ISSUES"
+      (campaign) => campaign.effective_status === "WITH_ISSUES"
     ).length;
 
     let score = 100;
@@ -426,27 +471,19 @@ app.get("/tools/score", requireApiKey, async (req, res) => {
     if (activeCampaigns === 0) {
       score -= 40;
       reasons.push("No active campaigns");
-    }
-
-    if (activeCampaigns === 1) {
+    } else if (activeCampaigns === 1) {
       score -= 10;
       reasons.push("Only one active campaign");
     }
-    if (campaignsWithoutData > 0) {
-  score -= 15;
-  reasons.push(`${campaignsWithoutData} active campaigns have no data`);
-    }
-
-    score -= campaignsWithIssues * 5;
 
     if (campaignsWithIssues > 0) {
-  growthReasons.push(`${campaignsWithIssues} campaigns have issues`);
-}
+      score -= campaignsWithIssues * 5;
+      reasons.push(`${campaignsWithIssues} campaigns have issues`);
+    }
 
-    if (score < 0) score = 0;
+    score = Math.max(score, 0);
 
     let status = "healthy";
-
     if (score < 80) status = "warning";
     if (score < 60) status = "needs_attention";
     if (score < 40) status = "critical";
@@ -457,9 +494,10 @@ app.get("/tools/score", requireApiKey, async (req, res) => {
       status,
       reasons,
       summary: {
-        campaigns_total: campaignsTotal,
+        campaigns_total: campaigns.length,
         campaigns_active: activeCampaigns,
         campaigns_with_issues: campaignsWithIssues,
+        data_completeness: "not_assessed",
       },
     });
   } catch (error) {
@@ -469,6 +507,7 @@ app.get("/tools/score", requireApiKey, async (req, res) => {
     });
   }
 });
+
 app.get("/tools/active-campaigns/report", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
@@ -534,38 +573,38 @@ app.get("/tools/recommendations", requireApiKey, async (req, res) => {
 
   try {
     const campaigns = await getCampaigns();
-
     const activeCampaigns = campaigns.filter(
-      (campaign) => campaign.status === "ACTIVE" || campaign.effective_status === "ACTIVE"
+      (campaign) =>
+        campaign.status === "ACTIVE" ||
+        campaign.effective_status === "ACTIVE"
     );
-
     const campaignsWithIssues = campaigns.filter(
       (campaign) => campaign.effective_status === "WITH_ISSUES"
     );
-
     const pausedCampaigns = campaigns.filter(
-      (campaign) => campaign.status === "PAUSED" || campaign.effective_status === "PAUSED"
+      (campaign) =>
+        campaign.status === "PAUSED" ||
+        campaign.effective_status === "PAUSED"
     );
-
     const recommendations = [];
 
     if (activeCampaigns.length === 0) {
       recommendations.push({
         priority: "high",
         type: "meta_campaigns",
-        message: "No active Meta campaigns found. Consider activating a small test campaign.",
+        message:
+          "No active Meta campaigns found. Prepare a controlled campaign proposal for human review.",
       });
-    }
-
-    if (activeCampaigns.length === 1) {
+    } else if (activeCampaigns.length === 1) {
       recommendations.push({
         priority: "medium",
         type: "meta_campaigns",
-        message: "Only one Meta campaign is currently active. Review whether this is intentional.",
+        message:
+          "Only one Meta campaign is currently active. Review whether this is intentional.",
       });
     }
 
-   if (campaignsWithIssues > 0) {
+    if (campaignsWithIssues.length > 0) {
       recommendations.push({
         priority: "high",
         type: "meta_issues",
@@ -584,24 +623,12 @@ app.get("/tools/recommendations", requireApiKey, async (req, res) => {
       recommendations.push({
         priority: "medium",
         type: "sales_opportunity",
-        message: `${pausedSalesCampaigns.length} sales/conversion campaigns are paused. Review whether one should be reactivated for a controlled test.`,
+        message:
+          `${pausedSalesCampaigns.length} sales/conversion campaigns are paused. Prepare a reactivation proposal for human review.`,
         campaign_ids: pausedSalesCampaigns.map((campaign) => campaign.id),
       });
     }
 
-    const growthReasons = [];
-
-if (activeCampaigns.length === 1) {
-  growthReasons.push("Only one active campaign");
-}
-
-if (activeCampaigns.length > 0) {
-  growthReasons.push(`${activeCampaigns.length} active campaign(s) have no data`);
-}
-
-if (campaignsWithIssues > 0) {
-  growthReasons.push(`${campaignsWithIssues} campaigns have issues`);
-}
     res.json({
       success: true,
       generated_at: new Date().toISOString(),
@@ -620,43 +647,58 @@ if (campaignsWithIssues > 0) {
     });
   }
 });
+
 app.get("/tools/status", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
   try {
     const campaigns = await getCampaigns();
-
-    const campaignsTotal = campaigns.length;
     const activeCampaigns = campaigns.filter(
-      (campaign) => campaign.status === "ACTIVE" || campaign.effective_status === "ACTIVE"
+      (campaign) =>
+        campaign.status === "ACTIVE" ||
+        campaign.effective_status === "ACTIVE"
     );
     const campaignsPaused = campaigns.filter(
-      (campaign) => campaign.status === "PAUSED" || campaign.effective_status === "PAUSED"
+      (campaign) =>
+        campaign.status === "PAUSED" ||
+        campaign.effective_status === "PAUSED"
     ).length;
     const campaignsWithIssues = campaigns.filter(
       (campaign) => campaign.effective_status === "WITH_ISSUES"
     ).length;
 
-const growthReasons = [];
+    const growthReasons = [];
 
-if (activeCampaigns.length === 1) {
-  growthReasons.push("Only one active campaign");
-}
+    if (activeCampaigns.length === 0) {
+      growthReasons.push("No active campaigns");
+    } else if (activeCampaigns.length === 1) {
+      growthReasons.push("Only one active campaign");
+    }
 
-if (activeCampaigns.length > 0) {
-  growthReasons.push(`${activeCampaigns.length} active campaign(s) have no data`);
-}
+    if (campaignsWithIssues > 0) {
+      growthReasons.push(`${campaignsWithIssues} campaigns have issues`);
+    }
 
-if (campaignsWithIssues.length > 0) {
-  growthReasons.push(`${campaignsWithIssues.length} campaigns have issues`);
-}
-    
+    const growthScore = Math.max(
+      100 -
+        (activeCampaigns.length === 0
+          ? 40
+          : activeCampaigns.length === 1
+            ? 10
+            : 0) -
+        campaignsWithIssues * 5,
+      0
+    );
+
+    let growthStatus = "healthy";
+    if (growthScore < 80) growthStatus = "warning";
+    if (growthScore < 60) growthStatus = "needs_attention";
+    if (growthScore < 40) growthStatus = "critical";
+
     const recommendations = [];
-
     if (activeCampaigns.length === 0) {
       recommendations.push("No active campaigns found");
     }
-
     if (campaignsWithIssues > 0) {
       recommendations.push("Some campaigns have issues and require attention");
     }
@@ -666,11 +708,12 @@ if (campaignsWithIssues.length > 0) {
       system: {
         railway_online: true,
         api_key_required: true,
+        ad_writes_enabled: false,
       },
       meta: {
         connected: true,
         ad_account_id: META_AD_ACCOUNT_ID,
-        campaigns_total: campaignsTotal,
+        campaigns_total: campaigns.length,
         campaigns_active: activeCampaigns.length,
         campaigns_paused: campaignsPaused,
         campaigns_with_issues: campaignsWithIssues,
@@ -681,37 +724,20 @@ if (campaignsWithIssues.length > 0) {
           effective_status: campaign.effective_status,
         })),
       },
-            growth: {
-  growth_score:
-    100 -
-    (activeCampaigns.length === 0 ? 40 : activeCampaigns.length === 1 ? 10 : 0) -
-    activeCampaigns.length * 15 -
-    campaignsWithIssues * 5,
-
- reasons: growthReasons,
-              
-  status:
-    100 -
-      (activeCampaigns.length === 0 ? 40 : activeCampaigns.length === 1 ? 10 : 0) -
-      activeCampaigns.length * 15 -
-      campaignsWithIssues * 5 <
-    60
-      ? "needs_attention"
-      : 100 -
-          (activeCampaigns.length === 0 ? 40 : activeCampaigns.length === 1 ? 10 : 0) -
-          activeCampaigns.length * 15 -
-          campaignsWithIssues * 5 <
-        80
-      ? "warning"
-      : "healthy",
-},
+      growth: {
+        growth_score: growthScore,
+        reasons: growthReasons,
+        status: growthStatus,
+        data_completeness: "not_assessed",
+      },
       google: {
         connected: Boolean(
           process.env.GOOGLE_CLIENT_ID &&
           process.env.GOOGLE_CLIENT_SECRET &&
           process.env.GOOGLE_REFRESH_TOKEN
         ),
-        conversion_tracking: "booking_completed configured in GA4 / Google Ads",
+        conversion_tracking:
+          "booking_completed configured in GA4 / Google Ads",
       },
       recommendations,
     });
@@ -955,22 +981,31 @@ app.post("/tools/campaign/pause", requireApiKey, disableAdWrites, async (req, re
 app.post("/tools/campaign/metrics", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
-  const { campaign_id, date_preset } = req.body;
+  const campaignId = parseMetaObjectId(req.body?.campaign_id);
+  const datePreset = parseMetaDatePreset(req.body?.date_preset);
 
-  if (!campaign_id) {
+  if (!campaignId) {
     return res.status(400).json({
       success: false,
-      error: "campaign_id is required",
+      error: "campaign_id must contain 1 to 30 digits",
+    });
+  }
+
+  if (!datePreset) {
+    return res.status(400).json({
+      success: false,
+      error:
+        "date_preset must be one of: last_7d, last_14d, last_30d, last_90d",
     });
   }
 
   try {
-    const insights = await getInsights(campaign_id, date_preset || "last_30d");
+    const insights = await getInsights(campaignId, datePreset);
 
     res.json({
       success: true,
-      campaign_id,
-      date_preset: date_preset || "last_30d",
+      campaign_id: campaignId,
+      date_preset: datePreset,
       insights,
     });
   } catch (error) {
@@ -984,21 +1019,21 @@ app.post("/tools/campaign/metrics", requireApiKey, async (req, res) => {
 app.post("/tools/campaign/structure", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
-  const { campaign_id } = req.body;
+  const campaignId = parseMetaObjectId(req.body?.campaign_id);
 
-  if (!campaign_id) {
+  if (!campaignId) {
     return res.status(400).json({
       success: false,
-      error: "campaign_id is required",
+      error: "campaign_id must contain 1 to 30 digits",
     });
   }
 
   try {
-    const structure = await getCampaignStructure(campaign_id);
+    const structure = await getCampaignStructure(campaignId);
 
     res.json({
       success: true,
-      campaign_id,
+      campaign_id: campaignId,
       structure,
     });
   } catch (error) {
@@ -1331,14 +1366,35 @@ app.get(
 app.get("/tools/meta/campaign/:id/metrics", requireApiKey, async (req, res) => {
   if (!checkMetaConfig(res)) return;
 
+  const campaignId = parseMetaObjectId(req.params.id);
+  const datePreset = parseMetaDatePreset(req.query.date_preset);
+
+  if (!campaignId) {
+    return res.status(400).json({
+      success: false,
+      source: "meta_ads",
+      error: "campaign id must contain 1 to 30 digits",
+    });
+  }
+
+  if (!datePreset) {
+    return res.status(400).json({
+      success: false,
+      source: "meta_ads",
+      campaign_id: campaignId,
+      error:
+        "date_preset must be one of: last_7d, last_14d, last_30d, last_90d",
+    });
+  }
+
   try {
-    const insights = await getInsights(req.params.id, req.query.date_preset || "last_30d");
+    const insights = await getInsights(campaignId, datePreset);
 
     res.json({
       success: true,
       source: "meta_ads",
-      campaign_id: req.params.id,
-      date_preset: req.query.date_preset || "last_30d",
+      campaign_id: campaignId,
+      date_preset: datePreset,
       status: insights.length ? "has_data" : "no_data",
       insights,
     });
@@ -1346,7 +1402,7 @@ app.get("/tools/meta/campaign/:id/metrics", requireApiKey, async (req, res) => {
     res.status(500).json({
       success: false,
       source: "meta_ads",
-      campaign_id: req.params.id,
+      campaign_id: campaignId,
       error: cleanMetaError(error),
     });
   }
@@ -1369,6 +1425,49 @@ app.get(disabledGoogleSetupRoutes, (req, res) => {
 
 app.get("/openapi.yaml", (req, res) => {
   res.sendFile(path.join(__dirname, "openapi.yaml"));
+});
+
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: "Not found",
+    request_id: req.requestId,
+  });
+});
+
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+
+  const isInvalidJson =
+    error instanceof SyntaxError &&
+    error.status === 400 &&
+    Object.prototype.hasOwnProperty.call(error, "body");
+  const status = error.type === "entity.too.large"
+    ? 413
+    : isInvalidJson
+      ? 400
+      : 500;
+
+  console.error(
+    JSON.stringify({
+      event: "request_error",
+      request_id: req.requestId,
+      method: req.method,
+      path: req.path,
+      status,
+    })
+  );
+
+  res.status(status).json({
+    success: false,
+    error:
+      status === 413
+        ? "Request body too large"
+        : status === 400
+          ? "Invalid JSON body"
+          : "Internal server error",
+    request_id: req.requestId,
+  });
 });
 
 app.listen(PORT, () => {
