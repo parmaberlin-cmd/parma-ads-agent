@@ -352,6 +352,7 @@ function buildPausedReservationDraft({
       name: `Parma | Reservations | Kreuzberg | ${startDate}`,
       objective: "OUTCOME_TRAFFIC",
       buying_type: "AUCTION",
+      is_adset_budget_sharing_enabled: false,
       special_ad_categories: [],
       status: "PAUSED",
     },
