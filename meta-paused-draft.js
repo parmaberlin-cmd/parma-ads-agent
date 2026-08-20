@@ -95,28 +95,6 @@ async function discoverInstagramReelAssets({
 
   const reelCode = getInstagramReelCode(reelPermalink);
   const expectedUsername = String(instagramUsername || "").trim().toLowerCase();
-  const instagramCollection = await transport.get(
-    `/${normalizedAdAccountId}/instagram_accounts`,
-    {
-      fields: "id,username",
-      limit: 100,
-    }
-  );
-  const instagramAccount = (instagramCollection?.data || []).find(
-    (candidate) =>
-      String(candidate?.username || "").trim().toLowerCase() === expectedUsername
-  );
-
-  if (!instagramAccount) {
-    throw new Error(
-      `No Instagram account @${expectedUsername} is associated with ${normalizedAdAccountId}`
-    );
-  }
-
-  const instagramUserId = requireNumericId(
-    instagramAccount.id,
-    "discovered Instagram user id"
-  );
   const pageCollection = await transport.get(
     `/${normalizedAdAccountId}/promote_pages`,
     {
@@ -124,14 +102,56 @@ async function discoverInstagramReelAssets({
       limit: 100,
     }
   );
-  const page = (pageCollection?.data || []).find((candidate) => {
+  let page = (pageCollection?.data || []).find((candidate) => {
     const connectedInstagram = candidate?.instagram_business_account;
-    return (
-      String(connectedInstagram?.id || "") === instagramUserId ||
-      String(connectedInstagram?.username || "").trim().toLowerCase() ===
-        expectedUsername
-    );
+    return String(connectedInstagram?.username || "").trim().toLowerCase() ===
+      expectedUsername;
   });
+
+  let instagramAccount = page?.instagram_business_account || null;
+
+  // Some Meta system-user tokens can read the Page connection but do not expose
+  // the ad account's instagram_accounts edge. Prefer the Page-owned identity and
+  // retain the ad-account edge only as a compatibility fallback.
+  if (!instagramAccount) {
+    const instagramCollection = await transport.get(
+      `/${normalizedAdAccountId}/instagram_accounts`,
+      {
+        fields: "id,username",
+        limit: 100,
+      }
+    );
+    instagramAccount = (instagramCollection?.data || []).find(
+      (candidate) =>
+        String(candidate?.username || "").trim().toLowerCase() === expectedUsername
+    );
+
+    if (instagramAccount) {
+      const fallbackInstagramId = requireNumericId(
+        instagramAccount.id,
+        "discovered Instagram user id"
+      );
+      page = (pageCollection?.data || []).find((candidate) => {
+        const connectedInstagram = candidate?.instagram_business_account;
+        return (
+          String(connectedInstagram?.id || "") === fallbackInstagramId ||
+          String(connectedInstagram?.username || "").trim().toLowerCase() ===
+            expectedUsername
+        );
+      });
+    }
+  }
+
+  if (!instagramAccount) {
+    throw new Error(
+      `No Instagram account @${expectedUsername} is connected to a promotable Meta Page or ${normalizedAdAccountId}`
+    );
+  }
+
+  const instagramUserId = requireNumericId(
+    instagramAccount.id,
+    "discovered Instagram user id"
+  );
 
   if (!page) {
     throw new Error(
