@@ -1,4 +1,5 @@
 const APPROVAL_TOKEN = "CREATE_PARMA_META_DRAFT_PAUSED_ONLY";
+const ONE_SHOT_TRIGGER = "RUN_PARMA_META_DRAFT_PAUSED_ONLY_ONCE";
 const RESERVATION_URL = "https://www.parmaberlin.de/reservations";
 
 class PartialMetaDraftError extends Error {
@@ -69,6 +70,10 @@ function assertPausedOnly(value, path = "draft") {
       assertPausedOnly(item, `${path}.${key}`)
     );
   }
+}
+
+function shouldRunPausedDraftOneShot({ trigger, writeGateEnabled }) {
+  return trigger === ONE_SHOT_TRIGGER && writeGateEnabled === true;
 }
 
 function getInstagramReelCode(permalink) {
@@ -546,9 +551,11 @@ async function createPausedReservationDraft({
 
 module.exports = {
   APPROVAL_TOKEN,
+  ONE_SHOT_TRIGGER,
   RESERVATION_URL,
   PartialMetaDraftError,
   assertPausedOnly,
+  shouldRunPausedDraftOneShot,
   discoverInstagramReelAssets,
   getInstagramReelCode,
   buildPausedReservationDraft,

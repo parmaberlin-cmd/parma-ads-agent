@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const {
   APPROVAL_TOKEN,
+  ONE_SHOT_TRIGGER,
   RESERVATION_URL,
   PartialMetaDraftError,
   assertPausedOnly,
@@ -10,6 +11,7 @@ const {
   getInstagramReelCode,
   buildPausedReservationDraft,
   createPausedReservationDraft,
+  shouldRunPausedDraftOneShot,
 } = require("../meta-paused-draft");
 
 function validInput(overrides = {}) {
@@ -96,6 +98,30 @@ test("paused-only guard rejects ACTIVE anywhere in a request", () => {
   assert.throws(
     () => assertPausedOnly({ nested: { status: "ACTIVE" } }),
     /must never contain ACTIVE/
+  );
+});
+
+test("one-shot diagnostic requires both the exact trigger and the write gate", () => {
+  assert.equal(
+    shouldRunPausedDraftOneShot({
+      trigger: ONE_SHOT_TRIGGER,
+      writeGateEnabled: true,
+    }),
+    true
+  );
+  assert.equal(
+    shouldRunPausedDraftOneShot({
+      trigger: "yes",
+      writeGateEnabled: true,
+    }),
+    false
+  );
+  assert.equal(
+    shouldRunPausedDraftOneShot({
+      trigger: ONE_SHOT_TRIGGER,
+      writeGateEnabled: false,
+    }),
+    false
   );
 });
 
