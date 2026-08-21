@@ -134,17 +134,28 @@ function checkMetaConfig(res) {
   return true;
 }
 
+function sanitizeMetaDiagnosticText(value) {
+  if (typeof value !== "string") return null;
+  return value
+    .replace(/\bact_\d+\b/gi, "act_[REDACTED]")
+    .replace(/\bEA[A-Za-z0-9_-]{20,}\b/g, "[REDACTED_TOKEN]")
+    .replace(/\b\d{8,}\b/g, "[REDACTED_ID]")
+    .slice(0, 500);
+}
+
 function cleanMetaError(error) {
   const metaError = error?.response?.data?.error;
 
   return {
     message:
-      metaError?.message ||
-      error?.message ||
+      sanitizeMetaDiagnosticText(metaError?.message) ||
+      sanitizeMetaDiagnosticText(error?.message) ||
       "Meta Ads request failed",
     type: metaError?.type || null,
     code: metaError?.code || null,
     subcode: metaError?.error_subcode || null,
+    user_title: sanitizeMetaDiagnosticText(metaError?.error_user_title),
+    user_message: sanitizeMetaDiagnosticText(metaError?.error_user_msg),
   };
 }
 
@@ -1089,14 +1100,35 @@ app.post("/tools/meta/reservation-draft/create", requireApiKey, async (req, res)
   try {
     const draft = await preparePausedReservationDraft(startsAt);
     const existingCampaigns = await getCampaignCollection();
-    const duplicate = (existingCampaigns?.data || []).find(
+    const duplicates = (existingCampaigns?.data || []).filter(
       (campaign) => campaign?.name === draft.campaign.name
     );
-    if (duplicate) {
+    if (duplicates.length > 1) {
       return res.status(409).json({
         success: false,
-        error: "A Meta campaign draft already exists for this start date",
+        error: "Multiple Meta campaign drafts already exist for this start date; manual inspection is required",
       });
+    }
+    const duplicate = duplicates[0] || null;
+    if (
+      duplicate &&
+      (duplicate.status !== "PAUSED" || duplicate.objective !== draft.campaign.objective)
+    ) {
+      return res.status(409).json({
+        success: false,
+        error: "The existing Meta campaign is not a resumable paused reservation draft",
+      });
+    }
+    if (duplicate) {
+      const existingAdSets = await getMetaCollection(`/${duplicate.id}/adsets`, {
+        fields: "id,status,effective_status",
+      });
+      if ((existingAdSets?.data || []).length > 0) {
+        return res.status(409).json({
+          success: false,
+          error: "The existing paused Meta campaign already contains an ad set; manual inspection is required",
+        });
+      }
     }
 
     const result = await createPausedReservationDraft({
@@ -1104,6 +1136,7 @@ app.post("/tools/meta/reservation-draft/create", requireApiKey, async (req, res)
       adAccountId: META_AD_ACCOUNT_ID,
       draft,
       approvalToken: req.body.approval_token,
+      existingCampaignId: duplicate?.id || null,
     });
 
     res.status(201).json({
@@ -1123,6 +1156,10 @@ app.post("/tools/meta/reservation-draft/create", requireApiKey, async (req, res)
     res.status(partial ? 502 : error instanceof TypeError ? 400 : 500).json({
       success: false,
       error: cleanMetaError(partial ? error.cause : error),
+      ...(partial ? { failure_stage: error.stage } : {}),
+      ...(partial && Object.keys(error.reused || {}).length > 0
+        ? { reused_paused_objects: error.reused }
+        : {}),
       ...(partial ? { partial_paused_objects: error.created } : {}),
       activates_spend: false,
     });

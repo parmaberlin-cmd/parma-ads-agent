@@ -2,10 +2,12 @@ const APPROVAL_TOKEN = "CREATE_PARMA_META_DRAFT_PAUSED_ONLY";
 const RESERVATION_URL = "https://www.parmaberlin.de/reservations";
 
 class PartialMetaDraftError extends Error {
-  constructor(message, created, cause) {
+  constructor(message, created, stage, cause, reused = {}) {
     super(message, { cause });
     this.name = "PartialMetaDraftError";
     this.created = { ...created };
+    this.stage = stage;
+    this.reused = { ...reused };
   }
 }
 
@@ -436,6 +438,7 @@ async function createPausedReservationDraft({
   adAccountId,
   draft,
   approvalToken,
+  existingCampaignId = null,
 }) {
   if (approvalToken !== APPROVAL_TOKEN) {
     throw new Error("Exact paused-draft approval token is required");
@@ -451,20 +454,30 @@ async function createPausedReservationDraft({
 
   assertPausedOnly(draft);
   const created = {};
+  const reused = {};
+  let stage = "campaign";
 
   try {
-    const campaign = await transport.post(`/${accountId}/campaigns`, draft.campaign);
-    created.campaign_id = requireNumericId(campaign?.id, "created campaign id");
+    if (existingCampaignId) {
+      created.campaign_id = requireNumericId(existingCampaignId, "existing campaign id");
+      reused.campaign = true;
+    } else {
+      const campaign = await transport.post(`/${accountId}/campaigns`, draft.campaign);
+      created.campaign_id = requireNumericId(campaign?.id, "created campaign id");
+    }
 
+    stage = "adset";
     const adSet = await transport.post(`/${accountId}/adsets`, {
       ...draft.adSet,
       campaign_id: created.campaign_id,
     });
     created.adset_id = requireNumericId(adSet?.id, "created ad set id");
 
+    stage = "creative";
     const creative = await transport.post(`/${accountId}/adcreatives`, draft.creative);
     created.creative_id = requireNumericId(creative?.id, "created creative id");
 
+    stage = "ad";
     const ad = await transport.post(`/${accountId}/ads`, {
       ...draft.ad,
       adset_id: created.adset_id,
@@ -472,6 +485,7 @@ async function createPausedReservationDraft({
     });
     created.ad_id = requireNumericId(ad?.id, "created ad id");
 
+    stage = "verification";
     let verificationEntries = await Promise.all(
       [created.campaign_id, created.adset_id, created.ad_id].map(async (id) => {
         const object = await transport.get(`/${id}`, { fields: "id,status,effective_status" });
@@ -515,6 +529,7 @@ async function createPausedReservationDraft({
       success: true,
       mode: "paused_draft_only",
       created,
+      reused,
       verification,
       activates_spend: false,
     };
@@ -522,7 +537,9 @@ async function createPausedReservationDraft({
     throw new PartialMetaDraftError(
       "Paused Meta draft creation did not complete; inspect the returned object IDs before any further action",
       created,
-      error
+      stage,
+      error,
+      reused
     );
   }
 }

@@ -407,7 +407,65 @@ test("reports partial paused objects instead of hiding a failed draft", async ()
         campaign_id: "2001",
         adset_id: "2002",
       });
+      assert.equal(error.stage, "creative");
       assert.match(error.cause.message, /creative rejected/);
+      return true;
+    }
+  );
+});
+
+test("resumes a known paused campaign without creating another campaign", async () => {
+  const posts = [];
+  const ids = ["5002", "5003", "5004"];
+  const transport = {
+    post: async (path, payload) => {
+      posts.push({ path, payload });
+      return { id: ids[posts.length - 1] };
+    },
+    get: async (path) => ({
+      id: path.slice(1),
+      status: "PAUSED",
+      effective_status: "PAUSED",
+    }),
+  };
+
+  const result = await createPausedReservationDraft({
+    transport,
+    adAccountId: "act_404",
+    draft: buildPausedReservationDraft(validInput()),
+    approvalToken: APPROVAL_TOKEN,
+    existingCampaignId: "5001",
+  });
+
+  assert.equal(result.reused.campaign, true);
+  assert.equal(result.created.campaign_id, "5001");
+  assert.deepEqual(
+    posts.map((call) => call.path),
+    ["/act_404/adsets", "/act_404/adcreatives", "/act_404/ads"]
+  );
+});
+
+test("reports the ad set stage when a resumed campaign still fails validation", async () => {
+  const transport = {
+    post: async () => {
+      throw new Error("Invalid parameter");
+    },
+    get: async () => ({ status: "PAUSED" }),
+  };
+
+  await assert.rejects(
+    createPausedReservationDraft({
+      transport,
+      adAccountId: "act_404",
+      draft: buildPausedReservationDraft(validInput()),
+      approvalToken: APPROVAL_TOKEN,
+      existingCampaignId: "6001",
+    }),
+    (error) => {
+      assert.ok(error instanceof PartialMetaDraftError);
+      assert.equal(error.stage, "adset");
+      assert.equal(error.reused.campaign, true);
+      assert.deepEqual(error.created, { campaign_id: "6001" });
       return true;
     }
   );
