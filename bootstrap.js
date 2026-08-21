@@ -15,8 +15,41 @@ function authorized(req) {
   return Boolean(process.env.PARMA_AGENT_API_KEY && supplied === process.env.PARMA_AGENT_API_KEY);
 }
 
+function sanitizedSummary() {
+  if (state.status !== "completed" || !state.result) return null;
+  const r = state.result;
+  return {
+    generated_at: r.generated_at,
+    mode: "shadow",
+    writes_allowed: false,
+    source_health: {
+      google: Boolean(r.live_sources?.google?.access_ok),
+      ga4: Boolean(r.live_sources?.ga4?.access_ok),
+      meta: Boolean(r.live_sources?.meta?.access_ok),
+    },
+    source_errors: {
+      google: r.live_sources?.google?.access_ok ? null : String(r.live_sources?.google?.error || "unavailable").slice(0, 160),
+      ga4: r.live_sources?.ga4?.access_ok ? null : String(r.live_sources?.ga4?.error || "unavailable").slice(0, 160),
+      meta: r.live_sources?.meta?.access_ok ? null : String(r.live_sources?.meta?.error || "unavailable").slice(0, 160),
+    },
+    conversion_integrity: {
+      status: r.conversion_integrity?.status || "unknown",
+      confidence: r.conversion_integrity?.confidence || "unknown",
+      optimization_allowed: Boolean(r.conversion_integrity?.optimization_allowed),
+      issues: r.conversion_integrity?.issues || [],
+    },
+    anomalies: (r.anomalies || []).map((a) => ({ code: a.code, severity: a.severity, reason: a.reason, channel: a.channel })),
+    primary_priorities: (r.daily_manager?.primary_priorities || []).map((p) => ({ code: p.code, severity: p.severity, source: p.source, reason: p.reason, requires_authorization: Boolean(p.requires_authorization) })),
+  };
+}
+
 function wrappedExpress(...args) {
   const app = realExpress(...args);
+  app.get("/health/agent-shadow-summary", (req, res) => {
+    if (state.status === "starting") return res.status(202).json({ success: true, status: "running", mode: "shadow", writes_allowed: false });
+    if (state.status === "failed") return res.status(500).json({ success: false, status: "failed", mode: "shadow", writes_allowed: false, error: String(state.error || "shadow_report_failed").slice(0, 160) });
+    return res.json({ success: true, status: "completed", ...sanitizedSummary() });
+  });
   app.get("/tools/agent/shadow/live", (req, res) => {
     if (!authorized(req)) return res.status(401).json({ success: false, error: "Unauthorized" });
     if (state.status === "starting") return res.status(202).json({ success: true, mode: "shadow", status: "running", writes_allowed: false, started_at: state.started_at });
