@@ -1,0 +1,169 @@
+function numberOrZero(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function relativeDifference(a, b) {
+  const left = Math.abs(numberOrZero(a));
+  const right = Math.abs(numberOrZero(b));
+  const denominator = Math.max(left, right, 1);
+  return Math.abs(left - right) / denominator;
+}
+
+function assessConversionIntegrity({
+  googleAdsConversions = null,
+  ga4Bookings = null,
+  googleLastSeenAt = null,
+  ga4LastSeenAt = null,
+  now = new Date(),
+  staleAfterHours = 48,
+  toleranceRatio = 0.35,
+} = {}) {
+  const googleAvailable = googleAdsConversions !== null && googleAdsConversions !== undefined;
+  const ga4Available = ga4Bookings !== null && ga4Bookings !== undefined;
+  const issues = [];
+
+  if (!googleAvailable) issues.push("google_ads_conversion_signal_missing");
+  if (!ga4Available) issues.push("ga4_booking_signal_missing");
+
+  function isStale(timestamp) {
+    if (!timestamp) return false;
+    const parsed = new Date(timestamp);
+    if (Number.isNaN(parsed.getTime())) return true;
+    return now.getTime() - parsed.getTime() > staleAfterHours * 60 * 60 * 1000;
+  }
+
+  if (googleAvailable && isStale(googleLastSeenAt)) {
+    issues.push("google_ads_conversion_signal_stale");
+  }
+  if (ga4Available && isStale(ga4LastSeenAt)) {
+    issues.push("ga4_booking_signal_stale");
+  }
+
+  let discrepancyRatio = null;
+  if (googleAvailable && ga4Available) {
+    discrepancyRatio = relativeDifference(googleAdsConversions, ga4Bookings);
+    if (discrepancyRatio > toleranceRatio) {
+      issues.push("conversion_sources_disagree");
+    }
+  }
+
+  let status = "healthy";
+  let confidence = "high";
+  if (!googleAvailable || !ga4Available) {
+    status = "unverified";
+    confidence = "low";
+  } else if (issues.length > 0) {
+    status = "degraded";
+    confidence = "medium";
+  }
+
+  return {
+    status,
+    confidence,
+    optimization_allowed: status === "healthy",
+    google_ads_conversions: googleAvailable ? numberOrZero(googleAdsConversions) : null,
+    ga4_bookings: ga4Available ? numberOrZero(ga4Bookings) : null,
+    discrepancy_ratio: discrepancyRatio,
+    tolerance_ratio: toleranceRatio,
+    issues,
+  };
+}
+
+function detectAnomalies({ current = {}, baseline = {}, access = {} } = {}) {
+  const anomalies = [];
+  const push = (code, severity, reason, channel = "cross_channel") => {
+    anomalies.push({ code, severity, reason, channel });
+  };
+
+  if (access.google_ok === false) {
+    push("GOOGLE_ACCESS_FAILURE", "critical", "Google Ads live access is unavailable.", "google");
+  }
+  if (access.meta_ok === false) {
+    push("META_ACCESS_FAILURE", "critical", "Meta live access is unavailable.", "meta");
+  }
+  if (current.delivery_active === false && numberOrZero(baseline.impressions) > 0) {
+    push("DELIVERY_STOPPED", "critical", "Delivery is currently stopped despite prior delivery history.");
+  }
+
+  const currentSpend = numberOrZero(current.spend);
+  const baselineSpend = numberOrZero(baseline.spend);
+  const currentClicks = numberOrZero(current.clicks);
+  const currentConversions = numberOrZero(current.conversions);
+  const baselineConversions = numberOrZero(baseline.conversions);
+  const currentCpc = numberOrZero(current.cpc);
+  const baselineCpc = numberOrZero(baseline.cpc);
+
+  if (currentSpend >= Math.max(10, baselineSpend * 0.5) && currentClicks === 0) {
+    push("SPEND_WITHOUT_CLICKS", "high", "Meaningful spend is present without clicks.");
+  }
+
+  if (baselineConversions >= 3 && currentConversions === 0 && currentClicks >= 5) {
+    push("CONVERSION_COLLAPSE", "high", "Conversions dropped to zero while traffic is still present.", "conversion");
+  }
+
+  if (baselineCpc > 0 && currentCpc >= baselineCpc * 1.75 && currentClicks >= 3) {
+    push("CPC_SPIKE", "medium", "Current CPC is at least 75% above baseline.");
+  }
+
+  const severityRank = { critical: 3, high: 2, medium: 1, low: 0 };
+  anomalies.sort((a, b) => severityRank[b.severity] - severityRank[a.severity] || a.code.localeCompare(b.code));
+  return anomalies;
+}
+
+function createDecisionJournalEntry({
+  timestamp = new Date().toISOString(),
+  channel,
+  evidenceWindow,
+  evidence = {},
+  dataQuality,
+  diagnosis,
+  confidence,
+  expectedEffect,
+  proposedAction,
+  requiresAuthorization = false,
+  approvalState = "not_requested",
+  execution = null,
+  verification = null,
+  measurementWindow = null,
+  outcome = null,
+} = {}) {
+  if (!channel || !diagnosis || !proposedAction) {
+    throw new Error("channel, diagnosis and proposedAction are required");
+  }
+
+  return {
+    timestamp,
+    channel,
+    evidence_window: evidenceWindow || null,
+    evidence,
+    data_quality: dataQuality || "unknown",
+    diagnosis,
+    confidence: confidence || "unknown",
+    expected_effect: expectedEffect || null,
+    proposed_action: proposedAction,
+    requires_authorization: Boolean(requiresAuthorization),
+    approval_state: approvalState,
+    execution,
+    verification,
+    measurement_window: measurementWindow,
+    outcome,
+  };
+}
+
+function finalizeDecisionJournalEntry(entry, { execution, verification, outcome } = {}) {
+  if (!entry || typeof entry !== "object") throw new Error("entry is required");
+  return {
+    ...entry,
+    execution: execution ?? entry.execution,
+    verification: verification ?? entry.verification,
+    outcome: outcome ?? entry.outcome,
+  };
+}
+
+module.exports = {
+  assessConversionIntegrity,
+  createDecisionJournalEntry,
+  detectAnomalies,
+  finalizeDecisionJournalEntry,
+};
