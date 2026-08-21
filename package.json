@@ -4,7 +4,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check reporting.js && node --check proposals.js && node --check meta-paused-draft.js",
+    "check": "node --check server.js && node --check reporting.js && node --check proposals.js && node --check meta-paused-draft.js && node --check decision-support.js && node --check business-ops-evaluation.js",
     "test": "node --test"
   },
   "dependencies": {
