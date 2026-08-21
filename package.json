@@ -4,7 +4,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check reporting.js && node --check proposals.js && node --check meta-paused-draft.js && node --check decision-support.js && node --check agent-foundation.js && node --check acquisition-intelligence.js && node --check optimization-manager.js && node --check safety-experiments.js && node --check business-ops-evaluation.js && node --check agent-shadow.js",
+    "check": "node --check server.js && node --check reporting.js && node --check proposals.js && node --check meta-paused-draft.js && node --check decision-support.js && node --check agent-foundation.js && node --check acquisition-intelligence.js && node --check optimization-manager.js && node --check safety-experiments.js && node --check business-ops-evaluation.js && node --check agent-shadow.js && node --check live-shadow-data.js && node --check scripts/run-live-shadow-report.js",
+    "shadow:live": "node scripts/run-live-shadow-report.js",
     "test": "node --test"
   },
   "dependencies": {
