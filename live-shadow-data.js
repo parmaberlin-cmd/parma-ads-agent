@@ -37,24 +37,81 @@ function cleanGoogleDiagnostic(error) {
   return { error: "google_read_failed", category, code: code || null, message };
 }
 
-async function collectGoogleShadowData({ env = process.env, days = 30, now = new Date() } = {}) {
-  if (!googleConfigured(env)) {
-    return { access_ok: false, configuration_complete: false, error: "google_configuration_incomplete", campaigns: [], totals: null };
-  }
-
+function createGoogleCustomer(env = process.env) {
   const client = new GoogleAdsApi({
     client_id: env.GOOGLE_CLIENT_ID,
     client_secret: env.GOOGLE_CLIENT_SECRET,
     developer_token: env.GOOGLE_DEVELOPER_TOKEN,
   });
-  const customer = client.Customer({
+  return client.Customer({
     customer_id: normalizeGoogleCustomerId(env.GOOGLE_CUSTOMER_ID),
     refresh_token: env.GOOGLE_REFRESH_TOKEN,
     ...(env.GOOGLE_LOGIN_CUSTOMER_ID ? { login_customer_id: normalizeGoogleCustomerId(env.GOOGLE_LOGIN_CUSTOMER_ID) } : {}),
   });
+}
+
+async function collectGoogleSearchTerms({ customer, start, end }) {
+  const rows = await customer.query(`
+    SELECT campaign.id, campaign.name, ad_group.id, ad_group.name,
+      search_term_view.search_term, search_term_view.status,
+      metrics.impressions, metrics.clicks, metrics.cost_micros,
+      metrics.conversions, metrics.conversions_value
+    FROM search_term_view
+    WHERE segments.date BETWEEN '${start}' AND '${end}'
+  `);
+  return rows.map((row) => ({
+    campaign_id: String(row.campaign.id),
+    campaign_name: row.campaign.name,
+    ad_group_id: String(row.ad_group.id),
+    ad_group_name: row.ad_group.name,
+    search_term: row.search_term_view.search_term,
+    status: row.search_term_view.status,
+    impressions: Number(row.metrics.impressions || 0),
+    clicks: Number(row.metrics.clicks || 0),
+    cost_eur: Number(row.metrics.cost_micros || 0) / 1_000_000,
+    conversions: Number(row.metrics.conversions || 0),
+    conversion_value: Number(row.metrics.conversions_value || 0),
+  }));
+}
+
+async function collectGoogleKeywords({ customer, start, end }) {
+  const rows = await customer.query(`
+    SELECT campaign.id, campaign.name, ad_group.id, ad_group.name,
+      ad_group_criterion.criterion_id, ad_group_criterion.keyword.text,
+      ad_group_criterion.keyword.match_type, ad_group_criterion.status,
+      ad_group_criterion.negative, metrics.impressions, metrics.clicks,
+      metrics.cost_micros, metrics.conversions, metrics.conversions_value
+    FROM keyword_view
+    WHERE ad_group_criterion.status != 'REMOVED'
+      AND segments.date BETWEEN '${start}' AND '${end}'
+  `);
+  return rows.map((row) => ({
+    campaign_id: String(row.campaign.id),
+    campaign_name: row.campaign.name,
+    ad_group_id: String(row.ad_group.id),
+    ad_group_name: row.ad_group.name,
+    criterion_id: String(row.ad_group_criterion.criterion_id),
+    keyword: row.ad_group_criterion.keyword?.text || null,
+    match_type: row.ad_group_criterion.keyword?.match_type || null,
+    status: row.ad_group_criterion.status,
+    negative: Boolean(row.ad_group_criterion.negative),
+    impressions: Number(row.metrics.impressions || 0),
+    clicks: Number(row.metrics.clicks || 0),
+    cost_eur: Number(row.metrics.cost_micros || 0) / 1_000_000,
+    conversions: Number(row.metrics.conversions || 0),
+    conversion_value: Number(row.metrics.conversions_value || 0),
+  }));
+}
+
+async function collectGoogleShadowData({ env = process.env, days = 30, now = new Date() } = {}) {
+  if (!googleConfigured(env)) {
+    return { access_ok: false, configuration_complete: false, error: "google_configuration_incomplete", campaigns: [], search_terms: [], keywords: [], totals: null };
+  }
+
+  const customer = createGoogleCustomer(env);
   const { start, end } = getDateRange(days, now);
   try {
-    const rows = await customer.query(`
+    const campaignRows = await customer.query(`
       SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type,
         metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.average_cpc,
         metrics.conversions, metrics.conversions_value
@@ -62,7 +119,7 @@ async function collectGoogleShadowData({ env = process.env, days = 30, now = new
       WHERE campaign.status != 'REMOVED'
         AND segments.date BETWEEN '${start}' AND '${end}'
     `);
-    const campaigns = rows.map((row) => ({
+    const campaigns = campaignRows.map((row) => ({
       campaign_id: String(row.campaign.id),
       campaign_name: row.campaign.name,
       status: row.campaign.status,
@@ -81,9 +138,33 @@ async function collectGoogleShadowData({ env = process.env, days = 30, now = new
       conversions: a.conversions + r.conversions,
     }), { impressions: 0, clicks: 0, spend_eur: 0, conversions: 0 });
     totals.cpc_eur = totals.clicks ? totals.spend_eur / totals.clicks : 0;
-    return { access_ok: true, configuration_complete: true, period: { start, end }, campaigns, totals };
+
+    const [searchTermsResult, keywordsResult] = await Promise.allSettled([
+      collectGoogleSearchTerms({ customer, start, end }),
+      collectGoogleKeywords({ customer, start, end }),
+    ]);
+    const searchTerms = searchTermsResult.status === "fulfilled" ? searchTermsResult.value : [];
+    const keywords = keywordsResult.status === "fulfilled" ? keywordsResult.value : [];
+    const detail_diagnostics = {};
+    if (searchTermsResult.status === "rejected") detail_diagnostics.search_terms = cleanGoogleDiagnostic(searchTermsResult.reason);
+    if (keywordsResult.status === "rejected") detail_diagnostics.keywords = cleanGoogleDiagnostic(keywordsResult.reason);
+
+    return {
+      access_ok: true,
+      configuration_complete: true,
+      period: { start, end },
+      campaigns,
+      search_terms: searchTerms,
+      keywords,
+      detail_access: {
+        search_terms_ok: searchTermsResult.status === "fulfilled",
+        keywords_ok: keywordsResult.status === "fulfilled",
+      },
+      ...(Object.keys(detail_diagnostics).length ? { detail_diagnostics } : {}),
+      totals,
+    };
   } catch (error) {
-    return { access_ok: false, configuration_complete: true, diagnostic: cleanGoogleDiagnostic(error), error: "google_read_failed", campaigns: [], totals: null };
+    return { access_ok: false, configuration_complete: true, diagnostic: cleanGoogleDiagnostic(error), error: "google_read_failed", campaigns: [], search_terms: [], keywords: [], totals: null };
   }
 }
 
@@ -120,7 +201,7 @@ async function collectLiveShadowInput({ env = process.env, days = 30, now = new 
   return {
     now: now.toISOString(),
     evidence_window: `${days}d`,
-    google: google.access_ok ? { ...buildGoogleReadiness(), configuration_complete: true, api_access: "verified", totals: googleTotals, campaigns: google.campaigns } : { ...buildGoogleReadiness(), configuration_complete: google.configuration_complete, api_access: "failed", error: google.error },
+    google: google.access_ok ? { ...buildGoogleReadiness(), configuration_complete: true, api_access: "verified", totals: googleTotals, campaigns: google.campaigns, search_terms: google.search_terms, keywords: google.keywords, detail_access: google.detail_access, detail_diagnostics: google.detail_diagnostics } : { ...buildGoogleReadiness(), configuration_complete: google.configuration_complete, api_access: "failed", error: google.error },
     meta: meta.overview || { campaign_counts: {}, totals: {} },
     conversions: {
       google_ads_conversions: google.access_ok ? Number(googleTotals.conversions || 0) : null,
@@ -145,4 +226,4 @@ async function collectLiveShadowInput({ env = process.env, days = 30, now = new 
   };
 }
 
-module.exports = { collectGoogleShadowData, collectMetaShadowData, collectLiveShadowInput, getDateRange, googleConfigured, metaConfigured, cleanGoogleDiagnostic };
+module.exports = { collectGoogleShadowData, collectGoogleSearchTerms, collectGoogleKeywords, collectMetaShadowData, collectLiveShadowInput, getDateRange, googleConfigured, metaConfigured, cleanGoogleDiagnostic };

@@ -12,31 +12,28 @@ test("search term analysis finds negative and expansion candidates", () => {
   assert.ok(result.some((item) => item.type === "keyword_expansion_candidate" && item.term === "bio pizza kreuzberg"));
 });
 
+test("keyword expansion is suppressed when query already exists in inventory", () => {
+  const result = analyzeSearchTerms([{ search_term:"bio pizza kreuzberg", clicks:9, cost_eur:6, conversions:3 }], { knownKeywords:[{ keyword:"Bio Pizza Kreuzberg" }] });
+  assert.equal(result.some((item) => item.type === "keyword_expansion_candidate"), false);
+});
+
 test("low evidence search terms are not over-classified", () => {
   const result = analyzeSearchTerms([{ search_term: "pizza", clicks: 1, cost_eur: 0.7, conversions: 0, match_type: "broad" }]);
   assert.equal(result.length, 0);
 });
 
 test("creative ranking favors booking evidence before CTR", () => {
-  const ranked = rankCreatives([
-    { creative_id: "a", impressions: 2000, clicks: 100, bookings: 0, spend_eur: 20, frequency: 2 },
-    { creative_id: "b", impressions: 1000, clicks: 20, bookings: 2, spend_eur: 20, frequency: 2 },
-  ]);
-  assert.equal(ranked[0].creative_id, "b");
-  assert.equal(ranked[0].evidence_status, "conversion_evidence");
+  const ranked = rankCreatives([{ creative_id: "a", impressions: 2000, clicks: 100, bookings: 0, spend_eur: 20, frequency: 2 },{ creative_id: "b", impressions: 1000, clicks: 20, bookings: 2, spend_eur: 20, frequency: 2 }]);
+  assert.equal(ranked[0].creative_id, "b"); assert.equal(ranked[0].evidence_status, "conversion_evidence");
 });
 
 test("creative intelligence flags fatigue and traffic without bookings", () => {
   const ranked = rankCreatives([{ creative_id: "fatigue", impressions: 1500, clicks: 10, bookings: 0, spend_eur: 20, frequency: 4.2 }]);
-  assert.ok(ranked[0].flags.includes("possible_fatigue"));
-  assert.ok(ranked[0].flags.includes("traffic_without_bookings"));
-  const proposals = proposeCreativeTests(ranked);
-  assert.equal(proposals.length, 2);
-  assert.ok(proposals.every((item) => item.requires_authorization));
+  assert.ok(ranked[0].flags.includes("possible_fatigue")); assert.ok(ranked[0].flags.includes("traffic_without_bookings"));
+  const proposals = proposeCreativeTests(ranked); assert.equal(proposals.length, 2); assert.ok(proposals.every((item) => item.requires_authorization));
 });
 
 test("creative intelligence avoids declaring low-reach creative a winner", () => {
   const ranked = rankCreatives([{ creative_id: "small", impressions: 90, clicks: 8, bookings: 0, spend_eur: 2, frequency: 1 }]);
-  assert.equal(ranked[0].evidence_status, "insufficient_data");
-  assert.deepEqual(proposeCreativeTests(ranked), []);
+  assert.equal(ranked[0].evidence_status, "insufficient_data"); assert.deepEqual(proposeCreativeTests(ranked), []);
 });
