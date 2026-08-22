@@ -43,8 +43,8 @@ paths:
   /tools/agent/shadow/live:
     get:
       operationId: getLiveShadowAgentReport
-      summary: Get the first operational read-only Agent shadow report from live Google Ads, GA4 and Meta data
-      description: Returns the latest startup-generated shadow report. This endpoint never activates campaigns, publishes ads, enables delivery, or changes budgets.
+      summary: Get the latest operational read-only Agent shadow report from live Google Ads, GA4 and Meta data
+      description: Returns the latest generated shadow report. This endpoint never activates campaigns, publishes ads, enables delivery, or changes budgets.
       security:
         - ApiKeyAuth: []
       responses:
@@ -56,6 +56,18 @@ paths:
           description: Unauthorized
         "500":
           description: Live shadow report failed safely
+  /tools/agent/shadow/refresh:
+    post:
+      operationId: refreshLiveShadowAgentReport
+      summary: Start a fresh read-only Google Ads, GA4 and Meta shadow collection
+      description: Starts a new shadow collection without restarting the service. It never activates campaigns, publishes ads, enables delivery, or changes budgets.
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "202":
+          description: Refresh started or already running
+        "401":
+          description: Unauthorized
   /tools/google/test:
     get:
       operationId: testGoogleAds
