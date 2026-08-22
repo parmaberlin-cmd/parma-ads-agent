@@ -32,6 +32,13 @@ function sanitizedSummary() {
       ga4: r.live_sources?.ga4?.access_ok ? null : String(r.live_sources?.ga4?.error || "unavailable").slice(0, 160),
       meta: r.live_sources?.meta?.access_ok ? null : String(r.live_sources?.meta?.error || "unavailable").slice(0, 160),
     },
+    source_diagnostics: {
+      google: r.live_sources?.google?.diagnostic || null,
+      ga4: r.live_sources?.ga4?.access_ok ? null : {
+        configuration_complete: Boolean(r.live_sources?.ga4?.configuration_complete),
+        required_variable: r.live_sources?.ga4?.required_variable || null,
+      },
+    },
     conversion_integrity: {
       status: r.conversion_integrity?.status || "unknown",
       confidence: r.conversion_integrity?.confidence || "unknown",
