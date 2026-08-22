@@ -1,20 +1,20 @@
 const { collectLiveShadowInput } = require("./live-shadow-data");
 const { collectGa4ShadowData } = require("./ga4-shadow-data");
 
-async function collectFullLiveShadowInput({ env = process.env, days = 30, now = new Date() } = {}) {
+async function collectFullLiveShadowInput({ env = process.env, days = 30, now = new Date(), collectBase = collectLiveShadowInput, collectGa4 = collectGa4ShadowData } = {}) {
   const [base, ga4] = await Promise.all([
-    collectLiveShadowInput({ env, days, now }),
-    collectGa4ShadowData({ env, days, now }),
+    collectBase({ env, days, now }),
+    collectGa4({ env, days, now }),
   ]);
 
-  const googleConversions = base.conversions?.google_ads_conversions;
+  const exactGoogleLastSeenAt = base.live_sources?.google?.last_conversion_at || null;
   return {
     ...base,
     conversions: {
       ...base.conversions,
       booking_completed: ga4.access_ok ? Number(ga4.google_cpc_booking_completed || 0) : null,
       ga4_total_booking_completed: ga4.access_ok ? Number(ga4.total_booking_completed || 0) : null,
-      google_last_seen_at: googleConversions !== null && googleConversions !== undefined && Number(googleConversions) > 0 ? base.now : null,
+      google_last_seen_at: exactGoogleLastSeenAt,
       ga4_last_seen_at: ga4.access_ok ? ga4.last_seen_at : null,
     },
     ga4_funnel: ga4.access_ok ? {
