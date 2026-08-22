@@ -5,8 +5,14 @@ function ga4Configured(env = process.env) {
   return Boolean(env.GA4_PROPERTY_ID && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REFRESH_TOKEN);
 }
 
-function sanitizeGoogleError(error, fallback) {
-  return error?.response?.data?.error_description || error?.response?.data?.error?.message || error?.response?.data?.error || error?.message || fallback;
+function sanitizeGoogleError(error, fallback = "ga4_read_failed") {
+  const raw = String(error?.response?.data?.error_description || error?.response?.data?.error?.message || error?.response?.data?.error || error?.message || fallback);
+  let category = "unknown";
+  if (/invalid_grant|refresh token|oauth|unauthorized|401/i.test(raw)) category = "oauth";
+  else if (/permission|forbidden|403|insufficient/i.test(raw)) category = "permission";
+  else if (/property|dimension|metric|field|invalid argument|400/i.test(raw)) category = "query_or_property";
+  else if (/deadline|timeout|network|ENOTFOUND|ECONN/i.test(raw)) category = "network";
+  return { error: fallback, category };
 }
 
 async function getGoogleAccessToken(env = process.env) {
@@ -83,8 +89,8 @@ async function collectGa4ShadowData({ env = process.env, days = 30, now = new Da
     if (googleCpcFunnelResult.status === "rejected") funnel_diagnostics.google_cpc = sanitizeGoogleError(googleCpcFunnelResult.reason, "ga4_funnel_read_failed");
     return { access_ok: true, configuration_complete: true, period: { start, end }, event_name: "booking_completed", reservation_path: reservationPath, total_booking_completed: allBookings.value.event_count, google_cpc_booking_completed: googleCpcBookings.value.event_count, last_seen_at: googleCpcBookings.value.last_seen_at || allBookings.value.last_seen_at, reservation_funnel: { all_traffic: allFunnelResult.status === "fulfilled" ? allFunnelResult.value : null, google_cpc: googleCpcFunnelResult.status === "fulfilled" ? googleCpcFunnelResult.value : null }, funnel_access: { all_traffic_ok: allFunnelResult.status === "fulfilled", google_cpc_ok: googleCpcFunnelResult.status === "fulfilled" }, ...(Object.keys(funnel_diagnostics).length ? { funnel_diagnostics } : {}) };
   } catch (error) {
-    return { access_ok: false, configuration_complete: true, error: sanitizeGoogleError(error, "ga4_read_failed"), total_booking_completed: null, google_cpc_booking_completed: null, last_seen_at: null };
+    return { access_ok: false, configuration_complete: true, diagnostic: sanitizeGoogleError(error, "ga4_read_failed"), total_booking_completed: null, google_cpc_booking_completed: null, last_seen_at: null };
   }
 }
 
-module.exports = { ga4Configured, collectGa4ShadowData, parseGa4Date, sourceMediumFilters, reservationFunnelEventExpression, runReservationFunnelReport };
+module.exports = { ga4Configured, collectGa4ShadowData, parseGa4Date, sourceMediumFilters, reservationFunnelEventExpression, runReservationFunnelReport, sanitizeGoogleError };
