@@ -23,6 +23,20 @@ function getDateRange(days = 30, now = new Date()) {
   return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
 }
 
+function cleanGoogleDiagnostic(error) {
+  const first = Array.isArray(error?.errors) ? error.errors[0] : null;
+  const rawCode = first?.error_code || null;
+  const code = rawCode && typeof rawCode === "object" ? Object.keys(rawCode)[0] || null : rawCode;
+  const message = String(first?.message || error?.message || "google_read_failed").slice(0, 180);
+  let category = "unknown";
+  if (/invalid_grant|refresh token|oauth/i.test(message)) category = "oauth";
+  else if (/developer token|DEVELOPER_TOKEN/i.test(message) || /developer_token/i.test(String(code))) category = "developer_token";
+  else if (/login customer|manager|customer.*not enabled|CUSTOMER_NOT_FOUND|USER_PERMISSION_DENIED/i.test(message) || /customer|authorization|permission/i.test(String(code))) category = "account_access";
+  else if (/query|SELECT|GAQL|field/i.test(message)) category = "query";
+  else if (/deadline|timeout|network|ENOTFOUND|ECONN/i.test(message)) category = "network";
+  return { error: "google_read_failed", category, code: code || null, message };
+}
+
 async function collectGoogleShadowData({ env = process.env, days = 30, now = new Date() } = {}) {
   if (!googleConfigured(env)) {
     return { access_ok: false, configuration_complete: false, error: "google_configuration_incomplete", campaigns: [], totals: null };
@@ -69,7 +83,7 @@ async function collectGoogleShadowData({ env = process.env, days = 30, now = new
     totals.cpc_eur = totals.clicks ? totals.spend_eur / totals.clicks : 0;
     return { access_ok: true, configuration_complete: true, period: { start, end }, campaigns, totals };
   } catch (error) {
-    return { access_ok: false, configuration_complete: true, error: error?.message || "google_read_failed", campaigns: [], totals: null };
+    return { access_ok: false, configuration_complete: true, diagnostic: cleanGoogleDiagnostic(error), error: "google_read_failed", campaigns: [], totals: null };
   }
 }
 
@@ -131,4 +145,4 @@ async function collectLiveShadowInput({ env = process.env, days = 30, now = new 
   };
 }
 
-module.exports = { collectGoogleShadowData, collectMetaShadowData, collectLiveShadowInput, getDateRange, googleConfigured, metaConfigured };
+module.exports = { collectGoogleShadowData, collectMetaShadowData, collectLiveShadowInput, getDateRange, googleConfigured, metaConfigured, cleanGoogleDiagnostic };
