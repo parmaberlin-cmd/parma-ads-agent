@@ -29,15 +29,19 @@ function sourceMediumFilters(googleCpcOnly) {
   ];
 }
 
+function reservationFunnelEventExpression(reservationPath = "/reservations") {
+  return { orGroup: { expressions: [
+    { andGroup: { expressions: [
+      { filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "page_view" } } },
+      { filter: { fieldName: "pagePath", stringFilter: { matchType: "BEGINS_WITH", value: reservationPath, caseSensitive: false } } },
+    ] } },
+    { filter: { fieldName: "eventName", inListFilter: { values: ["booking_started", "booking_completed"] } } },
+  ] } };
+}
+
 async function runBookingReport({ accessToken, propertyId, start, end, googleCpcOnly = false }) {
-  const filters = [
-    { filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "booking_completed" } } },
-    ...sourceMediumFilters(googleCpcOnly),
-  ];
-  const body = {
-    dateRanges: [{ startDate: start, endDate: end }], dimensions: [{ name: "date" }], metrics: [{ name: "eventCount" }],
-    dimensionFilter: { andGroup: { expressions: filters } }, orderBys: [{ dimension: { dimensionName: "date", orderType: "ALPHANUMERIC" }, desc: true }], limit: "1000",
-  };
+  const filters = [{ filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "booking_completed" } } }, ...sourceMediumFilters(googleCpcOnly)];
+  const body = { dateRanges: [{ startDate: start, endDate: end }], dimensions: [{ name: "date" }], metrics: [{ name: "eventCount" }], dimensionFilter: { andGroup: { expressions: filters } }, orderBys: [{ dimension: { dimensionName: "date", orderType: "ALPHANUMERIC" }, desc: true }], limit: "1000" };
   const response = await axios.post(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, body, { headers: { authorization: `Bearer ${accessToken}` }, timeout: 20000 });
   const rows = response.data.rows || [];
   const total = rows.reduce((sum, row) => sum + Number(row.metricValues?.[0]?.value || 0), 0);
@@ -45,27 +49,17 @@ async function runBookingReport({ accessToken, propertyId, start, end, googleCpc
   return { event_count: total, last_seen_at: latest ? parseGa4Date(latest.dimensionValues?.[0]?.value) : null };
 }
 
-async function runReservationFunnelReport({ accessToken, propertyId, start, end, googleCpcOnly = false }) {
+async function runReservationFunnelReport({ accessToken, propertyId, start, end, googleCpcOnly = false, reservationPath = "/reservations" }) {
   const body = {
-    dateRanges: [{ startDate: start, endDate: end }],
-    dimensions: [{ name: "eventName" }],
-    metrics: [{ name: "eventCount" }, { name: "sessions" }, { name: "activeUsers" }],
-    dimensionFilter: { andGroup: { expressions: [
-      { filter: { fieldName: "eventName", inListFilter: { values: ["page_view", "booking_started", "booking_completed"] } } },
-      ...sourceMediumFilters(googleCpcOnly),
-    ] } },
-    limit: "100",
+    dateRanges: [{ startDate: start, endDate: end }], dimensions: [{ name: "eventName" }], metrics: [{ name: "eventCount" }, { name: "sessions" }, { name: "activeUsers" }],
+    dimensionFilter: { andGroup: { expressions: [reservationFunnelEventExpression(reservationPath), ...sourceMediumFilters(googleCpcOnly)] } }, limit: "100",
   };
   const response = await axios.post(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, body, { headers: { authorization: `Bearer ${accessToken}` }, timeout: 20000 });
   const events = {};
   for (const row of response.data.rows || []) {
     const name = row.dimensionValues?.[0]?.value;
     if (!name) continue;
-    events[name] = {
-      event_count: Number(row.metricValues?.[0]?.value || 0),
-      sessions: Number(row.metricValues?.[1]?.value || 0),
-      active_users: Number(row.metricValues?.[2]?.value || 0),
-    };
+    events[name] = { event_count: Number(row.metricValues?.[0]?.value || 0), sessions: Number(row.metricValues?.[1]?.value || 0), active_users: Number(row.metricValues?.[2]?.value || 0) };
   }
   return events;
 }
@@ -73,33 +67,24 @@ async function runReservationFunnelReport({ accessToken, propertyId, start, end,
 async function collectGa4ShadowData({ env = process.env, days = 30, now = new Date() } = {}) {
   if (!ga4Configured(env)) return { access_ok: false, configuration_complete: false, error: "ga4_configuration_incomplete", required_variable: "GA4_PROPERTY_ID", total_booking_completed: null, google_cpc_booking_completed: null, last_seen_at: null };
   const { start, end } = getDateRange(days, now);
+  const reservationPath = env.GA4_RESERVATION_PATH || "/reservations";
   try {
     const accessToken = await getGoogleAccessToken(env);
     const [allBookings, googleCpcBookings, allFunnelResult, googleCpcFunnelResult] = await Promise.allSettled([
       runBookingReport({ accessToken, propertyId: env.GA4_PROPERTY_ID, start, end, googleCpcOnly: false }),
       runBookingReport({ accessToken, propertyId: env.GA4_PROPERTY_ID, start, end, googleCpcOnly: true }),
-      runReservationFunnelReport({ accessToken, propertyId: env.GA4_PROPERTY_ID, start, end, googleCpcOnly: false }),
-      runReservationFunnelReport({ accessToken, propertyId: env.GA4_PROPERTY_ID, start, end, googleCpcOnly: true }),
+      runReservationFunnelReport({ accessToken, propertyId: env.GA4_PROPERTY_ID, start, end, googleCpcOnly: false, reservationPath }),
+      runReservationFunnelReport({ accessToken, propertyId: env.GA4_PROPERTY_ID, start, end, googleCpcOnly: true, reservationPath }),
     ]);
     if (allBookings.status === "rejected") throw allBookings.reason;
     if (googleCpcBookings.status === "rejected") throw googleCpcBookings.reason;
     const funnel_diagnostics = {};
     if (allFunnelResult.status === "rejected") funnel_diagnostics.all_traffic = sanitizeGoogleError(allFunnelResult.reason, "ga4_funnel_read_failed");
     if (googleCpcFunnelResult.status === "rejected") funnel_diagnostics.google_cpc = sanitizeGoogleError(googleCpcFunnelResult.reason, "ga4_funnel_read_failed");
-    return {
-      access_ok: true, configuration_complete: true, period: { start, end }, event_name: "booking_completed",
-      total_booking_completed: allBookings.value.event_count, google_cpc_booking_completed: googleCpcBookings.value.event_count,
-      last_seen_at: googleCpcBookings.value.last_seen_at || allBookings.value.last_seen_at,
-      reservation_funnel: {
-        all_traffic: allFunnelResult.status === "fulfilled" ? allFunnelResult.value : null,
-        google_cpc: googleCpcFunnelResult.status === "fulfilled" ? googleCpcFunnelResult.value : null,
-      },
-      funnel_access: { all_traffic_ok: allFunnelResult.status === "fulfilled", google_cpc_ok: googleCpcFunnelResult.status === "fulfilled" },
-      ...(Object.keys(funnel_diagnostics).length ? { funnel_diagnostics } : {}),
-    };
+    return { access_ok: true, configuration_complete: true, period: { start, end }, event_name: "booking_completed", reservation_path: reservationPath, total_booking_completed: allBookings.value.event_count, google_cpc_booking_completed: googleCpcBookings.value.event_count, last_seen_at: googleCpcBookings.value.last_seen_at || allBookings.value.last_seen_at, reservation_funnel: { all_traffic: allFunnelResult.status === "fulfilled" ? allFunnelResult.value : null, google_cpc: googleCpcFunnelResult.status === "fulfilled" ? googleCpcFunnelResult.value : null }, funnel_access: { all_traffic_ok: allFunnelResult.status === "fulfilled", google_cpc_ok: googleCpcFunnelResult.status === "fulfilled" }, ...(Object.keys(funnel_diagnostics).length ? { funnel_diagnostics } : {}) };
   } catch (error) {
     return { access_ok: false, configuration_complete: true, error: sanitizeGoogleError(error, "ga4_read_failed"), total_booking_completed: null, google_cpc_booking_completed: null, last_seen_at: null };
   }
 }
 
-module.exports = { ga4Configured, collectGa4ShadowData, parseGa4Date, sourceMediumFilters, runReservationFunnelReport };
+module.exports = { ga4Configured, collectGa4ShadowData, parseGa4Date, sourceMediumFilters, reservationFunnelEventExpression, runReservationFunnelReport };
