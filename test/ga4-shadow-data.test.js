@@ -1,9 +1,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { ga4Configured, parseGa4Date, sourceMediumFilters, reservationFunnelEventExpression } = require("../ga4-shadow-data");
+const { ga4Configured, parseGa4Date, sourceMediumFilters, reservationFunnelEventExpression, sanitizeGoogleError } = require("../ga4-shadow-data");
 
 test("GA4 collector fails closed when property configuration is missing", () => { assert.equal(ga4Configured({}), false); });
 test("GA4 collector recognizes required configuration without exposing values", () => { assert.equal(ga4Configured({ GA4_PROPERTY_ID:"x", GOOGLE_CLIENT_ID:"x", GOOGLE_CLIENT_SECRET:"x", GOOGLE_REFRESH_TOKEN:"x" }), true); });
 test("GA4 date parser converts analytics date format", () => { assert.equal(parseGa4Date("20260820"), "2026-08-20T12:00:00.000Z"); assert.equal(parseGa4Date("bad"), null); });
 test("GA4 funnel attribution uses google cpc session filters only when requested", () => { assert.deepEqual(sourceMediumFilters(false), []); const filters=sourceMediumFilters(true); assert.equal(filters.length,2); assert.equal(filters[0].filter.fieldName,"sessionSource"); assert.equal(filters[0].filter.stringFilter.value,"google"); assert.equal(filters[1].filter.fieldName,"sessionMedium"); assert.equal(filters[1].filter.stringFilter.value,"cpc"); });
 test("GA4 funnel scopes page views to reservation path while preserving booking events", () => { const expression=reservationFunnelEventExpression("/reservations"); const branches=expression.orGroup.expressions; assert.equal(branches.length,2); const pagePathFilter=branches[0].andGroup.expressions[1].filter; assert.equal(pagePathFilter.fieldName,"pagePath"); assert.equal(pagePathFilter.stringFilter.matchType,"BEGINS_WITH"); assert.equal(pagePathFilter.stringFilter.value,"/reservations"); assert.deepEqual(branches[1].filter.inListFilter.values,["booking_started","booking_completed"]); });
+test("GA4 diagnostics expose category but never raw OAuth text", () => { const diagnostic=sanitizeGoogleError({ response:{ data:{ error_description:"invalid_grant refresh token SECRET_VALUE" } } },"ga4_read_failed"); assert.deepEqual(diagnostic,{error:"ga4_read_failed",category:"oauth"}); assert.equal(JSON.stringify(diagnostic).includes("SECRET_VALUE"),false); });
