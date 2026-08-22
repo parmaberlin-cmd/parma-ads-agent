@@ -11,8 +11,10 @@ function analyzeSearchTerms(rows = [], {
   minClicksForNegative = 4,
   minCostForNegative = 4,
   minConversionsForExpansion = 2,
+  knownKeywords = [],
 } = {}) {
   const recommendations = [];
+  const knownKeywordSet = new Set((knownKeywords || []).map((item) => normalizeText(item?.keyword ?? item?.text ?? item)).filter(Boolean));
   for (const row of rows) {
     const term = normalizeText(row.search_term || row.term);
     if (!term) continue;
@@ -22,7 +24,7 @@ function analyzeSearchTerms(rows = [], {
     const keyword = normalizeText(row.keyword);
     const matchType = normalizeText(row.match_type);
     if (conversions === 0 && clicks >= minClicksForNegative && cost >= minCostForNegative) recommendations.push({type:"negative_keyword_candidate",term,reason:"Search term generated meaningful traffic/cost without conversion.",evidence:{clicks,cost_eur:cost,conversions},requires_authorization:true});
-    if (conversions >= minConversionsForExpansion && term !== keyword) recommendations.push({type:"keyword_expansion_candidate",term,reason:"Search term converted repeatedly and is not identical to the supplied keyword.",evidence:{clicks,cost_eur:cost,conversions,source_keyword:keyword||null},requires_authorization:true});
+    if (conversions >= minConversionsForExpansion && term !== keyword && !knownKeywordSet.has(term)) recommendations.push({type:"keyword_expansion_candidate",term,reason:"Search term converted repeatedly and is not already present in the known keyword inventory.",evidence:{clicks,cost_eur:cost,conversions,source_keyword:keyword||null},requires_authorization:true});
     if (matchType === "broad" && clicks >= minClicksForNegative && conversions === 0) recommendations.push({type:"broad_match_attention",term,reason:"Broad-match traffic has enough clicks to deserve relevance review.",evidence:{clicks,conversions},requires_authorization:false});
   }
   return recommendations;
