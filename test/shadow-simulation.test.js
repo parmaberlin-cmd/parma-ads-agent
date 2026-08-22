@@ -16,8 +16,9 @@ test("simulation combines report trends attribution and access readiness without
   assert.equal(r.meta_attribution_integrity.status,"degraded");
   assert.ok(r.trend_signals.length>=1);
   assert.ok(r.readiness.mandatory_access_for_live_validation.length>=2);
-  assert.ok(r.priorities.some(p=>p.action==="investigate_attribution"));
-  r.priorities.forEach(p=>assert.equal(p.executable,false));
+  assert.ok(r.all_priorities.some(p=>p.action==="investigate_attribution"));
+  assert.ok(r.priorities.length<=5);
+  r.all_priorities.forEach(p=>assert.equal(p.executable,false));
 });
 
 test("simulation clears live validation blocker only with all accesses",()=>{
