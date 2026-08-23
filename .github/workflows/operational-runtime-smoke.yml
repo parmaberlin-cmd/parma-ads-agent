@@ -38,14 +38,15 @@ jobs:
           cycle_safe=$(jq -r '(.writes_allowed == false) and (.execution_allowed == false) and (.spend_allowed == false)' cycle.json 2>/dev/null || echo false)
           stages_ok=$(jq -r '(.stages.collect and .stages.validate and .stages.analyze and .stages.detect and .stages.prioritize and .stages.report and .stages.history) != null' cycle.json 2>/dev/null || echo false)
           history_class=$(jq -r '.history.storage.path_class // "unknown"' dashboard.json 2>/dev/null || echo unknown)
+          history_healthy=$(jq -r '.history.storage.healthy == true' dashboard.json 2>/dev/null || echo false)
           google=$(jq -r '.sources.google // "unknown"' dashboard.json 2>/dev/null || echo unknown)
           ga4=$(jq -r '.sources.ga4 // "unknown"' dashboard.json 2>/dev/null || echo unknown)
           meta=$(jq -r '.sources.meta // "unknown"' dashboard.json 2>/dev/null || echo unknown)
           safe_history=$(printf '%s' "$history_class" | tr -cs 'A-Za-z0-9_-' '_' | cut -c1-22)
 
-          if [ "$dashboard_code" = "200" ] && [ "$cycle_code" = "200" ] && [ "$dashboard_safe" = "true" ] && [ "$cycle_safe" = "true" ] && [ "$stages_ok" = "true" ]; then state="success"; else state="failure"; fi
-          context="shadow-ops:dash=${dashboard_safe}:cycle=${cycle_safe}:hist=${safe_history}"
-          description="dashboard=${dashboard_safe}; cycle=${cycle_safe}; history=${safe_history}; google=${google}; ga4=${ga4}; meta=${meta}"
+          if [ "$dashboard_code" = "200" ] && [ "$cycle_code" = "200" ] && [ "$dashboard_safe" = "true" ] && [ "$cycle_safe" = "true" ] && [ "$stages_ok" = "true" ] && [ "$history_healthy" = "true" ]; then state="success"; else state="failure"; fi
+          context="shadow-ops:dash=${dashboard_safe}:cycle=${cycle_safe}:hist=${safe_history}:healthy=${history_healthy}"
+          description="dashboard=${dashboard_safe}; cycle=${cycle_safe}; history=${safe_history}; history_healthy=${history_healthy}; google=${google}; ga4=${ga4}; meta=${meta}"
           payload=$(jq -n --arg state "$state" --arg description "$description" --arg context "$context" '{state:$state,context:$context,description:$description}')
           curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/$REPO/statuses/$SHA" -d "$payload"
           echo "$description"
