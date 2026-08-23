@@ -1,5 +1,8 @@
 const axios = require("axios");
 const { getDateRange } = require("./live-shadow-data");
+const { runFunnelReport, summarizeFunnel } = require("./ga4-funnel-intelligence");
+
+const DEFAULT_FUNNEL_EVENTS = ["reservation_page_view", "reservation_start", "booking_completed"];
 
 function ga4Configured(env = process.env) {
   return Boolean(
@@ -82,14 +85,20 @@ async function collectGa4ShadowData({ env = process.env, days = 30, now = new Da
       total_booking_completed: null,
       google_cpc_booking_completed: null,
       last_seen_at: null,
+      funnel: null,
     };
   }
   const { start, end } = getDateRange(days, now);
   try {
     const accessToken = await getGoogleAccessToken(env);
-    const [allBookings, googleCpcBookings] = await Promise.all([
+    const eventNames = String(env.GA4_FUNNEL_EVENTS || DEFAULT_FUNNEL_EVENTS.join(","))
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const [allBookings, googleCpcBookings, funnelRows] = await Promise.all([
       runBookingReport({ accessToken, propertyId: env.GA4_PROPERTY_ID, start, end, googleCpcOnly: false }),
       runBookingReport({ accessToken, propertyId: env.GA4_PROPERTY_ID, start, end, googleCpcOnly: true }),
+      runFunnelReport({ accessToken, propertyId: env.GA4_PROPERTY_ID, start, end, eventNames }),
     ]);
     return {
       access_ok: true,
@@ -99,6 +108,10 @@ async function collectGa4ShadowData({ env = process.env, days = 30, now = new Da
       total_booking_completed: allBookings.event_count,
       google_cpc_booking_completed: googleCpcBookings.event_count,
       last_seen_at: googleCpcBookings.last_seen_at || allBookings.last_seen_at,
+      funnel: {
+        event_names: eventNames,
+        ...summarizeFunnel(funnelRows, eventNames),
+      },
     };
   } catch (error) {
     return {
@@ -108,8 +121,9 @@ async function collectGa4ShadowData({ env = process.env, days = 30, now = new Da
       total_booking_completed: null,
       google_cpc_booking_completed: null,
       last_seen_at: null,
+      funnel: null,
     };
   }
 }
 
-module.exports = { ga4Configured, collectGa4ShadowData, parseGa4Date };
+module.exports = { ga4Configured, collectGa4ShadowData, parseGa4Date, DEFAULT_FUNNEL_EVENTS };

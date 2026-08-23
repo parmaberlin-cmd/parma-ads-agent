@@ -4,6 +4,8 @@ const { analyzeSearchTerms, rankCreatives, proposeCreativeTests } = require("./a
 const { recommendBudget, assessFunnel, buildDailyManager } = require("./optimization-manager");
 const { classifyAction } = require("./safety-experiments");
 const { estimateBusinessValue, allocateChannelRoles, scheduleChecks } = require("./business-ops-evaluation");
+const { detectWaste, detectOpportunities, assessMatchTypes, simulateBudget, assessLandingContinuity, assessRsa, buildSafetyGate, buildExecutiveModel } = require("./preaccess-intelligence");
+const { detectTrendAnomalies, detectTrackingAnomaly } = require("./trend-intelligence");
 
 function buildShadowAgentReport(input = {}) {
   const meta = input.meta || {};
@@ -18,17 +20,36 @@ function buildShadowAgentReport(input = {}) {
   });
 
   const legacyDecisionSupport = buildDecisionSupportReport({ meta, google, conversions });
-  const anomalies = detectAnomalies({
-    current: input.current || {},
-    baseline: input.baseline || {},
-    access: input.access || {},
+  const baseAnomalies = detectAnomalies({ current: input.current || {}, baseline: input.baseline || {}, access: input.access || {} });
+  const trendAnalysis = detectTrendAnomalies({ current: input.current || {}, baseline: input.baseline || {} });
+  const trackingAnomalies = detectTrackingAnomaly({
+    googleConversions: conversions.google_ads_conversions,
+    ga4Bookings: conversions.booking_completed,
+    googleLastSeenAt: conversions.google_last_seen_at,
+    ga4LastSeenAt: conversions.ga4_last_seen_at,
+    now: input.now ? new Date(input.now) : new Date(),
   });
+  const anomalies = [
+    ...baseAnomalies,
+    ...trendAnalysis.anomalies.map((item) => ({ ...item, reason: item.code })),
+    ...trackingAnomalies.map((item) => ({ ...item, reason: item.code })),
+  ];
+
   const searchRecommendations = analyzeSearchTerms(input.search_terms || []);
   const rankedCreatives = rankCreatives(input.creatives || []);
   const creativeTests = proposeCreativeTests(rankedCreatives);
-  const funnel = assessFunnel({
-    ...(input.funnel || {}),
-    conversionIntegrity: conversionIntegrity.status,
+  const funnel = assessFunnel({ ...(input.funnel || {}), conversionIntegrity: conversionIntegrity.status });
+  const waste = detectWaste({ searchTerms: input.search_terms || [], keywords: input.keywords || [] });
+  const opportunities = detectOpportunities({ searchTerms: input.search_terms || [], keywords: input.keywords || [] });
+  const matchTypeAnalysis = assessMatchTypes(input.search_terms || []);
+  const rsaAnalysis = (input.rsa_assets || []).map((asset) => ({ campaign: asset.campaign || null, ad_group: asset.ad_group || null, ...assessRsa(asset) }));
+  const landingContinuity = (input.landing_contexts || []).map((row) => ({ id: row.id || null, ...assessLandingContinuity(row) }));
+  const safetyGate = buildSafetyGate({
+    conversionIntegrity,
+    ga4Ok: input.access?.ga4_ok === true,
+    googleOk: input.access?.google_ok === true,
+    funnelStatus: funnel.status,
+    evidenceCount: (input.search_terms || []).length + (input.keywords || []).length,
   });
 
   const budget = conversionIntegrity.optimization_allowed
@@ -42,40 +63,29 @@ function buildShadowAgentReport(input = {}) {
         reason: "Budget optimization blocked because conversion integrity is not healthy.",
         requires_authorization: false,
       }));
+  const budgetSimulation = simulateBudget(input.budget_inputs || []);
+
+  const intelligenceRecommendations = [
+    ...waste.items.map((item) => ({ code: item.source === "search_term" ? "SEARCH_TERM_WASTE_REVIEW" : "KEYWORD_WASTE_REVIEW", priority: "medium", score: Math.min(80, 45 + Math.round(item.estimated_waste_eur)), reason: item.reason, requires_authorization: true })),
+    ...opportunities.map((item) => ({ code: item.type === "keyword_expansion" ? "KEYWORD_EXPANSION_OPPORTUNITY" : "PROVEN_KEYWORD_PROTECTION", priority: item.confidence === "high" ? "high" : "medium", score: item.confidence === "high" ? 75 : 55, reason: "Opportunity supported by conversion evidence.", requires_authorization: Boolean(item.requires_authorization) })),
+    ...matchTypeAnalysis.warnings.map((item) => ({ code: item.code, priority: item.severity || "medium", score: 60, reason: item.reason, requires_authorization: false })),
+    ...rsaAnalysis.filter((item) => item.status !== "healthy").map(() => ({ code:"RSA_ATTENTION_REQUIRED", priority:"medium", score:55, reason:"RSA asset variety or intent coverage requires review.", requires_authorization:true })),
+    ...landingContinuity.filter((item) => item.status === "weak").map(() => ({ code:"LANDING_CONTINUITY_WEAK", priority:"medium", score:58, reason:"Search intent, ad copy and landing content have weak continuity.", requires_authorization:false })),
+  ];
 
   const recommendations = [
     ...(legacyDecisionSupport.recommendations || []),
     ...searchRecommendations,
-    ...creativeTests.map((item) => ({
-      ...item,
-      code: "CREATIVE_TEST_PROPOSAL",
-      priority: "medium",
-      score: 50,
-      reason: item.reason,
-    })),
+    ...intelligenceRecommendations,
+    ...creativeTests.map((item) => ({ ...item, code: "CREATIVE_TEST_PROPOSAL", priority: "medium", score: 50, reason: item.reason })),
   ];
 
-  const dailyManager = buildDailyManager({
-    recommendations,
-    anomalies,
-    funnel,
-    budget,
-  });
-
+  const dailyManager = buildDailyManager({ recommendations, anomalies, funnel, budget });
   const channelRoles = allocateChannelRoles(input.channel_signals || {});
   const businessValue = estimateBusinessValue(input.business_value || {});
-  const schedule = scheduleChecks({
-    now: input.now ? new Date(input.now) : new Date(),
-    lastRuns: input.last_runs || {},
-  });
-
-  const actions = dailyManager.primary_priorities.map((priority) => {
-    const requestedAction = priority.requires_authorization ? "analyze" : "analyze";
-    return {
-      code: priority.code,
-      safety: classifyAction({ type: requestedAction }),
-    };
-  });
+  const schedule = scheduleChecks({ now: input.now ? new Date(input.now) : new Date(), lastRuns: input.last_runs || {} });
+  const actions = dailyManager.primary_priorities.map((priority) => ({ code: priority.code, safety: classifyAction({ type: "analyze" }) }));
+  const executive = buildExecutiveModel({ waste, opportunities, funnel, conversionIntegrity, safetyGate });
 
   const journal = createDecisionJournalEntry({
     channel: "cross_channel",
@@ -84,6 +94,8 @@ function buildShadowAgentReport(input = {}) {
       conversion_integrity: conversionIntegrity,
       anomaly_count: anomalies.length,
       priority_count: dailyManager.primary_priorities.length,
+      estimated_waste_eur: waste.estimated_waste_eur,
+      opportunity_count: opportunities.length,
     },
     dataQuality: conversionIntegrity.status,
     diagnosis: dailyManager.primary_priorities[0]?.reason || "No material priority detected.",
@@ -98,7 +110,16 @@ function buildShadowAgentReport(input = {}) {
     writes_allowed: false,
     conversion_integrity: conversionIntegrity,
     anomalies,
+    trend_analysis: trendAnalysis,
     search_term_recommendations: searchRecommendations,
+    waste,
+    opportunities,
+    match_type_analysis: matchTypeAnalysis,
+    rsa_analysis: rsaAnalysis,
+    landing_continuity: landingContinuity,
+    budget_simulation: budgetSimulation,
+    safety_gate: safetyGate,
+    executive,
     creative_ranking: rankedCreatives,
     creative_test_proposals: creativeTests,
     funnel,
