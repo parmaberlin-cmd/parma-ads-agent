@@ -1,3 +1,5 @@
+const { assertPublicPayloadSafe } = require('./public-output-safety');
+
 function safeArray(value, max = 5) {
   return Array.isArray(value) ? value.slice(0, max) : [];
 }
@@ -9,7 +11,7 @@ function buildOperationalDashboard({ summary = {}, cycle = {}, promotion = {} } 
   const alerts = cycle.operational?.alerts || [];
   const priorities = summary.primary_priorities || cycle.operational?.priorities || [];
   const blockers = [...new Set([...(dataQuality.blockers || []), ...(promotion.blockers || []), ...(cycle.blocked_stages || []).map((stage) => `cycle_${stage}`)])];
-  return {
+  const dashboard = {
     mode: 'shadow',
     generated_at: summary.generated_at || cycle.generated_at || new Date().toISOString(),
     status: blockers.length ? 'attention' : 'normal',
@@ -38,6 +40,7 @@ function buildOperationalDashboard({ summary = {}, cycle = {}, promotion = {} } 
     execution_allowed: false,
     spend_allowed: false,
   };
+  return assertPublicPayloadSafe(dashboard);
 }
 
 module.exports = { safeArray, buildOperationalDashboard };
