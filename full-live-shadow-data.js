@@ -1,6 +1,7 @@
 const { collectLiveShadowInput } = require("./live-shadow-data");
 const { collectGa4ShadowData } = require("./ga4-shadow-data");
 const { analyzeFunnel } = require("./funnel-analysis");
+const { evaluateShadowDataQuality, assertQualityFailClosed } = require("./shadow-data-quality");
 
 function buildFunnelInput(base, ga4) {
   const totals = ga4?.funnel?.totals || {};
@@ -28,9 +29,11 @@ async function collectFullLiveShadowInput({ env = process.env, days = 30, now = 
     collectGa4ShadowData({ env, days, now }),
   ]);
 
-  return {
+  const snapshot = {
     ...base,
-    funnel: ga4.access_ok ? buildFunnelInput(base, ga4) : { landingAvailable: false, bookingStartedTracked: false, analysis: null },
+    funnel: ga4.access_ok
+      ? buildFunnelInput(base, ga4)
+      : { landingAvailable: false, bookingStartedTracked: false, analysis: null },
     conversions: {
       ...base.conversions,
       booking_completed: ga4.access_ok ? Number(ga4.google_cpc_booking_completed || 0) : null,
@@ -45,6 +48,14 @@ async function collectFullLiveShadowInput({ env = process.env, days = 30, now = 
       ...base.live_sources,
       ga4,
     },
+  };
+
+  const dataQuality = evaluateShadowDataQuality(snapshot, { now });
+  assertQualityFailClosed(dataQuality);
+
+  return {
+    ...snapshot,
+    data_quality: dataQuality,
   };
 }
 
