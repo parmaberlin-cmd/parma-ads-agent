@@ -1,0 +1,29 @@
+name: meta-runtime-smoke
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Railway deploy
+        run: sleep 45
+      - name: Read sanitized Meta runtime preflight
+        run: |
+          set -euo pipefail
+          URL="https://supportive-stillness-production-ec37.up.railway.app/health/meta-real-preflight-summary"
+          for i in 1 2 3 4 5; do
+            code=$(curl -sS -o response.json -w "%{http_code}" "$URL" || true)
+            echo "HTTP $code"
+            cat response.json || true
+            echo
+            if [ "$code" = "200" ] || [ "$code" = "409" ] || [ "$code" = "500" ]; then
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Runtime preflight summary did not become readable in time"
+          exit 1
