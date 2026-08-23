@@ -76,10 +76,12 @@ async function runBookingReport({ accessToken, propertyId, start, end, googleCpc
 }
 
 async function collectGa4ShadowData({ env = process.env, days = 30, now = new Date() } = {}) {
+  const collectedAt = now.toISOString();
   if (!ga4Configured(env)) {
     return {
       access_ok: false,
       configuration_complete: false,
+      collected_at: collectedAt,
       error: "ga4_configuration_incomplete",
       required_variable: "GA4_PROPERTY_ID",
       total_booking_completed: null,
@@ -103,6 +105,7 @@ async function collectGa4ShadowData({ env = process.env, days = 30, now = new Da
     return {
       access_ok: true,
       configuration_complete: true,
+      collected_at: collectedAt,
       period: { start, end },
       event_name: "booking_completed",
       total_booking_completed: allBookings.event_count,
@@ -117,6 +120,7 @@ async function collectGa4ShadowData({ env = process.env, days = 30, now = new Da
     return {
       access_ok: false,
       configuration_complete: true,
+      collected_at: collectedAt,
       error: sanitizeGoogleError(error, "ga4_read_failed"),
       total_booking_completed: null,
       google_cpc_booking_completed: null,
