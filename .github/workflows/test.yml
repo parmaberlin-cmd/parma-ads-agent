@@ -24,6 +24,8 @@ jobs:
         run: npm install --ignore-scripts
       - name: Dependency audit diagnostic
         run: npm audit --omit=dev --json || true
+      - name: Dependency tree diagnostic
+        run: npm ls gaxios uuid google-auth-library google-gax google-ads-api || true
       - name: Syntax check
         run: npm run check
       - name: Tests
