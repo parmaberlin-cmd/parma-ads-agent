@@ -1,6 +1,10 @@
 const { buildShadowDecisions, assertShadowSafe } = require("./shadow-decision-engine");
+const { evaluateShadowDataQuality, assertQualityFailClosed } = require("./shadow-data-quality");
 
-function n(value) { const x = Number(value); return Number.isFinite(x) ? x : 0; }
+function n(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 function summarizeChannel(channel = {}) {
   const spend = n(channel.cost ?? channel.spend);
@@ -15,24 +19,55 @@ function summarizeChannel(channel = {}) {
   };
 }
 
+function buildRepairDecision(dataQuality) {
+  const blockedChannels = Object.entries(dataQuality.channel_ready || {})
+    .filter(([, ready]) => !ready)
+    .map(([channel]) => channel);
+
+  if (!blockedChannels.length) return null;
+
+  return {
+    channel: "system",
+    action: "collect_or_repair_data",
+    reason: `Recommendations withheld for: ${blockedChannels.join(", ")}. Blockers: ${(dataQuality.blockers || []).join(", ") || "insufficient evidence"}`,
+    confidence: "high",
+    mode: "shadow",
+    executable: false,
+  };
+}
+
 function buildDailyShadowReport(snapshot = {}) {
   const shadow = buildShadowDecisions(snapshot);
   assertShadowSafe(shadow);
+
+  const dataQuality = snapshot.data_quality || evaluateShadowDataQuality(snapshot);
+  assertQualityFailClosed(dataQuality);
+
+  const trustedChannels = new Set(
+    Object.entries(dataQuality.channel_ready || {})
+      .filter(([, ready]) => ready)
+      .map(([channel]) => channel)
+  );
+
+  const trustedDecisions = shadow.decisions.filter((decision) => trustedChannels.has(decision.channel));
+  const repairDecision = buildRepairDecision(dataQuality);
+  const decisions = repairDecision ? [repairDecision, ...trustedDecisions] : trustedDecisions;
 
   const report = {
     mode: "shadow",
     generated_at: shadow.generated_at,
     writes_allowed: false,
     spend_changed: false,
-    source_health: snapshot.source_health || {},
+    data_quality: dataQuality,
+    source_health: dataQuality.sources || snapshot.source_health || {},
     conversion_integrity: shadow.integrity,
     channels: {
       google: summarizeChannel(snapshot.google),
       meta: summarizeChannel(snapshot.meta),
     },
-    top_priorities: shadow.decisions.slice(0, 3),
-    observations: shadow.decisions.slice(3),
-    journal: shadow.decisions.map((decision, index) => ({
+    top_priorities: decisions.slice(0, 3),
+    observations: decisions.slice(3),
+    journal: decisions.map((decision, index) => ({
       sequence: index + 1,
       timestamp: shadow.generated_at,
       channel: decision.channel,
@@ -49,7 +84,15 @@ function buildDailyShadowReport(snapshot = {}) {
   if (report.writes_allowed !== false || report.spend_changed !== false) {
     throw new Error("daily shadow report violated no-write contract");
   }
+
+  const leakedUntrustedDecision = report.top_priorities
+    .concat(report.observations)
+    .some((decision) => decision.channel !== "system" && !trustedChannels.has(decision.channel));
+  if (leakedUntrustedDecision) {
+    throw new Error("untrusted channel produced recommendation");
+  }
+
   return report;
 }
 
-module.exports = { summarizeChannel, buildDailyShadowReport };
+module.exports = { summarizeChannel, buildDailyShadowReport, buildRepairDecision };
