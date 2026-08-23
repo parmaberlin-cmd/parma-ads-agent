@@ -1,0 +1,2 @@
+const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');
+test('Meta shadow collector shares the pinned compatibility generation',()=>{const source=fs.readFileSync(path.join(__dirname,'..','live-shadow-data.js'),'utf8');assert.ok(source.includes("require('./meta-paused-draft-next')"));assert.ok(!source.includes("env.META_API_VERSION||\"v19.0\""));assert.ok(source.includes('META_API_VERSION'));});
