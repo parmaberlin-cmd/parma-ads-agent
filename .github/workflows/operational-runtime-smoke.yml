@@ -1,0 +1,51 @@
+name: operational-runtime-smoke
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Wait for Railway deploy and validate sanitized operations
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          BASE="https://supportive-stillness-production-ec37.up.railway.app"
+          dashboard_code="000"
+          cycle_code="000"
+          for i in 1 2 3 4 5 6 7 8; do
+            dashboard_code=$(curl -sS -o dashboard.json -w "%{http_code}" "$BASE/health/agent-dashboard" || true)
+            cycle_code=$(curl -sS -o cycle.json -w "%{http_code}" "$BASE/health/agent-cycle" || true)
+            if [ "$dashboard_code" = "200" ] && [ "$cycle_code" = "200" ]; then break; fi
+            sleep 15
+          done
+
+          dashboard_safe=$(jq -r '(.writes_allowed == false) and (.execution_allowed == false) and (.spend_allowed == false)' dashboard.json 2>/dev/null || echo false)
+          cycle_safe=$(jq -r '(.writes_allowed == false) and (.execution_allowed == false) and (.spend_allowed == false)' cycle.json 2>/dev/null || echo false)
+          stages_ok=$(jq -r '(["collect","validate","analyze","detect","prioritize","report","history"] | all(. as $s | .; ($s | IN(.))))' cycle.json 2>/dev/null || echo false)
+          # Use explicit key checks because jq IN portability differs between versions.
+          stages_ok=$(jq -r '(.stages.collect and .stages.validate and .stages.analyze and .stages.detect and .stages.prioritize and .stages.report and .stages.history) != null' cycle.json 2>/dev/null || echo false)
+          history_class=$(jq -r '.history.storage.path_class // "unknown"' dashboard.json 2>/dev/null || echo unknown)
+          google=$(jq -r '.sources.google // "unknown"' dashboard.json 2>/dev/null || echo unknown)
+          ga4=$(jq -r '.sources.ga4 // "unknown"' dashboard.json 2>/dev/null || echo unknown)
+          meta=$(jq -r '.sources.meta // "unknown"' dashboard.json 2>/dev/null || echo unknown)
+          safe_history=$(printf '%s' "$history_class" | tr -cs 'A-Za-z0-9_-' '_' | cut -c1-22)
+
+          if [ "$dashboard_code" = "200" ] && [ "$cycle_code" = "200" ] && [ "$dashboard_safe" = "true" ] && [ "$cycle_safe" = "true" ] && [ "$stages_ok" = "true" ]; then state="success"; else state="failure"; fi
+          context="shadow-ops:dash=${dashboard_safe}:cycle=${cycle_safe}:hist=${safe_history}"
+          description="dashboard=${dashboard_safe}; cycle=${cycle_safe}; history=${safe_history}; google=${google}; ga4=${ga4}; meta=${meta}"
+          payload=$(jq -n --arg state "$state" --arg description "$description" --arg context "$context" '{state:$state,context:$context,description:$description}')
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/$REPO/statuses/$SHA" -d "$payload"
+          echo "$description"
+          if [ "$state" != "success" ]; then exit 1; fi
