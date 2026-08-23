@@ -4,6 +4,16 @@ function safeArray(value, max = 5) {
   return Array.isArray(value) ? value.slice(0, max) : [];
 }
 
+function trackingObserved(value) {
+  if (value && typeof value === 'object') return value.observed === true;
+  return value === true;
+}
+
+function trackingConfigured(value) {
+  if (value && typeof value === 'object') return value.configured === true;
+  return value === true;
+}
+
 function buildOperationalDashboard({ summary = {}, cycle = {}, promotion = {} } = {}) {
   const sourceHealth = summary.source_health || cycle.stages?.collect?.sources || {};
   const dataQuality = summary.data_quality || {};
@@ -23,9 +33,9 @@ function buildOperationalDashboard({ summary = {}, cycle = {}, promotion = {} } 
     data_confidence: dataQuality.confidence || 'unknown',
     conversion_integrity: summary.conversion_integrity?.status || 'unknown',
     tracking: {
-      reservation_page_view: tracking.reservation_page_view === true,
-      reservation_start: tracking.reservation_start === true,
-      booking_completed: tracking.booking_completed === true,
+      reservation_page_view: { configured: trackingConfigured(tracking.reservation_page_view), observed: trackingObserved(tracking.reservation_page_view) },
+      reservation_start: { configured: trackingConfigured(tracking.reservation_start), observed: trackingObserved(tracking.reservation_start) },
+      booking_completed: { configured: trackingConfigured(tracking.booking_completed), observed: trackingObserved(tracking.booking_completed) },
     },
     history: summary.history || cycle.history || { total_runs: 0 },
     readiness: {
@@ -43,4 +53,4 @@ function buildOperationalDashboard({ summary = {}, cycle = {}, promotion = {} } 
   return assertPublicPayloadSafe(dashboard);
 }
 
-module.exports = { safeArray, buildOperationalDashboard };
+module.exports = { safeArray, trackingObserved, trackingConfigured, buildOperationalDashboard };
