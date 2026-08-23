@@ -1,11 +1,13 @@
 const { assessMetaPausedLiveTestReadiness }=require('./meta-live-test-readiness');
 const { buildConservativePausedPayloads }=require('./meta-safe-payload');
 const { buildRecoveryPlan }=require('./meta-draft-validation');
+const { validatePayloadSet }=require('./meta-payload-contract');
 
 function runMetaPausedPreflight(input={}){
  const readiness=assessMetaPausedLiveTestReadiness(input);
  const payloads=buildConservativePausedPayloads(input.draft||{},input.knownPartial||{});
  const recoveryPlan=buildRecoveryPlan({created:input.knownPartial||{}});
+ const contract=validatePayloadSet(payloads);
  const payloadChecks={
   campaign_paused:payloads.campaign.status==='PAUSED',
   adset_paused:payloads.adset.status==='PAUSED',
@@ -19,12 +21,13 @@ function runMetaPausedPreflight(input={}){
   creative_has_instagram:Boolean(payloads.creative.instagram_user_id),
   creative_has_media:Boolean(payloads.creative.source_instagram_media_id),
   recovery_resume_point_known:Boolean(recoveryPlan.resume_from),
+  payload_contract_valid:contract.valid,
  };
  const payloadBlockers=Object.entries(payloadChecks).filter(([,ok])=>!ok).map(([k])=>k);
  return {
   ready:readiness.ready&&payloadBlockers.length===0,
   level_1_readiness:readiness,
-  level_2_payload:{checks:payloadChecks,blockers:payloadBlockers},
+  level_2_payload:{checks:payloadChecks,blockers:payloadBlockers,contract},
   recovery_plan:recoveryPlan,
   payloads,
   maximum_attempts:1,
