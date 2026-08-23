@@ -12,7 +12,8 @@ function sanitizeMetaIssues(issues) { if (!Array.isArray(issues)) return []; ret
 function buildGoogleCustomer(env) { const client=new GoogleAdsApi({client_id:env.GOOGLE_CLIENT_ID,client_secret:env.GOOGLE_CLIENT_SECRET,developer_token:env.GOOGLE_DEVELOPER_TOKEN}); return client.Customer({customer_id:normalizeGoogleCustomerId(env.GOOGLE_CUSTOMER_ID),refresh_token:env.GOOGLE_REFRESH_TOKEN,...(env.GOOGLE_LOGIN_CUSTOMER_ID?{login_customer_id:normalizeGoogleCustomerId(env.GOOGLE_LOGIN_CUSTOMER_ID)}:{})}); }
 
 async function collectGoogleShadowData({env=process.env,days=30,now=new Date()}={}) {
-  if(!googleConfigured(env)) return {access_ok:false,configuration_complete:false,error:"google_configuration_incomplete",campaigns:[],totals:null,search_terms:[],keywords:[],search_intelligence_ok:false};
+  const collectedAt = now.toISOString();
+  if(!googleConfigured(env)) return {access_ok:false,configuration_complete:false,collected_at:collectedAt,error:"google_configuration_incomplete",campaigns:[],totals:null,search_terms:[],keywords:[],search_intelligence_ok:false};
   const customer=buildGoogleCustomer(env);
   const {start,end}=getDateRange(days,now);
   try {
@@ -37,14 +38,15 @@ async function collectGoogleShadowData({env=process.env,days=30,now=new Date()}=
       searchIntelligenceDiagnostic=cleanGoogleDiagnostic(error);
     }
 
-    return {access_ok:true,configuration_complete:true,period:{start,end},campaigns,totals,search_terms:searchTerms,keywords,search_intelligence_ok:searchIntelligenceOk,search_intelligence_diagnostic:searchIntelligenceDiagnostic};
+    return {access_ok:true,configuration_complete:true,collected_at:collectedAt,period:{start,end},campaigns,totals,search_terms:searchTerms,keywords,search_intelligence_ok:searchIntelligenceOk,search_intelligence_diagnostic:searchIntelligenceDiagnostic};
   } catch(error) {
-    return {access_ok:false,configuration_complete:true,diagnostic:cleanGoogleDiagnostic(error),error:"google_read_failed",campaigns:[],totals:null,search_terms:[],keywords:[],search_intelligence_ok:false};
+    return {access_ok:false,configuration_complete:true,collected_at:collectedAt,diagnostic:cleanGoogleDiagnostic(error),error:"google_read_failed",campaigns:[],totals:null,search_terms:[],keywords:[],search_intelligence_ok:false};
   }
 }
 
-async function collectMetaShadowData({env=process.env,datePreset="last_30d"}={}) {
-  if(!metaConfigured(env)) return {access_ok:false,configuration_complete:false,error:"meta_configuration_incomplete",overview:null};
+async function collectMetaShadowData({env=process.env,datePreset="last_30d",now=new Date()}={}) {
+  const collectedAt = now.toISOString();
+  if(!metaConfigured(env)) return {access_ok:false,configuration_complete:false,collected_at:collectedAt,error:"meta_configuration_incomplete",overview:null};
   const accountId=String(env.META_AD_ACCOUNT_ID).startsWith("act_")?String(env.META_AD_ACCOUNT_ID):`act_${env.META_AD_ACCOUNT_ID}`;
   const apiVersion=env.META_API_VERSION||"v19.0";
   const client=axios.create({baseURL:`https://graph.facebook.com/${apiVersion}`,timeout:20000});
@@ -58,14 +60,14 @@ async function collectMetaShadowData({env=process.env,datePreset="last_30d"}={})
     ]);
     const overview=buildMetaOverview(campaigns,insights,adsets);
     overview.issue_diagnostics={campaigns:campaigns.filter(x=>x.effective_status==="WITH_ISSUES"||x.issues_info?.length).map(x=>({id:String(x.id),name:x.name||null,issues:sanitizeMetaIssues(x.issues_info)})),adsets:adsets.filter(x=>x.effective_status==="WITH_ISSUES"||x.issues_info?.length).map(x=>({id:String(x.id),campaign_id:String(x.campaign_id||""),issues:sanitizeMetaIssues(x.issues_info)})),ads:ads.filter(x=>x.effective_status==="WITH_ISSUES"||x.issues_info?.length).map(x=>({id:String(x.id),campaign_id:String(x.campaign_id||""),adset_id:String(x.adset_id||""),name:x.name||null,issues:sanitizeMetaIssues(x.issues_info)}))};
-    return {access_ok:true,configuration_complete:true,date_preset:datePreset,overview};
+    return {access_ok:true,configuration_complete:true,collected_at:collectedAt,date_preset:datePreset,overview};
   } catch(error) {
-    return {access_ok:false,configuration_complete:true,error:error?.response?.data?.error?.message||error?.message||"meta_read_failed",overview:null};
+    return {access_ok:false,configuration_complete:true,collected_at:collectedAt,error:error?.response?.data?.error?.message||error?.message||"meta_read_failed",overview:null};
   }
 }
 
 async function collectLiveShadowInput({env=process.env,days=30,now=new Date()}={}) {
-  const [google,meta]=await Promise.all([collectGoogleShadowData({env,days,now}),collectMetaShadowData({env})]);
+  const [google,meta]=await Promise.all([collectGoogleShadowData({env,days,now}),collectMetaShadowData({env,now})]);
   const googleTotals=google.totals||{};
   const metaTotals=meta.overview?.totals||{};
   return {
