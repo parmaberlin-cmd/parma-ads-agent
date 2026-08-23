@@ -13,7 +13,7 @@ const { buildSanitizedPromotionStatus } = require("./promotion-status");
 const { buildReadonlyCycleState, assertReadonlyCycleSafe } = require("./shadow-readonly-cycle");
 const { buildOperationalDashboard } = require("./operational-dashboard");
 const {
-  loadHistory,
+  loadHistoryState,
   appendAndPersist,
   buildSanitizedHistoryRecord,
   publicHistorySummary,
@@ -34,7 +34,12 @@ const state = {
 
 let refreshPromise = null;
 const historyStorage = historyStorageStatus(process.env);
-let shadowHistory = loadHistory(historyPath(process.env));
+const initialHistory = loadHistoryState(historyPath(process.env));
+let shadowHistory = initialHistory.records;
+let historyIntegrity = {
+  healthy: initialHistory.healthy === true,
+  reason: initialHistory.reason || null,
+};
 
 function authorized(req) {
   const supplied = req.headers["x-api-key"] || String(req.headers["authorization"] || "").replace(/^Bearer\s+/i, "");
@@ -50,8 +55,10 @@ function buildRuntimeViews() {
     buildValidated: process.env.AGENT_BUILD_VALIDATED === "true",
     shadowRecords: shadowHistory,
     historyDurable: historyStorage.durable,
+    historyHealthy: historyIntegrity.healthy,
   });
   const ga4Events = Array.isArray(r.live_sources?.ga4?.funnel?.event_names) ? r.live_sources.ga4.funnel.event_names : [];
+  const publicStorage = { ...historyStorage, ...historyIntegrity };
   const summary = {
     generated_at: r.generated_at,
     mode: "shadow",
@@ -94,7 +101,7 @@ function buildRuntimeViews() {
       optimization_allowed: Boolean(r.conversion_integrity?.optimization_allowed),
       issues: r.conversion_integrity?.issues || [],
     },
-    history: publicHistorySummary(shadowHistory, historyStorage),
+    history: publicHistorySummary(shadowHistory, publicStorage),
     promotion,
     anomalies: (r.anomalies || []).map((a) => ({ code: a.code, severity: a.severity, reason: a.reason, channel: a.channel })),
     primary_priorities: (r.daily_manager?.primary_priorities || []).map((p) => ({ code: p.code, severity: p.severity, source: p.source, reason: p.reason, requires_authorization: Boolean(p.requires_authorization) })),
@@ -147,7 +154,9 @@ function triggerShadowReport() {
       const record = buildSanitizedHistoryRecord({ snapshot: input, report, generatedAt: state.finished_at });
       try {
         shadowHistory = appendAndPersist({ records: shadowHistory, record, filePath: historyPath(process.env) });
+        historyIntegrity = { healthy: true, reason: null };
       } catch (error) {
+        historyIntegrity = { healthy: false, reason: "history_persist_failed" };
         console.error(JSON.stringify({ event: "shadow_history_persist", success: false, error: String(error?.message || error).slice(0, 120), writes_allowed: false }));
       }
 
@@ -166,6 +175,7 @@ function triggerShadowReport() {
         priority_count: report.daily_manager?.primary_priorities?.length || 0,
         history_runs: shadowHistory.length,
         history_durable: historyStorage.durable,
+        history_healthy: historyIntegrity.healthy,
         cycle_blocked_stages: cycle?.blocked_stages || [],
         writes_allowed: false,
       }));

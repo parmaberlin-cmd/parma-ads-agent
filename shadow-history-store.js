@@ -12,9 +12,7 @@ function safeCode(value, fallback = null) {
 
 function historyPath(env = process.env) {
   if (env.SHADOW_HISTORY_PATH) return env.SHADOW_HISTORY_PATH;
-  if (env.RAILWAY_VOLUME_MOUNT_PATH) {
-    return path.join(env.RAILWAY_VOLUME_MOUNT_PATH, VOLUME_HISTORY_FILENAME);
-  }
+  if (env.RAILWAY_VOLUME_MOUNT_PATH) return path.join(env.RAILWAY_VOLUME_MOUNT_PATH, VOLUME_HISTORY_FILENAME);
   return DEFAULT_TMP_HISTORY;
 }
 
@@ -23,7 +21,6 @@ function historyStorageStatus(env = process.env) {
   const railwayVolume = Boolean(env.RAILWAY_VOLUME_MOUNT_PATH);
   const filePath = historyPath(env);
   const ephemeral = filePath.startsWith("/tmp/") || (!explicitPath && !railwayVolume);
-
   return {
     configured: explicitPath || railwayVolume,
     source: explicitPath ? "explicit_path" : railwayVolume ? "railway_volume" : "default_tmp",
@@ -33,13 +30,28 @@ function historyStorageStatus(env = process.env) {
   };
 }
 
-function loadHistory(filePath = historyPath()) {
+function validateLoadedRecords(parsed) {
+  if (!Array.isArray(parsed)) return { healthy: false, records: [], reason: "history_not_array" };
+  const invalid = parsed.some((record) => !record || typeof record !== "object" || !record.generated_at);
+  if (invalid) return { healthy: false, records: [], reason: "history_record_invalid" };
+  return { healthy: true, records: parsed, reason: null };
+}
+
+function loadHistoryState(filePath = historyPath()) {
+  if (!fs.existsSync(filePath)) {
+    return { healthy: true, exists: false, records: [], reason: null };
+  }
   try {
     const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    return Array.isArray(parsed) ? parsed : [];
+    const validated = validateLoadedRecords(parsed);
+    return { ...validated, exists: true };
   } catch {
-    return [];
+    return { healthy: false, exists: true, records: [], reason: "history_parse_failed" };
   }
+}
+
+function loadHistory(filePath = historyPath()) {
+  return loadHistoryState(filePath).records;
 }
 
 function saveHistory(records = [], filePath = historyPath(), { maxRecords = DEFAULT_MAX_RECORDS } = {}) {
@@ -48,6 +60,10 @@ function saveHistory(records = [], filePath = historyPath(), { maxRecords = DEFA
   const tmp = `${filePath}.tmp`;
   fs.writeFileSync(tmp, `${JSON.stringify(bounded)}\n`, { mode: 0o600 });
   fs.renameSync(tmp, filePath);
+  const verified = loadHistoryState(filePath);
+  if (!verified.healthy || verified.records.length !== bounded.length) {
+    throw new Error("shadow_history_persistence_verification_failed");
+  }
   return bounded;
 }
 
@@ -57,7 +73,6 @@ function buildSanitizedHistoryRecord({ snapshot = {}, report = {}, generatedAt =
   const events = Array.isArray(snapshot.live_sources?.ga4?.funnel?.event_names)
     ? snapshot.live_sources.ga4.funnel.event_names
     : [];
-
   return {
     id: generatedAt,
     generated_at: generatedAt,
@@ -69,9 +84,7 @@ function buildSanitizedHistoryRecord({ snapshot = {}, report = {}, generatedAt =
       ga4: snapshot.live_sources?.ga4?.access_ok === true,
       meta: snapshot.live_sources?.meta?.access_ok === true,
     },
-    tracking: {
-      reservation_start: events.includes("reservation_start"),
-    },
+    tracking: { reservation_start: events.includes("reservation_start") },
     priority_codes: priorities.map((priority) => safeCode(priority.code, "unknown")),
     anomaly_codes: anomalies.map((anomaly) => safeCode(anomaly.code, "unknown")),
     safety_violation: false,
@@ -82,10 +95,7 @@ function buildSanitizedHistoryRecord({ snapshot = {}, report = {}, generatedAt =
 
 function appendHistoryRecord(records = [], record, { maxRecords = DEFAULT_MAX_RECORDS } = {}) {
   if (!record?.generated_at) return records.slice(-maxRecords);
-  return [
-    ...records.filter((existing) => existing.generated_at !== record.generated_at),
-    record,
-  ].slice(-maxRecords);
+  return [...records.filter((existing) => existing.generated_at !== record.generated_at), record].slice(-maxRecords);
 }
 
 function appendAndPersist({ records = [], record, filePath = historyPath(), maxRecords = DEFAULT_MAX_RECORDS } = {}) {
@@ -105,8 +115,10 @@ function publicHistorySummary(records = [], storage = {}) {
     reservation_start_tracked_runs: records.filter((record) => record.tracking?.reservation_start === true).length,
     storage: {
       durable: storage.durable === true,
+      healthy: storage.healthy === true,
       path_class: storage.path_class || "unknown",
       source: storage.source || "unknown",
+      reason: storage.reason || null,
     },
     writes_allowed: false,
   };
@@ -119,6 +131,8 @@ module.exports = {
   safeCode,
   historyPath,
   historyStorageStatus,
+  validateLoadedRecords,
+  loadHistoryState,
   loadHistory,
   saveHistory,
   buildSanitizedHistoryRecord,
