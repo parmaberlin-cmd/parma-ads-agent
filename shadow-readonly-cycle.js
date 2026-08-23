@@ -15,9 +15,13 @@ function buildReadonlyCycleState({ snapshot = {}, report = {}, history = [], now
   const quality = snapshot.data_quality || {};
   const sources = sourceStatus(snapshot);
   const validationPassed = quality.integrity_ok === true && quality.confidence !== 'blocked';
-  const operational = buildDailyOperationalSummary({ snapshot, shadowReport: report, lastRunAt: snapshot.now || now.toISOString() });
   const priorities = report.daily_manager?.primary_priorities || report.top_priorities || [];
   const anomalies = report.anomalies || [];
+  const operational = buildDailyOperationalSummary({
+    snapshot,
+    shadowReport: { ...report, top_priorities: priorities, daily_manager: undefined },
+    lastRunAt: snapshot.now || now.toISOString(),
+  });
   const historySummary = publicHistorySummary(history);
   const stages = {
     collect: { complete: Boolean(snapshot.now || snapshot.live_sources), sources },
