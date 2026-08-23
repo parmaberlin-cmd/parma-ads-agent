@@ -1,0 +1,10 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { evaluateShadowDataQuality, assertQualityFailClosed } = require('../shadow-data-quality');
+const NOW = new Date('2026-08-23T12:00:00.000Z');
+function healthy(){return{generated_at:'2026-08-23T11:00:00.000Z',access:{google_ok:true,ga4_ok:true,meta_ok:true},live_sources:{google:{last_seen_at:'2026-08-23T10:00:00.000Z',totals:{clicks:20,cost:10}},ga4:{last_seen_at:'2026-08-23T10:30:00.000Z'},meta:{last_seen_at:'2026-08-23T10:15:00.000Z'}},conversions:{booking_completed:3}};}
+test('healthy fresh snapshot is recommendation-ready but never execution-ready',()=>{const q=evaluateShadowDataQuality(healthy(),{now:NOW});assert.equal(q.ready_for_recommendations,true);assert.equal(q.ready_for_execution,false);assert.equal(q.confidence,'high');assert.equal(q.writes_allowed,false);assertQualityFailClosed(q);});
+test('stale source fails closed',()=>{const s=healthy();s.live_sources.ga4.last_seen_at='2026-08-20T00:00:00.000Z';const q=evaluateShadowDataQuality(s,{now:NOW});assert.equal(q.ready_for_recommendations,false);assert.ok(q.blockers.includes('ga4_stale'));assertQualityFailClosed(q);});
+test('missing freshness evidence fails closed',()=>{const s=healthy();delete s.live_sources.meta.last_seen_at;delete s.generated_at;const q=evaluateShadowDataQuality(s,{now:NOW});assert.equal(q.ready_for_recommendations,false);assert.ok(q.blockers.includes('meta_freshness_unknown'));});
+test('impossible conversion relationship is blocked',()=>{const s=healthy();s.live_sources.google.totals.clicks=2;s.conversions.booking_completed=5;const q=evaluateShadowDataQuality(s,{now:NOW});assert.equal(q.integrity_ok,false);assert.equal(q.confidence,'blocked');assert.ok(q.blockers.includes('bookings_exceed_google_clicks'));});
+test('unavailable source blocks recommendations',()=>{const s=healthy();s.access.google_ok=false;const q=evaluateShadowDataQuality(s,{now:NOW});assert.equal(q.ready_for_recommendations,false);assert.ok(q.blockers.includes('google_unavailable'));});
