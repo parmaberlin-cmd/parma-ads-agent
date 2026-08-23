@@ -7,28 +7,13 @@ const { buildDashboardModel } = require("../dashboard-model");
   const report = buildShadowAgentReport(input);
   const dashboard = buildDashboardModel({ input, report });
   const output = {
-    generated_at: new Date().toISOString(),
-    mode: report.mode,
-    writes_allowed: report.writes_allowed,
-    dashboard,
-    live_sources: input.live_sources,
-    conversions: input.conversions,
-    conversion_integrity: report.conversion_integrity,
-    funnel: report.funnel,
-    waste: report.waste,
-    opportunities: report.opportunities,
-    match_type_analysis: report.match_type_analysis,
-    rsa_analysis: report.rsa_analysis,
-    landing_continuity: report.landing_continuity,
-    safety_gate: report.safety_gate,
-    executive: report.executive,
-    anomalies: report.anomalies,
-    daily_manager: report.daily_manager,
-    budget_recommendations: report.budget_recommendations,
-    budget_simulation: report.budget_simulation,
-    channel_roles: report.channel_roles,
-    business_value: report.business_value,
-    journal: report.journal,
+    generated_at: new Date().toISOString(), mode: report.mode, writes_allowed: report.writes_allowed, dashboard,
+    live_sources: input.live_sources, conversions: input.conversions, conversion_integrity: report.conversion_integrity,
+    funnel: report.funnel, trend_analysis: report.trend_analysis, waste: report.waste, opportunities: report.opportunities,
+    match_type_analysis: report.match_type_analysis, rsa_analysis: report.rsa_analysis, landing_continuity: report.landing_continuity,
+    safety_gate: report.safety_gate, executive: report.executive, anomalies: report.anomalies, daily_manager: report.daily_manager,
+    budget_recommendations: report.budget_recommendations, budget_simulation: report.budget_simulation,
+    channel_roles: report.channel_roles, business_value: report.business_value, journal: report.journal,
   };
   process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
 })().catch((error) => {
