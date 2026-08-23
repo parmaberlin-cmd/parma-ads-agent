@@ -10,6 +10,8 @@ const { buildShadowAgentReport } = require("./agent-shadow");
 const { registerMetaRealPreflightRoute } = require("./meta-runtime-preflight");
 const { registerMetaSafeCreateRoute } = require("./meta-safe-create-route");
 const { buildSanitizedPromotionStatus } = require("./promotion-status");
+const { buildReadonlyCycleState, assertReadonlyCycleSafe } = require("./shadow-readonly-cycle");
+const { buildOperationalDashboard } = require("./operational-dashboard");
 const {
   loadHistory,
   appendAndPersist,
@@ -37,8 +39,8 @@ function authorized(req) {
   return Boolean(process.env.PARMA_AGENT_API_KEY && supplied === process.env.PARMA_AGENT_API_KEY);
 }
 
-function sanitizedSummary() {
-  if (!state.result) return null;
+function buildRuntimeViews() {
+  if (!state.result) return { summary: null, cycle: null, dashboard: null };
   const r = state.result;
   const promotion = buildSanitizedPromotionStatus({
     shadowResult: { ...r, refresh_error: state.last_refresh_error },
@@ -47,8 +49,7 @@ function sanitizedSummary() {
     shadowRecords: shadowHistory,
   });
   const ga4Events = Array.isArray(r.live_sources?.ga4?.funnel?.event_names) ? r.live_sources.ga4.funnel.event_names : [];
-
-  return {
+  const summary = {
     generated_at: r.generated_at,
     mode: "shadow",
     writes_allowed: false,
@@ -95,6 +96,18 @@ function sanitizedSummary() {
     anomalies: (r.anomalies || []).map((a) => ({ code: a.code, severity: a.severity, reason: a.reason, channel: a.channel })),
     primary_priorities: (r.daily_manager?.primary_priorities || []).map((p) => ({ code: p.code, severity: p.severity, source: p.source, reason: p.reason, requires_authorization: Boolean(p.requires_authorization) })),
   };
+  const cycle = buildReadonlyCycleState({
+    snapshot: { now: r.generated_at, data_quality: r.data_quality, live_sources: r.live_sources },
+    report: { conversion_integrity: r.conversion_integrity, anomalies: r.anomalies, daily_manager: r.daily_manager, mode: "shadow" },
+    history: shadowHistory,
+  });
+  assertReadonlyCycleSafe(cycle);
+  const dashboard = buildOperationalDashboard({ summary, cycle, promotion });
+  return { summary, cycle, dashboard };
+}
+
+function sanitizedSummary() {
+  return buildRuntimeViews().summary;
 }
 
 function triggerShadowReport() {
@@ -135,6 +148,7 @@ function triggerShadowReport() {
         console.error(JSON.stringify({ event: "shadow_history_persist", success: false, error: String(error?.message || error).slice(0, 120), writes_allowed: false }));
       }
 
+      const cycle = buildRuntimeViews().cycle;
       console.log(JSON.stringify({
         event: "agent_shadow_live_report",
         success: true,
@@ -148,6 +162,7 @@ function triggerShadowReport() {
         conversion_integrity: report.conversion_integrity?.status || null,
         priority_count: report.daily_manager?.primary_priorities?.length || 0,
         history_runs: shadowHistory.length,
+        cycle_blocked_stages: cycle?.blocked_stages || [],
         writes_allowed: false,
       }));
       return state.result;
@@ -184,7 +199,19 @@ function wrappedExpress(...args) {
   app.get("/health/agent-shadow-summary", (req, res) => {
     if (state.status === "starting" && !state.result) return res.status(202).json({ success: true, status: "running", mode: "shadow", writes_allowed: false, started_at: state.started_at });
     if (state.status === "failed" && !state.result) return res.status(500).json({ success: false, status: "failed", mode: "shadow", writes_allowed: false, error: String(state.error || "shadow_report_failed").slice(0, 160) });
-    return res.json({ success: true, status: "completed", refreshing: Boolean(refreshPromise), refresh_error: state.last_refresh_error ? String(state.last_refresh_error).slice(0, 160) : null, last_refresh_failed_at: state.last_refresh_failed_at, ...sanitizedSummary() });
+    return res.json({ success: true, status: "completed", refreshing: Boolean(refreshPromise), refresh_error: state.last_refresh_error ? String(state.last_refresh_error).slice(0, 160) : null, last_refresh_failed_at: state.last_refresh_failed_at, ...buildRuntimeViews().summary });
+  });
+
+  app.get("/health/agent-dashboard", (req, res) => {
+    if (state.status === "starting" && !state.result) return res.status(202).json({ success: true, status: "running", mode: "shadow", writes_allowed: false });
+    if (!state.result) return res.status(500).json({ success: false, status: "unavailable", mode: "shadow", writes_allowed: false });
+    return res.json({ success: true, ...buildRuntimeViews().dashboard });
+  });
+
+  app.get("/health/agent-cycle", (req, res) => {
+    if (state.status === "starting" && !state.result) return res.status(202).json({ success: true, status: "running", mode: "shadow", writes_allowed: false });
+    if (!state.result) return res.status(500).json({ success: false, status: "unavailable", mode: "shadow", writes_allowed: false });
+    return res.json({ success: true, ...buildRuntimeViews().cycle });
   });
 
   app.get("/tools/agent/shadow/live", (req, res) => {
