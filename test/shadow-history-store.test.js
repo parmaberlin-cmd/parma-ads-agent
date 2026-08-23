@@ -8,6 +8,7 @@ const {
   appendHistoryRecord,
   saveHistory,
   loadHistory,
+  loadHistoryState,
   publicHistorySummary,
   historyPath,
   historyStorageStatus,
@@ -49,12 +50,41 @@ test("history is bounded and deduplicated", () => {
   assert.equal(records[2].x, 1);
 });
 
-test("history persists with owner-only file mode and loads safely", () => {
+test("history persists with owner-only file mode and verified reload", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "shadow-history-"));
   const file = path.join(directory, "history.json");
   saveHistory([{ generated_at: "x", source_health: { google: true } }], file);
   assert.equal(loadHistory(file).length, 1);
+  assert.equal(loadHistoryState(file).healthy, true);
   assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+});
+
+test("missing history file is healthy empty state, not corruption", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "shadow-history-missing-"));
+  const state = loadHistoryState(path.join(directory, "missing.json"));
+  assert.equal(state.healthy, true);
+  assert.equal(state.exists, false);
+  assert.deepEqual(state.records, []);
+});
+
+test("malformed JSON is reported unhealthy and loads no records", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "shadow-history-corrupt-"));
+  const file = path.join(directory, "history.json");
+  fs.writeFileSync(file, "{not-json", { mode: 0o600 });
+  const state = loadHistoryState(file);
+  assert.equal(state.healthy, false);
+  assert.equal(state.exists, true);
+  assert.equal(state.reason, "history_parse_failed");
+  assert.deepEqual(state.records, []);
+});
+
+test("structurally invalid history is reported unhealthy", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "shadow-history-invalid-"));
+  const file = path.join(directory, "history.json");
+  fs.writeFileSync(file, JSON.stringify([{ source_health: {} }]), { mode: 0o600 });
+  const state = loadHistoryState(file);
+  assert.equal(state.healthy, false);
+  assert.equal(state.reason, "history_record_invalid");
 });
 
 test("default tmp history is classified ephemeral and cannot support promotion", () => {
@@ -85,26 +115,19 @@ test("Railway volume mount is automatically used as durable candidate", () => {
 });
 
 test("explicit history path takes precedence over Railway volume mount", () => {
-  const env = {
-    SHADOW_HISTORY_PATH: "/custom/history.json",
-    RAILWAY_VOLUME_MOUNT_PATH: "/data",
-  };
+  const env = { SHADOW_HISTORY_PATH: "/custom/history.json", RAILWAY_VOLUME_MOUNT_PATH: "/data" };
   assert.equal(historyPath(env), "/custom/history.json");
   assert.equal(historyStorageStatus(env).source, "explicit_path");
 });
 
-test("public summary reports durability classification without exposing a path", () => {
+test("public summary reports storage health without exposing a path", () => {
   const summary = publicHistorySummary([
-    {
-      data_quality: "high",
-      source_health: { google: true, ga4: true, meta: true },
-      tracking: { reservation_start: true },
-    },
-  ], { durable: true, path_class: "durable_candidate", source: "railway_volume" });
+    { data_quality: "high", source_health: { google: true, ga4: true, meta: true }, tracking: { reservation_start: true } },
+  ], { durable: true, healthy: false, reason: "history_parse_failed", path_class: "durable_candidate", source: "railway_volume" });
   assert.equal(summary.total_runs, 1);
   assert.equal(summary.storage.durable, true);
-  assert.equal(summary.storage.path_class, "durable_candidate");
-  assert.equal(summary.storage.source, "railway_volume");
+  assert.equal(summary.storage.healthy, false);
+  assert.equal(summary.storage.reason, "history_parse_failed");
   assert.equal(summary.storage.path, undefined);
   assert.equal(summary.writes_allowed, false);
 });
