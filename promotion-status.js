@@ -1,8 +1,8 @@
-const { buildPromotionDecision } = require('./promotion-controller');
+const { buildPromotionDecision } = require("./promotion-controller");
 
 function allSourcesFresh(dataQuality = {}) {
   const sources = dataQuality.sources || {};
-  return ['google', 'ga4', 'meta'].every((name) => sources[name]?.state === 'fresh');
+  return ["google", "ga4", "meta"].every((name) => sources[name]?.state === "fresh");
 }
 
 function buildSanitizedPromotionStatus({
@@ -11,6 +11,7 @@ function buildSanitizedPromotionStatus({
   buildValidated = false,
   shadowRecords = [],
   historyDurable = false,
+  historyHealthy = false,
 } = {}) {
   const dataQuality = shadowResult.data_quality || {};
   const channelReady = dataQuality.channel_ready || {};
@@ -29,7 +30,7 @@ function buildSanitizedPromotionStatus({
         ga4_ready: liveSources.ga4?.access_ok === true,
       },
       conversionIntegrity: {
-        trusted: integrity.status === 'healthy' && integrity.optimization_allowed === true,
+        trusted: integrity.status === "healthy" && integrity.optimization_allowed === true,
       },
       safety: {
         zero_write_default: true,
@@ -71,22 +72,29 @@ function buildSanitizedPromotionStatus({
     shadowRecords,
   });
 
-  const durabilityBlocker = historyDurable ? [] : ['history:storage_not_durable'];
-  const blockers = [...new Set([...(decision.blockers || []), ...durabilityBlocker])];
-  const promotionReady = decision.promotion_ready === true && historyDurable === true;
+  const historyStorageReady = historyDurable === true && historyHealthy === true;
+  const storageBlockers = [];
+  if (!historyDurable) storageBlockers.push("history:storage_not_durable");
+  if (!historyHealthy) storageBlockers.push("history:storage_unhealthy");
+  const blockers = [...new Set([...(decision.blockers || []), ...storageBlockers])];
+  const promotionReady = decision.promotion_ready === true && historyStorageReady;
 
   return {
     promotion_ready: promotionReady,
-    autonomy_class: promotionReady ? decision.autonomy_class : 'observe_and_propose',
+    autonomy_class: promotionReady ? decision.autonomy_class : "observe_and_propose",
     readiness_score: decision.readiness.score,
     readiness_stage: decision.readiness.stage,
-    gates: { ...decision.gates, history_storage: historyDurable === true },
+    gates: {
+      ...decision.gates,
+      history_storage: historyStorageReady,
+    },
     blockers,
     history: {
       total_runs: decision.shadow_history.total_runs,
       evaluable_decisions: decision.shadow_history.evaluable_decisions,
       safety_violations: decision.shadow_history.safety_violations,
       durable: historyDurable === true,
+      healthy: historyHealthy === true,
     },
     external_write_authorized: false,
     spend_authorized: false,
