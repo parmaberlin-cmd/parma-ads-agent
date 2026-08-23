@@ -23,7 +23,7 @@ async function inspectAccountContext(transport,config){
  const account=await transport.get(`/${config.adAccountId}`,{fields:'account_status,currency,timezone_name'});
  const timezone=String(account?.timezone_name||'');const currency=String(account?.currency||'').toUpperCase();
  const blockers=[];if(!timezone)blockers.push('account_timezone_unknown');else if(timezone!==config.expectedTimezone)blockers.push('account_timezone_mismatch');if(!currency)blockers.push('account_currency_unknown');else if(currency!==config.expectedCurrency)blockers.push('account_currency_mismatch');
- return {readable:true,timezone_match:timezone===config.expectedTimezone,currency_match:currency===config.expectedCurrency,account_status_present:account?.account_status!=null,blockers};
+ return {readable:true,timezone_name:timezone,expected_timezone:config.expectedTimezone,currency,expected_currency:config.expectedCurrency,timezone_match:timezone===config.expectedTimezone,currency_match:currency===config.expectedCurrency,account_status_present:account?.account_status!=null,blockers};
 }
 
 function finalizeResult(result){return {...result,decision:decideNextMetaStep(result),write_operation_performed:false,may_activate:false,may_spend:false};}
