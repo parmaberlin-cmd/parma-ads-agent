@@ -51,12 +51,14 @@ function saveHistory(records = [], filePath = historyPath(), { maxRecords = DEFA
   return bounded;
 }
 
+function observedGa4Event(snapshot = {}, eventName) {
+  const count = Number(snapshot.live_sources?.ga4?.funnel?.totals?.[eventName] || 0);
+  return Number.isFinite(count) && count > 0;
+}
+
 function buildSanitizedHistoryRecord({ snapshot = {}, report = {}, generatedAt = new Date().toISOString() } = {}) {
   const priorities = (report.daily_manager?.primary_priorities || []).slice(0, 3);
   const anomalies = (report.anomalies || []).slice(0, 10);
-  const events = Array.isArray(snapshot.live_sources?.ga4?.funnel?.event_names)
-    ? snapshot.live_sources.ga4.funnel.event_names
-    : [];
 
   return {
     id: generatedAt,
@@ -70,7 +72,9 @@ function buildSanitizedHistoryRecord({ snapshot = {}, report = {}, generatedAt =
       meta: snapshot.live_sources?.meta?.access_ok === true,
     },
     tracking: {
-      reservation_start: events.includes("reservation_start"),
+      reservation_page_view: observedGa4Event(snapshot, "reservation_page_view"),
+      reservation_start: observedGa4Event(snapshot, "reservation_start"),
+      booking_completed: observedGa4Event(snapshot, "booking_completed"),
     },
     priority_codes: priorities.map((priority) => safeCode(priority.code, "unknown")),
     anomaly_codes: anomalies.map((anomaly) => safeCode(anomaly.code, "unknown")),
@@ -102,7 +106,7 @@ function publicHistorySummary(records = [], storage = {}) {
       ga4: healthyRuns("ga4"),
       meta: healthyRuns("meta"),
     },
-    reservation_start_tracked_runs: records.filter((record) => record.tracking?.reservation_start === true).length,
+    reservation_start_observed_runs: records.filter((record) => record.tracking?.reservation_start === true).length,
     storage: {
       durable: storage.durable === true,
       path_class: storage.path_class || "unknown",
@@ -121,6 +125,7 @@ module.exports = {
   historyStorageStatus,
   loadHistory,
   saveHistory,
+  observedGa4Event,
   buildSanitizedHistoryRecord,
   appendHistoryRecord,
   appendAndPersist,
