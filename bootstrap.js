@@ -10,8 +10,10 @@ const { buildShadowAgentReport } = require("./agent-shadow");
 const { registerMetaRealPreflightRoute } = require("./meta-runtime-preflight");
 const { registerMetaSafeCreateRoute } = require("./meta-safe-create-route");
 const { buildSanitizedPromotionStatus } = require("./promotion-status");
+const { createShadowHistoryStore, recordFromShadowResult } = require("./shadow-history");
 const metaPreflightStatus = require("./meta-preflight-status");
 
+const shadowHistory = createShadowHistoryStore();
 const state = {
   status: "starting",
   started_at: new Date().toISOString(),
@@ -36,7 +38,7 @@ function sanitizedSummary() {
     shadowResult: { ...r, refresh_error: state.last_refresh_error },
     metaPreflightState: metaPreflightStatus.state,
     buildValidated: process.env.AGENT_BUILD_VALIDATED === "true",
-    shadowRecords: [],
+    shadowRecords: shadowHistory.list(),
   });
   const ga4Events = Array.isArray(r.live_sources?.ga4?.funnel?.event_names) ? r.live_sources.ga4.funnel.event_names : [];
 
@@ -118,6 +120,7 @@ function triggerShadowReport() {
         business_value: report.business_value,
         journal: report.journal,
       };
+      shadowHistory.append(recordFromShadowResult(state.result));
       console.log(JSON.stringify({
         event: "agent_shadow_live_report",
         success: true,
@@ -130,6 +133,7 @@ function triggerShadowReport() {
         data_confidence: input.data_quality?.confidence || null,
         conversion_integrity: report.conversion_integrity?.status || null,
         priority_count: report.daily_manager?.primary_priorities?.length || 0,
+        shadow_history_runs: shadowHistory.list().length,
         writes_allowed: false,
       }));
       return state.result;
