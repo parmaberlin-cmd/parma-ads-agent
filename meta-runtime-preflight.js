@@ -11,11 +11,18 @@ function normalizeAccountId(value){const text=String(value||'').trim();if(/^act_
 function parseFutureStart(value,now=Date.now()){const date=new Date(String(value||''));if(Number.isNaN(date.getTime())||date.getTime()<=now+15*60*1000)return null;return date.toISOString();}
 function cleanError(error){const graph=error?.response?.data?.error||{};return {message:String(graph.message||error?.message||'meta_preflight_failed').replace(/\b\d{8,}\b/g,'[REDACTED_ID]').slice(0,180),type:graph.type||null,code:graph.code||null,subcode:graph.error_subcode||null};}
 
-function runtimeConfig(env=process.env){return {accessToken:env.META_ACCESS_TOKEN||null,adAccountId:normalizeAccountId(env.META_AD_ACCOUNT_ID),apiVersion:env.META_API_VERSION||'v19.0',dsaBeneficiary:env.META_AD_DSA_BENEFICIARY||null,dsaPayor:env.META_AD_DSA_PAYOR||null,writeGateEnabled:env.META_PAUSED_DRAFT_WRITES_ENABLED==='true'};}
+function runtimeConfig(env=process.env){return {accessToken:env.META_ACCESS_TOKEN||null,adAccountId:normalizeAccountId(env.META_AD_ACCOUNT_ID),apiVersion:env.META_API_VERSION||'v19.0',dsaBeneficiary:env.META_AD_DSA_BENEFICIARY||null,dsaPayor:env.META_AD_DSA_PAYOR||null,writeGateEnabled:env.META_PAUSED_DRAFT_WRITES_ENABLED==='true',expectedTimezone:env.META_AD_TIMEZONE||'Europe/Berlin',expectedCurrency:env.META_AD_CURRENCY||'EUR'};}
 
 function createReadTransport({accessToken,apiVersion='v19.0',client=axios}){
  const http=client.create?client.create({baseURL:`https://graph.facebook.com/${apiVersion}`,timeout:20000}):client;
  return {async get(endpoint,params={}){const response=await http.get(endpoint,{params:{...params,access_token:accessToken}});return response.data;}};
+}
+
+async function inspectAccountContext(transport,config){
+ const account=await transport.get(`/${config.adAccountId}`,{fields:'account_status,currency,timezone_name'});
+ const timezone=String(account?.timezone_name||'');const currency=String(account?.currency||'').toUpperCase();
+ const blockers=[];if(!timezone)blockers.push('account_timezone_unknown');else if(timezone!==config.expectedTimezone)blockers.push('account_timezone_mismatch');if(!currency)blockers.push('account_currency_unknown');else if(currency!==config.expectedCurrency)blockers.push('account_currency_mismatch');
+ return {readable:true,timezone_match:timezone===config.expectedTimezone,currency_match:currency===config.expectedCurrency,account_status_present:account?.account_status!=null,blockers};
 }
 
 async function executeRuntimeMetaPreflight({env=process.env,startsAt,httpClient=axios}={}){
@@ -24,9 +31,12 @@ async function executeRuntimeMetaPreflight({env=process.env,startsAt,httpClient=
  if(missing.length)return {success:false,mode:'read_only',ready:false,blockers:['configuration_incomplete'],missing_variables:missing,write_operation_performed:false,may_activate:false,may_spend:false};
  const start=parseFutureStart(startsAt);if(!start)return {success:false,mode:'read_only',ready:false,blockers:['invalid_start_time'],write_operation_performed:false,may_activate:false,may_spend:false};
  const transport=createReadTransport({accessToken:config.accessToken,apiVersion:config.apiVersion,client:httpClient});
+ const account=await inspectAccountContext(transport,config);
  const assets=await discoverInstagramReelAssets({transport,adAccountId:config.adAccountId,instagramUsername:DEFAULT_USERNAME,reelPermalink:DEFAULT_REEL});
  const draft=buildPausedReservationDraft({pageId:assets.page_id,instagramUserId:assets.instagram_user_id,sourceInstagramMediaId:assets.source_instagram_media_id,latitude:DEFAULT_LATITUDE,longitude:DEFAULT_LONGITUDE,dailyBudgetEur:6,durationDays:14,startsAt:start,dsaBeneficiary:config.dsaBeneficiary,dsaPayor:config.dsaPayor});
- return runMetaRealPreflight({transport,adAccountId:config.adAccountId,draft,assets,writeGateEnabled:config.writeGateEnabled,approvalTokenOk:Boolean(APPROVAL_TOKEN)});
+ const preflight=await runMetaRealPreflight({transport,adAccountId:config.adAccountId,draft,assets,writeGateEnabled:config.writeGateEnabled,approvalTokenOk:Boolean(APPROVAL_TOKEN)});
+ const blockers=[...account.blockers,...(preflight.blockers||[])];
+ return {...preflight,ready:preflight.ready&&account.blockers.length===0,account,blockers:[...new Set(blockers)]};
 }
 
 function registerMetaRealPreflightRoute(app,{authorized,env=process.env,httpClient=axios}={}){
@@ -37,4 +47,4 @@ function registerMetaRealPreflightRoute(app,{authorized,env=process.env,httpClie
   catch(error){return res.status(500).json({success:false,mode:'read_only',ready:false,error:cleanError(error),write_operation_performed:false,may_activate:false,may_spend:false,activates_spend:false});}
  });
 }
-module.exports={normalizeAccountId,parseFutureStart,cleanError,runtimeConfig,createReadTransport,executeRuntimeMetaPreflight,registerMetaRealPreflightRoute};
+module.exports={normalizeAccountId,parseFutureStart,cleanError,runtimeConfig,createReadTransport,inspectAccountContext,executeRuntimeMetaPreflight,registerMetaRealPreflightRoute};
