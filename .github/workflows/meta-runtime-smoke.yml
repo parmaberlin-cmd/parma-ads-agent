@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  statuses: write
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
@@ -12,18 +16,44 @@ jobs:
       - name: Wait for Railway deploy
         run: sleep 45
       - name: Read sanitized Meta runtime preflight
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           URL="https://supportive-stillness-production-ec37.up.railway.app/health/meta-real-preflight-summary"
+          code="000"
           for i in 1 2 3 4 5; do
             code=$(curl -sS -o response.json -w "%{http_code}" "$URL" || true)
             echo "HTTP $code"
             cat response.json || true
             echo
             if [ "$code" = "200" ] || [ "$code" = "409" ] || [ "$code" = "500" ]; then
-              exit 0
+              break
             fi
             sleep 15
           done
-          echo "Runtime preflight summary did not become readable in time"
-          exit 1
+
+          ready=$(jq -r '.ready // false' response.json 2>/dev/null || echo false)
+          blockers=$(jq -r '(.blockers // []) | join(",")' response.json 2>/dev/null || echo unreadable)
+          if [ "$ready" = "true" ]; then
+            state="success"
+            description="ready=true; blockers=none"
+          else
+            state="failure"
+            if [ -z "$blockers" ]; then blockers="unknown"; fi
+            description="ready=false; blockers=${blockers:0:100}"
+          fi
+
+          payload=$(jq -n --arg state "$state" --arg description "$description" '{state:$state,context:"meta-runtime-preflight",description:$description}')
+          curl -sS -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$REPO/statuses/$SHA" \
+            -d "$payload"
+
+          if [ "$ready" != "true" ]; then
+            exit 1
+          fi
