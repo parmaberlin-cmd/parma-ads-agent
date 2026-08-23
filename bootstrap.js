@@ -1,6 +1,7 @@
 const realExpress = require("express");
 const { collectFullLiveShadowInput } = require("./full-live-shadow-data");
 const { buildShadowAgentReport } = require("./agent-shadow");
+const { registerMetaRealPreflightRoute } = require("./meta-runtime-preflight");
 
 const state = {
   status: "starting",
@@ -126,6 +127,7 @@ function triggerShadowReport() {
 
 function wrappedExpress(...args) {
   const app = realExpress(...args);
+  registerMetaRealPreflightRoute(app, { authorized });
   app.get("/health/agent-shadow-summary", (req, res) => {
     if (state.status === "starting" && !state.result) return res.status(202).json({ success: true, status: "running", mode: "shadow", writes_allowed: false, started_at: state.started_at });
     if (state.status === "failed" && !state.result) return res.status(500).json({ success: false, status: "failed", mode: "shadow", writes_allowed: false, error: String(state.error || "shadow_report_failed").slice(0, 160) });
