@@ -4,19 +4,13 @@ const { analyzeSearchTerms, rankCreatives, proposeCreativeTests } = require("./a
 const { recommendBudget, assessFunnel, buildDailyManager } = require("./optimization-manager");
 const { classifyAction } = require("./safety-experiments");
 const { estimateBusinessValue, allocateChannelRoles, scheduleChecks } = require("./business-ops-evaluation");
-const { detectWaste, detectOpportunities, assessMatchTypes, simulateBudget, buildSafetyGate, buildExecutiveModel } = require("./preaccess-intelligence");
+const { detectWaste, detectOpportunities, assessMatchTypes, simulateBudget, assessLandingContinuity, assessRsa, buildSafetyGate, buildExecutiveModel } = require("./preaccess-intelligence");
 
 function buildShadowAgentReport(input = {}) {
   const meta = input.meta || {};
   const google = input.google || {};
   const conversions = input.conversions || {};
-  const conversionIntegrity = assessConversionIntegrity({
-    googleAdsConversions: conversions.google_ads_conversions ?? null,
-    ga4Bookings: conversions.booking_completed ?? null,
-    googleLastSeenAt: conversions.google_last_seen_at || null,
-    ga4LastSeenAt: conversions.ga4_last_seen_at || null,
-    now: input.now ? new Date(input.now) : new Date(),
-  });
+  const conversionIntegrity = assessConversionIntegrity({ googleAdsConversions: conversions.google_ads_conversions ?? null, ga4Bookings: conversions.booking_completed ?? null, googleLastSeenAt: conversions.google_last_seen_at || null, ga4LastSeenAt: conversions.ga4_last_seen_at || null, now: input.now ? new Date(input.now) : new Date() });
   const legacyDecisionSupport = buildDecisionSupportReport({ meta, google, conversions });
   const anomalies = detectAnomalies({ current: input.current || {}, baseline: input.baseline || {}, access: input.access || {} });
   const searchRecommendations = analyzeSearchTerms(input.search_terms || []);
@@ -26,25 +20,20 @@ function buildShadowAgentReport(input = {}) {
   const waste = detectWaste({ searchTerms: input.search_terms || [], keywords: input.keywords || [] });
   const opportunities = detectOpportunities({ searchTerms: input.search_terms || [], keywords: input.keywords || [] });
   const matchTypeAnalysis = assessMatchTypes(input.search_terms || []);
+  const rsaAnalysis = (input.rsa_assets || []).map(asset => ({ campaign: asset.campaign || null, ad_group: asset.ad_group || null, ...assessRsa(asset) }));
+  const landingContinuity = (input.landing_contexts || []).map(row => ({ id: row.id || null, ...assessLandingContinuity(row) }));
   const safetyGate = buildSafetyGate({ conversionIntegrity, ga4Ok: input.access?.ga4_ok === true, googleOk: input.access?.google_ok === true, funnelStatus: funnel.status, evidenceCount: (input.search_terms || []).length + (input.keywords || []).length });
 
-  const budget = conversionIntegrity.optimization_allowed
-    ? recommendBudget(input.budget_inputs || [])
-    : (input.budget_inputs || []).map((row) => ({ channel: row.channel || "unknown", campaign: row.campaign || null, recommendation: "keep", proposed_delta_percent: 0, confidence: "low", reason: "Budget optimization blocked because conversion integrity is not healthy.", requires_authorization: false }));
+  const budget = conversionIntegrity.optimization_allowed ? recommendBudget(input.budget_inputs || []) : (input.budget_inputs || []).map((row) => ({ channel: row.channel || "unknown", campaign: row.campaign || null, recommendation: "keep", proposed_delta_percent: 0, confidence: "low", reason: "Budget optimization blocked because conversion integrity is not healthy.", requires_authorization: false }));
   const budgetSimulation = simulateBudget(input.budget_inputs || []);
-
   const intelligenceRecommendations = [
     ...waste.items.map((item) => ({ code: item.source === "search_term" ? "SEARCH_TERM_WASTE_REVIEW" : "KEYWORD_WASTE_REVIEW", priority: "medium", score: Math.min(80, 45 + Math.round(item.estimated_waste_eur)), reason: item.reason, requires_authorization: true })),
     ...opportunities.map((item) => ({ code: item.type === "keyword_expansion" ? "KEYWORD_EXPANSION_OPPORTUNITY" : "PROVEN_KEYWORD_PROTECTION", priority: item.confidence === "high" ? "high" : "medium", score: item.confidence === "high" ? 75 : 55, reason: "Opportunity supported by conversion evidence.", requires_authorization: Boolean(item.requires_authorization) })),
     ...matchTypeAnalysis.warnings.map((item) => ({ code: item.code, priority: item.severity || "medium", score: 60, reason: item.reason, requires_authorization: false })),
+    ...rsaAnalysis.filter(x=>x.status!=="healthy").map(() => ({ code:"RSA_ATTENTION_REQUIRED",priority:"medium",score:55,reason:"RSA asset variety or intent coverage requires review.",requires_authorization:true })),
+    ...landingContinuity.filter(x=>x.status==="weak").map(() => ({ code:"LANDING_CONTINUITY_WEAK",priority:"medium",score:58,reason:"Search intent, ad copy and landing content have weak continuity.",requires_authorization:false })),
   ];
-
-  const recommendations = [
-    ...(legacyDecisionSupport.recommendations || []),
-    ...searchRecommendations,
-    ...intelligenceRecommendations,
-    ...creativeTests.map((item) => ({ ...item, code: "CREATIVE_TEST_PROPOSAL", priority: "medium", score: 50, reason: item.reason })),
-  ];
+  const recommendations = [ ...(legacyDecisionSupport.recommendations || []), ...searchRecommendations, ...intelligenceRecommendations, ...creativeTests.map((item) => ({ ...item, code: "CREATIVE_TEST_PROPOSAL", priority: "medium", score: 50, reason: item.reason })) ];
   const dailyManager = buildDailyManager({ recommendations, anomalies, funnel, budget });
   const channelRoles = allocateChannelRoles(input.channel_signals || {});
   const businessValue = estimateBusinessValue(input.business_value || {});
@@ -52,30 +41,6 @@ function buildShadowAgentReport(input = {}) {
   const actions = dailyManager.primary_priorities.map((priority) => ({ code: priority.code, safety: classifyAction({ type: "analyze" }) }));
   const executive = buildExecutiveModel({ waste, opportunities, funnel, conversionIntegrity, safetyGate });
   const journal = createDecisionJournalEntry({ channel: "cross_channel", evidenceWindow: input.evidence_window || null, evidence: { conversion_integrity: conversionIntegrity, anomaly_count: anomalies.length, priority_count: dailyManager.primary_priorities.length, estimated_waste_eur: waste.estimated_waste_eur, opportunity_count: opportunities.length }, dataQuality: conversionIntegrity.status, diagnosis: dailyManager.primary_priorities[0]?.reason || "No material priority detected.", confidence: conversionIntegrity.confidence, expectedEffect: "Shadow-mode diagnosis only; no external state mutation.", proposedAction: "review_shadow_report", requiresAuthorization: false });
-
-  return {
-    mode: "shadow",
-    writes_allowed: false,
-    conversion_integrity: conversionIntegrity,
-    anomalies,
-    search_term_recommendations: searchRecommendations,
-    waste,
-    opportunities,
-    match_type_analysis: matchTypeAnalysis,
-    budget_simulation: budgetSimulation,
-    safety_gate: safetyGate,
-    executive,
-    creative_ranking: rankedCreatives,
-    creative_test_proposals: creativeTests,
-    funnel,
-    budget_recommendations: budget,
-    daily_manager: dailyManager,
-    channel_roles: channelRoles,
-    business_value: businessValue,
-    schedule,
-    safety_preview: actions,
-    legacy_decision_support: legacyDecisionSupport,
-    journal,
-  };
+  return { mode:"shadow",writes_allowed:false,conversion_integrity:conversionIntegrity,anomalies,search_term_recommendations:searchRecommendations,waste,opportunities,match_type_analysis:matchTypeAnalysis,rsa_analysis:rsaAnalysis,landing_continuity:landingContinuity,budget_simulation:budgetSimulation,safety_gate:safetyGate,executive,creative_ranking:rankedCreatives,creative_test_proposals:creativeTests,funnel,budget_recommendations:budget,daily_manager:dailyManager,channel_roles:channelRoles,business_value:businessValue,schedule,safety_preview:actions,legacy_decision_support:legacyDecisionSupport,journal };
 }
 module.exports = { buildShadowAgentReport };
