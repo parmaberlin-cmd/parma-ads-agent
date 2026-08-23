@@ -22,7 +22,11 @@ jobs:
           node-version: 24
       - name: Install dependencies
         run: npm install --ignore-scripts
+      - name: Security check high or critical
+        run: npm audit --audit-level=high
       - name: Syntax check
         run: npm run check
       - name: Tests
         run: npm test
+      - name: Pre-access release validation
+        run: PREACCESS_TESTS_PASSED=true PREACCESS_SYNTAX_PASSED=true npm run validate:preaccess
