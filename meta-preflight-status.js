@@ -23,6 +23,10 @@ function sanitize(result){
     may_spend: false,
     account: result.account ? {
       readable: Boolean(result.account.readable),
+      timezone_name: result.account.timezone_name || null,
+      expected_timezone: result.account.expected_timezone || null,
+      currency: result.account.currency || null,
+      expected_currency: result.account.expected_currency || null,
       timezone_match: Boolean(result.account.timezone_match),
       currency_match: Boolean(result.account.currency_match),
       account_status_present: Boolean(result.account.account_status_present),
