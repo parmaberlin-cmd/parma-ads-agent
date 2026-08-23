@@ -51,12 +51,44 @@ function createRuntimeTransport({ accessToken, apiVersion = META_API_VERSION, cl
   };
 }
 
+async function collectPagedData(transport, endpoint, params = {}, maxPages = 20) {
+  const data = [];
+  let after = null;
+  let pages = 0;
+  let hasMore = false;
+
+  do {
+    const response = await transport.get(endpoint, {
+      ...params,
+      limit: 100,
+      ...(after ? { after } : {}),
+    });
+    data.push(...(response?.data || []));
+    pages += 1;
+    const nextCursor = response?.paging?.cursors?.after || null;
+    hasMore = Boolean(response?.paging?.next && nextCursor);
+    after = hasMore ? nextCursor : null;
+  } while (hasMore && pages < maxPages);
+
+  return {
+    data,
+    pages,
+    truncated: hasMore,
+  };
+}
+
 async function inspectExistingDraft(transport, adAccountId, draft) {
-  const campaigns = await transport.get(`/${adAccountId}/campaigns`, {
-    fields: "id,name,status,effective_status,objective",
-    limit: 100,
-  });
-  const duplicates = (campaigns?.data || []).filter(
+  const campaigns = await collectPagedData(
+    transport,
+    `/${adAccountId}/campaigns`,
+    { fields: "id,name,status,effective_status,objective" }
+  );
+
+  if (campaigns.truncated) {
+    return { safe: false, blocker: "campaign_scan_truncated", existing: {} };
+  }
+
+  const duplicates = campaigns.data.filter(
     (campaign) => campaign?.name === draft.campaign.name
   );
 
@@ -76,7 +108,7 @@ async function inspectExistingDraft(transport, adAccountId, draft) {
 
   const adsets = await transport.get(`/${duplicate.id}/adsets`, {
     fields: "id,status,effective_status",
-    limit: 100,
+    limit: 1,
   });
   if ((adsets?.data || []).length > 0) {
     return { safe: false, blocker: "matching_campaign_requires_manual_inspection", existing: {} };
@@ -286,6 +318,7 @@ function registerSafePausedDraftRoute(app, { authorized, env = process.env, http
 
 module.exports = {
   createRuntimeTransport,
+  collectPagedData,
   inspectExistingDraft,
   executeRuntimePausedDraft,
   registerSafePausedDraftRoute,
