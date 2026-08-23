@@ -38,6 +38,7 @@ function sanitizedSummary() {
     buildValidated: process.env.AGENT_BUILD_VALIDATED === "true",
     shadowRecords: [],
   });
+  const ga4Events = Array.isArray(r.live_sources?.ga4?.funnel?.event_names) ? r.live_sources.ga4.funnel.event_names : [];
 
   return {
     generated_at: r.generated_at,
@@ -67,7 +68,13 @@ function sanitizedSummary() {
       },
       meta: r.live_sources?.meta?.access_ok ? {
         campaign_counts: r.live_sources?.meta?.overview?.campaign_counts || {},
+        issue_categories: r.live_sources?.meta?.overview?.issue_report?.categories || {},
       } : null,
+    },
+    tracking: {
+      reservation_page_view: ga4Events.includes("reservation_page_view"),
+      reservation_start: ga4Events.includes("reservation_start"),
+      booking_completed: ga4Events.includes("booking_completed"),
     },
     conversion_integrity: {
       status: r.conversion_integrity?.status || "unknown",
@@ -158,7 +165,7 @@ function wrappedExpress(...args) {
   app.get("/health/agent-shadow-summary", (req, res) => {
     if (state.status === "starting" && !state.result) return res.status(202).json({ success: true, status: "running", mode: "shadow", writes_allowed: false, started_at: state.started_at });
     if (state.status === "failed" && !state.result) return res.status(500).json({ success: false, status: "failed", mode: "shadow", writes_allowed: false, error: String(state.error || "shadow_report_failed").slice(0, 160) });
-    return res.json({ success: true, status: refreshPromise ? "refreshing" : "completed", refresh_error: state.last_refresh_error ? String(state.last_refresh_error).slice(0, 160) : null, last_refresh_failed_at: state.last_refresh_failed_at, ...sanitizedSummary() });
+    return res.json({ success: true, status: "completed", refreshing: Boolean(refreshPromise), refresh_error: state.last_refresh_error ? String(state.last_refresh_error).slice(0, 160) : null, last_refresh_failed_at: state.last_refresh_failed_at, ...sanitizedSummary() });
   });
   app.get("/tools/agent/shadow/live", (req, res) => {
     if (!authorized(req)) return res.status(401).json({ success: false, error: "Unauthorized" });
