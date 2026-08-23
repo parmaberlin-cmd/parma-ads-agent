@@ -1,7 +1,16 @@
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { APPROVAL_TOKEN, META_API_VERSION } = require('../meta-paused-draft-next');
-const { createWriteTransport, sanitizeCreateResult, registerMetaSafeCreateRoute } = require('../meta-safe-create-route');
+const {
+  createWriteTransport,
+  operationKey,
+  acquireOperationLock,
+  releaseOperationLock,
+  sanitizeCreateResult,
+  registerMetaSafeCreateRoute,
+} = require('../meta-safe-create-route');
 
 function responseStub() {
   return {
@@ -40,7 +49,7 @@ test('sanitized create result never exposes Meta object ids', () => {
 
 test('safe create route rejects missing exact approval before any network work', async () => {
   let handler;
-  const app = { post(path, fn) { assert.equal(path, '/tools/meta/reservation-draft/create'); handler = fn; } };
+  const app = { post(route, fn) { assert.equal(route, '/tools/meta/reservation-draft/create'); handler = fn; } };
   registerMetaSafeCreateRoute(app, { authorized: () => true, env: {} });
   const res = responseStub();
   await handler({ body: {} }, res);
@@ -50,11 +59,36 @@ test('safe create route rejects missing exact approval before any network work',
 
 test('kill switch blocks even with the exact approval token', async () => {
   let handler;
-  const app = { post(path, fn) { handler = fn; } };
+  const app = { post(route, fn) { handler = fn; } };
   registerMetaSafeCreateRoute(app, { authorized: () => true, env: { PARMA_AGENT_KILL_SWITCH: 'true' } });
   const res = responseStub();
   await handler({ body: { confirmation: APPROVAL_TOKEN } }, res);
   assert.equal(res.statusCode, 423);
   assert.equal(res.body.blocked, true);
   assert.equal(res.body.reason, 'kill_switch_enabled');
+});
+
+test('equivalent start instants use the same operation lock key', () => {
+  const env = { META_AD_ACCOUNT_ID: '123' };
+  const first = operationKey({ env, startsAt: '2030-08-24T15:00:00.000Z' });
+  const second = operationKey({ env, startsAt: '2030-08-24T17:00:00.000+02:00' });
+  assert.equal(first, second);
+});
+
+test('only one identical operation can be in flight at a time', () => {
+  const key = 'same-operation';
+  releaseOperationLock(key);
+  assert.equal(acquireOperationLock(key), true);
+  assert.equal(acquireOperationLock(key), false);
+  releaseOperationLock(key);
+  assert.equal(acquireOperationLock(key), true);
+  releaseOperationLock(key);
+});
+
+test('bootstrap clears legacy startup one-shot before loading server', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'bootstrap.js'), 'utf8');
+  const disableIndex = source.indexOf('process.env.META_PAUSED_DRAFT_ONE_SHOT = ""');
+  const serverIndex = source.indexOf('require("./server")');
+  assert.ok(disableIndex >= 0);
+  assert.ok(serverIndex > disableIndex);
 });
