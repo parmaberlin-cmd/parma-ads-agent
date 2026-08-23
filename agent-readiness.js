@@ -67,8 +67,12 @@ function assessAgentReadiness({
 
   if (!safety.zero_write_default) hardBlockers.push("zero_write_default_missing");
   if (!safety.kill_switch_enforced) hardBlockers.push("kill_switch_not_enforced");
+  if (!safety.idempotency_enforced) hardBlockers.push("idempotency_not_enforced");
   if (!safety.human_approval_for_spend) hardBlockers.push("spend_approval_not_enforced");
+  if (!safety.safe_orchestrator_mandatory) hardBlockers.push("safe_orchestrator_not_mandatory");
   if (!reliability.fail_closed) hardBlockers.push("fail_closed_not_verified");
+  if (!reliability.regression_suite_green) hardBlockers.push("regression_suite_not_verified");
+  if (!reliability.post_action_verification_ready) hardBlockers.push("post_action_verification_not_ready");
   if (!dataQuality.sources_fresh) hardBlockers.push("source_freshness_unverified");
   if (!conversionIntegrity.trusted) hardBlockers.push("conversion_integrity_untrusted");
 

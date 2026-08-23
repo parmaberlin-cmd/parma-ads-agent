@@ -9,6 +9,7 @@ const { collectFullLiveShadowInput } = require("./full-live-shadow-data");
 const { buildShadowAgentReport } = require("./agent-shadow");
 const { registerMetaRealPreflightRoute } = require("./meta-runtime-preflight");
 const { registerMetaSafeCreateRoute } = require("./meta-safe-create-route");
+const { buildSanitizedPromotionStatus } = require("./promotion-status");
 const metaPreflightStatus = require("./meta-preflight-status");
 
 const state = {
@@ -31,6 +32,13 @@ function authorized(req) {
 function sanitizedSummary() {
   if (!state.result) return null;
   const r = state.result;
+  const promotion = buildSanitizedPromotionStatus({
+    shadowResult: { ...r, refresh_error: state.last_refresh_error },
+    metaPreflightState: metaPreflightStatus.state,
+    buildValidated: process.env.AGENT_BUILD_VALIDATED === "true",
+    shadowRecords: [],
+  });
+
   return {
     generated_at: r.generated_at,
     mode: "shadow",
@@ -67,6 +75,7 @@ function sanitizedSummary() {
       optimization_allowed: Boolean(r.conversion_integrity?.optimization_allowed),
       issues: r.conversion_integrity?.issues || [],
     },
+    promotion,
     anomalies: (r.anomalies || []).map((a) => ({ code: a.code, severity: a.severity, reason: a.reason, channel: a.channel })),
     primary_priorities: (r.daily_manager?.primary_priorities || []).map((p) => ({ code: p.code, severity: p.severity, source: p.source, reason: p.reason, requires_authorization: Boolean(p.requires_authorization) })),
   };
