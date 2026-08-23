@@ -14,7 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Wait for Railway deploy and validate sanitized operations
+      - name: Wait for Railway deploy
+        if: github.event_name == 'push'
+        run: sleep 60
+      - name: Validate sanitized operational endpoints
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -24,7 +27,7 @@ jobs:
           BASE="https://supportive-stillness-production-ec37.up.railway.app"
           dashboard_code="000"
           cycle_code="000"
-          for i in 1 2 3 4 5 6 7 8; do
+          for i in 1 2 3 4 5 6; do
             dashboard_code=$(curl -sS -o dashboard.json -w "%{http_code}" "$BASE/health/agent-dashboard" || true)
             cycle_code=$(curl -sS -o cycle.json -w "%{http_code}" "$BASE/health/agent-cycle" || true)
             if [ "$dashboard_code" = "200" ] && [ "$cycle_code" = "200" ]; then break; fi
@@ -33,8 +36,6 @@ jobs:
 
           dashboard_safe=$(jq -r '(.writes_allowed == false) and (.execution_allowed == false) and (.spend_allowed == false)' dashboard.json 2>/dev/null || echo false)
           cycle_safe=$(jq -r '(.writes_allowed == false) and (.execution_allowed == false) and (.spend_allowed == false)' cycle.json 2>/dev/null || echo false)
-          stages_ok=$(jq -r '(["collect","validate","analyze","detect","prioritize","report","history"] | all(. as $s | .; ($s | IN(.))))' cycle.json 2>/dev/null || echo false)
-          # Use explicit key checks because jq IN portability differs between versions.
           stages_ok=$(jq -r '(.stages.collect and .stages.validate and .stages.analyze and .stages.detect and .stages.prioritize and .stages.report and .stages.history) != null' cycle.json 2>/dev/null || echo false)
           history_class=$(jq -r '.history.storage.path_class // "unknown"' dashboard.json 2>/dev/null || echo unknown)
           google=$(jq -r '.sources.google // "unknown"' dashboard.json 2>/dev/null || echo unknown)
