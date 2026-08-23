@@ -30,6 +30,53 @@ function summarizeFunnel(rows = [], eventNames = []) {
   return { totals, google_cpc: googleCpc };
 }
 
+function funnelTrackingStatus(funnel = {}, expectedEvents = []) {
+  const configured = new Set(Array.isArray(funnel.event_names) ? funnel.event_names : expectedEvents);
+  const totals = funnel.totals && typeof funnel.totals === "object" ? funnel.totals : {};
+  const status = {};
+  for (const eventName of expectedEvents) {
+    const count = Number(totals[eventName] || 0);
+    status[eventName] = {
+      configured: configured.has(eventName),
+      observed: Number.isFinite(count) && count > 0,
+      count: Number.isFinite(count) ? Math.max(0, count) : 0,
+    };
+  }
+  return status;
+}
+
+function funnelCompleteness(funnel = {}, expectedEvents = []) {
+  const tracking = funnelTrackingStatus(funnel, expectedEvents);
+  const configuredCount = expectedEvents.filter((name) => tracking[name]?.configured).length;
+  const observedCount = expectedEvents.filter((name) => tracking[name]?.observed).length;
+  return {
+    expected_events: expectedEvents.length,
+    configured_events: configuredCount,
+    observed_events: observedCount,
+    configuration_complete: expectedEvents.length > 0 && configuredCount === expectedEvents.length,
+    observation_complete: expectedEvents.length > 0 && observedCount === expectedEvents.length,
+    tracking,
+  };
+}
+
+function safeRate(numerator, denominator) {
+  const top = Number(numerator || 0);
+  const bottom = Number(denominator || 0);
+  return bottom > 0 ? top / bottom : null;
+}
+
+function funnelRates(funnel = {}) {
+  const totals = funnel.totals || {};
+  const pageViews = Number(totals.reservation_page_view || 0);
+  const starts = Number(totals.reservation_start || 0);
+  const bookings = Number(totals.booking_completed || 0);
+  return {
+    page_to_start: safeRate(starts, pageViews),
+    start_to_booking: safeRate(bookings, starts),
+    page_to_booking: safeRate(bookings, pageViews),
+  };
+}
+
 function reconcileConversions({ googleAdsConversions, ga4GoogleCpcBookings }) {
   if (googleAdsConversions == null || ga4GoogleCpcBookings == null) return { comparable: false, confidence: "blocked", reason: "missing_source" };
   const ads = Number(googleAdsConversions || 0);
@@ -40,4 +87,11 @@ function reconcileConversions({ googleAdsConversions, ga4GoogleCpcBookings }) {
   return { comparable: true, google_ads: ads, ga4_google_cpc: ga4, relative_gap: relativeGap, confidence, automation_safe: confidence === "high" };
 }
 
-module.exports = { runFunnelReport, summarizeFunnel, reconcileConversions };
+module.exports = {
+  runFunnelReport,
+  summarizeFunnel,
+  funnelTrackingStatus,
+  funnelCompleteness,
+  funnelRates,
+  reconcileConversions,
+};
