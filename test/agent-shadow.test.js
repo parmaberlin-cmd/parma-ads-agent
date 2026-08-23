@@ -34,7 +34,13 @@ test("shadow agent connects modules without allowing writes", () => {
 
 test("healthy conversion integrity allows bounded budget recommendation but never a write", () => {
   const report = buildShadowAgentReport({
-    conversions: { google_ads_conversions: 4, booking_completed: 4 },
+    now: "2026-08-23T10:00:00Z",
+    conversions: {
+      google_ads_conversions: 4,
+      booking_completed: 4,
+      google_last_seen_at: "2026-08-23T09:00:00Z",
+      ga4_last_seen_at: "2026-08-23T09:00:00Z",
+    },
     budget_inputs: [{ channel: "google", campaign: "Dinner", spend_eur: 20, conversions: 4, target_cpa_eur: 10 }],
   });
   assert.equal(report.conversion_integrity.optimization_allowed, true);
