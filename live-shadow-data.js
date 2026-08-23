@@ -2,6 +2,7 @@ const axios = require("axios");
 const { GoogleAdsApi } = require("google-ads-api");
 const { buildMetaOverview, buildGoogleReadiness } = require("./reporting");
 const { collectGoogleSearchTerms, collectGoogleKeywords, analyzeSearchTerms, analyzeKeywords } = require("./google-search-intelligence");
+const { buildMetaIssueReport } = require("./meta-issue-classification");
 
 function normalizeGoogleCustomerId(value) { return String(value || "").replace(/\D/g, ""); }
 function googleConfigured(env = process.env) { return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_DEVELOPER_TOKEN && env.GOOGLE_REFRESH_TOKEN && env.GOOGLE_CUSTOMER_ID); }
@@ -14,42 +15,20 @@ function buildGoogleCustomer(env) { const client=new GoogleAdsApi({client_id:env
 async function collectGoogleShadowData({env=process.env,days=30,now=new Date()}={}) {
   const collectedAt = now.toISOString();
   if(!googleConfigured(env)) return {access_ok:false,configuration_complete:false,collected_at:collectedAt,error:"google_configuration_incomplete",campaigns:[],totals:null,search_terms:[],keywords:[],search_intelligence_ok:false};
-  const customer=buildGoogleCustomer(env);
-  const {start,end}=getDateRange(days,now);
+  const customer=buildGoogleCustomer(env); const {start,end}=getDateRange(days,now);
   try {
     const rows=await customer.query(`SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.average_cpc, metrics.conversions, metrics.conversions_value FROM campaign WHERE campaign.status != 'REMOVED' AND segments.date BETWEEN '${start}' AND '${end}'`);
     const campaigns=(rows||[]).map(row=>({campaign_id:String(row.campaign.id),campaign_name:row.campaign.name,status:row.campaign.status,channel_type:row.campaign.advertising_channel_type,impressions:Number(row.metrics.impressions||0),clicks:Number(row.metrics.clicks||0),cost_eur:Number(row.metrics.cost_micros||0)/1_000_000,average_cpc_eur:Number(row.metrics.average_cpc||0)/1_000_000,conversions:Number(row.metrics.conversions||0),conversion_value:Number(row.metrics.conversions_value||0)}));
-    const totals=campaigns.reduce((a,r)=>({impressions:a.impressions+r.impressions,clicks:a.clicks+r.clicks,spend_eur:a.spend_eur+r.cost_eur,conversions:a.conversions+r.conversions}),{impressions:0,clicks:0,spend_eur:0,conversions:0});
-    totals.cpc_eur=totals.clicks?totals.spend_eur/totals.clicks:0;
-
-    let searchTerms=[];
-    let keywords=[];
-    let searchIntelligenceOk=false;
-    let searchIntelligenceDiagnostic=null;
-    try {
-      const [terms, keywordRows]=await Promise.all([
-        collectGoogleSearchTerms({customer,start,end}),
-        collectGoogleKeywords({customer,start,end}),
-      ]);
-      searchTerms=analyzeSearchTerms(terms);
-      keywords=analyzeKeywords(keywordRows);
-      searchIntelligenceOk=true;
-    } catch (error) {
-      searchIntelligenceDiagnostic=cleanGoogleDiagnostic(error);
-    }
-
+    const totals=campaigns.reduce((a,r)=>({impressions:a.impressions+r.impressions,clicks:a.clicks+r.clicks,spend_eur:a.spend_eur+r.cost_eur,conversions:a.conversions+r.conversions}),{impressions:0,clicks:0,spend_eur:0,conversions:0}); totals.cpc_eur=totals.clicks?totals.spend_eur/totals.clicks:0;
+    let searchTerms=[],keywords=[],searchIntelligenceOk=false,searchIntelligenceDiagnostic=null;
+    try { const [terms,keywordRows]=await Promise.all([collectGoogleSearchTerms({customer,start,end}),collectGoogleKeywords({customer,start,end})]); searchTerms=analyzeSearchTerms(terms); keywords=analyzeKeywords(keywordRows); searchIntelligenceOk=true; } catch(error) { searchIntelligenceDiagnostic=cleanGoogleDiagnostic(error); }
     return {access_ok:true,configuration_complete:true,collected_at:collectedAt,period:{start,end},campaigns,totals,search_terms:searchTerms,keywords,search_intelligence_ok:searchIntelligenceOk,search_intelligence_diagnostic:searchIntelligenceDiagnostic};
-  } catch(error) {
-    return {access_ok:false,configuration_complete:true,collected_at:collectedAt,diagnostic:cleanGoogleDiagnostic(error),error:"google_read_failed",campaigns:[],totals:null,search_terms:[],keywords:[],search_intelligence_ok:false};
-  }
+  } catch(error) { return {access_ok:false,configuration_complete:true,collected_at:collectedAt,diagnostic:cleanGoogleDiagnostic(error),error:"google_read_failed",campaigns:[],totals:null,search_terms:[],keywords:[],search_intelligence_ok:false}; }
 }
 
 async function collectMetaShadowData({env=process.env,datePreset="last_30d",now=new Date()}={}) {
-  const collectedAt = now.toISOString();
-  if(!metaConfigured(env)) return {access_ok:false,configuration_complete:false,collected_at:collectedAt,error:"meta_configuration_incomplete",overview:null};
-  const accountId=String(env.META_AD_ACCOUNT_ID).startsWith("act_")?String(env.META_AD_ACCOUNT_ID):`act_${env.META_AD_ACCOUNT_ID}`;
-  const apiVersion=env.META_API_VERSION||"v19.0";
-  const client=axios.create({baseURL:`https://graph.facebook.com/${apiVersion}`,timeout:20000});
+  const collectedAt=now.toISOString(); if(!metaConfigured(env)) return {access_ok:false,configuration_complete:false,collected_at:collectedAt,error:"meta_configuration_incomplete",overview:null};
+  const accountId=String(env.META_AD_ACCOUNT_ID).startsWith("act_")?String(env.META_AD_ACCOUNT_ID):`act_${env.META_AD_ACCOUNT_ID}`; const apiVersion=env.META_API_VERSION||"v19.0"; const client=axios.create({baseURL:`https://graph.facebook.com/${apiVersion}`,timeout:20000});
   const getCollection=async(endpoint,params)=>{const response=await client.get(endpoint,{params:{...params,access_token:env.META_ACCESS_TOKEN,limit:100}});return response.data.data||[];};
   try {
     const [campaigns,insights,adsets,ads]=await Promise.all([
@@ -60,30 +39,14 @@ async function collectMetaShadowData({env=process.env,datePreset="last_30d",now=
     ]);
     const overview=buildMetaOverview(campaigns,insights,adsets);
     overview.issue_diagnostics={campaigns:campaigns.filter(x=>x.effective_status==="WITH_ISSUES"||x.issues_info?.length).map(x=>({id:String(x.id),name:x.name||null,issues:sanitizeMetaIssues(x.issues_info)})),adsets:adsets.filter(x=>x.effective_status==="WITH_ISSUES"||x.issues_info?.length).map(x=>({id:String(x.id),campaign_id:String(x.campaign_id||""),issues:sanitizeMetaIssues(x.issues_info)})),ads:ads.filter(x=>x.effective_status==="WITH_ISSUES"||x.issues_info?.length).map(x=>({id:String(x.id),campaign_id:String(x.campaign_id||""),adset_id:String(x.adset_id||""),name:x.name||null,issues:sanitizeMetaIssues(x.issues_info)}))};
+    overview.issue_report=buildMetaIssueReport(overview.issue_diagnostics);
     return {access_ok:true,configuration_complete:true,collected_at:collectedAt,date_preset:datePreset,overview};
-  } catch(error) {
-    return {access_ok:false,configuration_complete:true,collected_at:collectedAt,error:error?.response?.data?.error?.message||error?.message||"meta_read_failed",overview:null};
-  }
+  } catch(error) { return {access_ok:false,configuration_complete:true,collected_at:collectedAt,error:error?.response?.data?.error?.message||error?.message||"meta_read_failed",overview:null}; }
 }
 
 async function collectLiveShadowInput({env=process.env,days=30,now=new Date()}={}) {
-  const [google,meta]=await Promise.all([collectGoogleShadowData({env,days,now}),collectMetaShadowData({env,now})]);
-  const googleTotals=google.totals||{};
-  const metaTotals=meta.overview?.totals||{};
-  return {
-    now:now.toISOString(),
-    evidence_window:`${days}d`,
-    google:google.access_ok?{...buildGoogleReadiness(),configuration_complete:true,api_access:"verified",totals:googleTotals,campaigns:google.campaigns}:{...buildGoogleReadiness(),configuration_complete:google.configuration_complete,api_access:"failed",error:google.error},
-    meta:meta.overview||{campaign_counts:{},totals:{}},
-    search_terms:google.search_terms||[],
-    keywords:google.keywords||[],
-    conversions:{google_ads_conversions:google.access_ok?Number(googleTotals.conversions||0):null,booking_completed:null,google_last_seen_at:google.access_ok?now.toISOString():null,ga4_last_seen_at:null},
-    current:{spend:Number(googleTotals.spend_eur||0)+Number(metaTotals.spend_eur||0),clicks:Number(googleTotals.clicks||0)+Number(metaTotals.clicks||0),conversions:Number(googleTotals.conversions||0),cpc:Number(googleTotals.cpc_eur||0),delivery_active:true},
-    access:{google_ok:google.access_ok,meta_ok:meta.access_ok,google_search_intelligence_ok:Boolean(google.search_intelligence_ok)},
-    budget_inputs:(google.campaigns||[]).filter(c=>c.status==="ENABLED"||c.status===2).map(c=>({channel:"google",campaign:c.campaign_name,spend_eur:c.cost_eur,conversions:c.conversions})),
-    channel_signals:{google:{clicks:Number(googleTotals.clicks||0),intent_conversions:Number(googleTotals.conversions||0)},meta:{reach:Number(metaTotals.reach_sum||metaTotals.reach||0),bookings:0}},
-    live_sources:{google,meta,ga4:{access_ok:false,reason:"ga4_live_collector_not_configured"}},
-  };
+  const [google,meta]=await Promise.all([collectGoogleShadowData({env,days,now}),collectMetaShadowData({env,now})]); const googleTotals=google.totals||{}; const metaTotals=meta.overview?.totals||{};
+  return {now:now.toISOString(),evidence_window:`${days}d`,google:google.access_ok?{...buildGoogleReadiness(),configuration_complete:true,api_access:"verified",totals:googleTotals,campaigns:google.campaigns}:{...buildGoogleReadiness(),configuration_complete:google.configuration_complete,api_access:"failed",error:google.error},meta:meta.overview||{campaign_counts:{},totals:{}},search_terms:google.search_terms||[],keywords:google.keywords||[],conversions:{google_ads_conversions:google.access_ok?Number(googleTotals.conversions||0):null,booking_completed:null,google_last_seen_at:google.access_ok?now.toISOString():null,ga4_last_seen_at:null},current:{spend:Number(googleTotals.spend_eur||0)+Number(metaTotals.spend_eur||0),clicks:Number(googleTotals.clicks||0)+Number(metaTotals.clicks||0),conversions:Number(googleTotals.conversions||0),cpc:Number(googleTotals.cpc_eur||0),delivery_active:true},access:{google_ok:google.access_ok,meta_ok:meta.access_ok,google_search_intelligence_ok:Boolean(google.search_intelligence_ok)},budget_inputs:(google.campaigns||[]).filter(c=>c.status==="ENABLED"||c.status===2).map(c=>({channel:"google",campaign:c.campaign_name,spend_eur:c.cost_eur,conversions:c.conversions})),channel_signals:{google:{clicks:Number(googleTotals.clicks||0),intent_conversions:Number(googleTotals.conversions||0)},meta:{reach:Number(metaTotals.reach_sum||metaTotals.reach||0),bookings:0}},live_sources:{google,meta,ga4:{access_ok:false,reason:"ga4_live_collector_not_configured"}}};
 }
 
 module.exports={collectGoogleShadowData,collectMetaShadowData,collectLiveShadowInput,getDateRange,googleConfigured,metaConfigured,cleanGoogleDiagnostic,sanitizeMetaIssues};
