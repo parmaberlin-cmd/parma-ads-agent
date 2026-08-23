@@ -1,0 +1,6 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {normalizeAccountId,parseFutureStart,runtimeConfig,executeRuntimeMetaPreflight}=require('../meta-runtime-preflight');
+
+test('normalizes Meta account ids safely',()=>{assert.equal(normalizeAccountId('123'),'act_123');assert.equal(normalizeAccountId('act_456'),'act_456');assert.equal(normalizeAccountId('bad'),null)});
+test('requires a future start time',()=>{const now=Date.parse('2026-08-23T10:00:00Z');assert.equal(parseFutureStart('2026-08-23T10:10:00Z',now),null);assert.equal(parseFutureStart('2026-08-23T11:00:00Z',now),'2026-08-23T11:00:00.000Z')});
+test('runtime config never exposes derived writes beyond explicit gate',()=>{const c=runtimeConfig({META_ACCESS_TOKEN:'x',META_AD_ACCOUNT_ID:'123',META_PAUSED_DRAFT_WRITES_ENABLED:'false'});assert.equal(c.adAccountId,'act_123');assert.equal(c.writeGateEnabled,false)});
+test('incomplete runtime config fails closed without HTTP calls',async()=>{let calls=0;const fake={create(){return{get:async()=>{calls++;throw new Error('should not call')}}}};const r=await executeRuntimeMetaPreflight({env:{},startsAt:'2026-09-01T18:00:00Z',httpClient:fake});assert.equal(r.ready,false);assert.equal(r.may_spend,false);assert.equal(calls,0);assert.ok(r.blockers.includes('configuration_incomplete'))});
