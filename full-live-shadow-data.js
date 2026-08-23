@@ -8,6 +8,7 @@ function buildFunnelInput(base, ga4) {
   const eventNames = ga4?.funnel?.event_names || ["reservation_page_view", "reservation_start", "booking_completed"];
   return {
     landingAvailable: ga4?.access_ok === true,
+    bookingStartedTracked: eventNames.includes("reservation_start"),
     adClicks: Number(base?.live_sources?.google?.totals?.clicks || 0),
     landingViews: Number(googleCpc.reservation_page_view || 0),
     reservationStarts: Number(googleCpc.reservation_start || 0),
@@ -29,7 +30,7 @@ async function collectFullLiveShadowInput({ env = process.env, days = 30, now = 
 
   return {
     ...base,
-    funnel: ga4.access_ok ? buildFunnelInput(base, ga4) : { landingAvailable: false, analysis: null },
+    funnel: ga4.access_ok ? buildFunnelInput(base, ga4) : { landingAvailable: false, bookingStartedTracked: false, analysis: null },
     conversions: {
       ...base.conversions,
       booking_completed: ga4.access_ok ? Number(ga4.google_cpc_booking_completed || 0) : null,

@@ -35,7 +35,7 @@ function buildShadowAgentReport(input = {}) {
     ...trackingAnomalies.map((item) => ({ ...item, reason: item.code })),
   ];
 
-  const searchRecommendations = analyzeSearchTerms(input.search_terms || []);
+  const searchRecommendations = analyzeSearchTerms(input.search_terms || [], { knownKeywords: input.keywords || [] });
   const rankedCreatives = rankCreatives(input.creatives || []);
   const creativeTests = proposeCreativeTests(rankedCreatives);
   const funnel = assessFunnel({ ...(input.funnel || {}), conversionIntegrity: conversionIntegrity.status });

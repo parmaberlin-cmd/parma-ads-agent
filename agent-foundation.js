@@ -18,6 +18,7 @@ function assessConversionIntegrity({
   now = new Date(),
   staleAfterHours = 48,
   toleranceRatio = 0.35,
+  minimumComparableConversions = 3,
 } = {}) {
   const googleAvailable = googleAdsConversions !== null && googleAdsConversions !== undefined;
   const ga4Available = ga4Bookings !== null && ga4Bookings !== undefined;
@@ -26,26 +27,34 @@ function assessConversionIntegrity({
   if (!googleAvailable) issues.push("google_ads_conversion_signal_missing");
   if (!ga4Available) issues.push("ga4_booking_signal_missing");
 
-  function isStale(timestamp) {
-    if (!timestamp) return false;
+  function freshness(timestamp, available, missingCode, staleCode) {
+    if (!available) return { present: false, stale: null };
+    if (!timestamp) {
+      issues.push(missingCode);
+      return { present: false, stale: null };
+    }
     const parsed = new Date(timestamp);
-    if (Number.isNaN(parsed.getTime())) return true;
-    return now.getTime() - parsed.getTime() > staleAfterHours * 60 * 60 * 1000;
+    if (Number.isNaN(parsed.getTime())) {
+      issues.push(staleCode);
+      return { present: true, stale: true };
+    }
+    const stale = now.getTime() - parsed.getTime() > staleAfterHours * 60 * 60 * 1000;
+    if (stale) issues.push(staleCode);
+    return { present: true, stale };
   }
 
-  if (googleAvailable && isStale(googleLastSeenAt)) {
-    issues.push("google_ads_conversion_signal_stale");
-  }
-  if (ga4Available && isStale(ga4LastSeenAt)) {
-    issues.push("ga4_booking_signal_stale");
-  }
+  const googleFreshness = freshness(googleLastSeenAt, googleAvailable, "google_ads_freshness_unknown", "google_ads_conversion_signal_stale");
+  const ga4Freshness = freshness(ga4LastSeenAt, ga4Available, "ga4_freshness_unknown", "ga4_booking_signal_stale");
 
   let discrepancyRatio = null;
+  let comparableVolume = false;
   if (googleAvailable && ga4Available) {
-    discrepancyRatio = relativeDifference(googleAdsConversions, ga4Bookings);
-    if (discrepancyRatio > toleranceRatio) {
-      issues.push("conversion_sources_disagree");
-    }
+    const google = numberOrZero(googleAdsConversions);
+    const ga4 = numberOrZero(ga4Bookings);
+    discrepancyRatio = relativeDifference(google, ga4);
+    comparableVolume = Math.max(Math.abs(google), Math.abs(ga4)) >= minimumComparableConversions;
+    if (!comparableVolume) issues.push("conversion_volume_too_low_for_optimization");
+    if (comparableVolume && discrepancyRatio > toleranceRatio) issues.push("conversion_sources_disagree");
   }
 
   let status = "healthy";
@@ -54,18 +63,21 @@ function assessConversionIntegrity({
     status = "unverified";
     confidence = "low";
   } else if (issues.length > 0) {
-    status = "degraded";
-    confidence = "medium";
+    status = issues.includes("conversion_volume_too_low_for_optimization") && issues.length === 1 ? "unverified" : "degraded";
+    confidence = status === "unverified" ? "low" : "medium";
   }
 
   return {
     status,
     confidence,
-    optimization_allowed: status === "healthy",
+    optimization_allowed: status === "healthy" && comparableVolume && googleFreshness.stale === false && ga4Freshness.stale === false,
     google_ads_conversions: googleAvailable ? numberOrZero(googleAdsConversions) : null,
     ga4_bookings: ga4Available ? numberOrZero(ga4Bookings) : null,
     discrepancy_ratio: discrepancyRatio,
     tolerance_ratio: toleranceRatio,
+    minimum_comparable_conversions: minimumComparableConversions,
+    comparable_volume: comparableVolume,
+    freshness: { google_ads: googleFreshness, ga4: ga4Freshness },
     issues,
   };
 }
@@ -76,15 +88,9 @@ function detectAnomalies({ current = {}, baseline = {}, access = {} } = {}) {
     anomalies.push({ code, severity, reason, channel });
   };
 
-  if (access.google_ok === false) {
-    push("GOOGLE_ACCESS_FAILURE", "critical", "Google Ads live access is unavailable.", "google");
-  }
-  if (access.meta_ok === false) {
-    push("META_ACCESS_FAILURE", "critical", "Meta live access is unavailable.", "meta");
-  }
-  if (current.delivery_active === false && numberOrZero(baseline.impressions) > 0) {
-    push("DELIVERY_STOPPED", "critical", "Delivery is currently stopped despite prior delivery history.");
-  }
+  if (access.google_ok === false) push("GOOGLE_ACCESS_FAILURE", "critical", "Google Ads live access is unavailable.", "google");
+  if (access.meta_ok === false) push("META_ACCESS_FAILURE", "critical", "Meta live access is unavailable.", "meta");
+  if (current.delivery_active === false && numberOrZero(baseline.impressions) > 0) push("DELIVERY_STOPPED", "critical", "Delivery is currently stopped despite prior delivery history.");
 
   const currentSpend = numberOrZero(current.spend);
   const baselineSpend = numberOrZero(baseline.spend);
@@ -94,17 +100,9 @@ function detectAnomalies({ current = {}, baseline = {}, access = {} } = {}) {
   const currentCpc = numberOrZero(current.cpc);
   const baselineCpc = numberOrZero(baseline.cpc);
 
-  if (currentSpend >= Math.max(10, baselineSpend * 0.5) && currentClicks === 0) {
-    push("SPEND_WITHOUT_CLICKS", "high", "Meaningful spend is present without clicks.");
-  }
-
-  if (baselineConversions >= 3 && currentConversions === 0 && currentClicks >= 5) {
-    push("CONVERSION_COLLAPSE", "high", "Conversions dropped to zero while traffic is still present.", "conversion");
-  }
-
-  if (baselineCpc > 0 && currentCpc >= baselineCpc * 1.75 && currentClicks >= 3) {
-    push("CPC_SPIKE", "medium", "Current CPC is at least 75% above baseline.");
-  }
+  if (currentSpend >= Math.max(10, baselineSpend * 0.5) && currentClicks === 0) push("SPEND_WITHOUT_CLICKS", "high", "Meaningful spend is present without clicks.");
+  if (baselineConversions >= 3 && currentConversions === 0 && currentClicks >= 5) push("CONVERSION_COLLAPSE", "high", "Conversions dropped to zero while traffic is still present.", "conversion");
+  if (baselineCpc > 0 && currentCpc >= baselineCpc * 1.75 && currentClicks >= 3) push("CPC_SPIKE", "medium", "Current CPC is at least 75% above baseline.");
 
   const severityRank = { critical: 3, high: 2, medium: 1, low: 0 };
   anomalies.sort((a, b) => severityRank[b.severity] - severityRank[a.severity] || a.code.localeCompare(b.code));
