@@ -24,6 +24,30 @@ paths:
           description: First Shadow snapshot is still running
         "500":
           description: No completed Shadow snapshot is available because collection failed safely
+  /health/agent-dashboard:
+    get:
+      operationId: getSanitizedAgentDashboard
+      summary: Get compact sanitized operational dashboard
+      description: Returns only source readiness, data confidence, tracking booleans, bounded alerts/priorities, history readiness and promotion blockers. It cannot authorize writes, execution or spend.
+      responses:
+        "200":
+          description: Sanitized dashboard from the latest completed Shadow snapshot
+        "202":
+          description: First Shadow snapshot is still running
+        "500":
+          description: No completed Shadow snapshot is available
+  /health/agent-cycle:
+    get:
+      operationId: getSanitizedReadonlyCycle
+      summary: Get the current collect-validate-analyze-detect-prioritize-report-history cycle state
+      description: Exposes completion/blocker state for the formal read-only operating loop. Writes, execution and spend are permanently false.
+      responses:
+        "200":
+          description: Sanitized read-only cycle state
+        "202":
+          description: First Shadow snapshot is still running
+        "500":
+          description: No completed Shadow snapshot is available
   /health/meta-real-preflight-summary:
     get:
       operationId: getSanitizedMetaPreflightHealth
