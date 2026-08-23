@@ -1,13 +1,16 @@
 const { collectFullLiveShadowInput } = require("../full-live-shadow-data");
 const { buildShadowAgentReport } = require("../agent-shadow");
+const { buildDashboardModel } = require("../dashboard-model");
 
 (async () => {
   const input = await collectFullLiveShadowInput({ days: Number(process.env.SHADOW_REPORT_DAYS || 30) });
   const report = buildShadowAgentReport(input);
+  const dashboard = buildDashboardModel({ input, report });
   const output = {
     generated_at: new Date().toISOString(),
     mode: report.mode,
     writes_allowed: report.writes_allowed,
+    dashboard,
     live_sources: input.live_sources,
     conversions: input.conversions,
     conversion_integrity: report.conversion_integrity,
