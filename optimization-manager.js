@@ -9,15 +9,19 @@ function recommendBudget(rows=[], {maxDeltaPercent=20, minConversions=2}={}) {
   });
 }
 
-function assessFunnel({landingAvailable=null, adClicks=null, landingViews=null, reservationStarts=null, bookings=null, conversionIntegrity="unknown"}={}){
+function assessFunnel({landingAvailable=null,adClicks=null,landingViews=null,reservationStarts=null,bookings=null,conversionIntegrity="unknown",bookingStartedTracked=true}={}){
   const issues=[];
   if(landingAvailable===false) issues.push({code:"LANDING_UNAVAILABLE",severity:"critical"});
   if(conversionIntegrity!=="healthy") issues.push({code:"CONVERSION_INTEGRITY_UNVERIFIED",severity:"high"});
-  const clicks=n(adClicks), views=n(landingViews), starts=n(reservationStarts), done=n(bookings);
-  if(clicks>=10 && views/clicks<0.7) issues.push({code:"CLICK_TO_LANDING_LEAKAGE",severity:"high"});
-  if(views>=10 && starts/views<0.1) issues.push({code:"LANDING_TO_RESERVATION_LEAKAGE",severity:"medium"});
-  if(starts>=5 && done/starts<0.3) issues.push({code:"RESERVATION_COMPLETION_LEAKAGE",severity:"high"});
-  return {status:issues.some(i=>i.severity==="critical")?"blocked":issues.length?"attention_required":"healthy",issues,metrics:{ad_clicks:clicks,landing_views:views,reservation_starts:starts,bookings:done}};
+  const clicks=n(adClicks),views=n(landingViews),starts=n(reservationStarts),done=n(bookings);
+  if(clicks>=10&&views/clicks<0.7) issues.push({code:"CLICK_TO_LANDING_LEAKAGE",severity:"high"});
+  if(bookingStartedTracked===false){
+    if(views>=10) issues.push({code:"BOOKING_STARTED_TRACKING_MISSING",severity:"medium"});
+  } else {
+    if(views>=10&&starts/views<0.1) issues.push({code:"LANDING_TO_RESERVATION_LEAKAGE",severity:"medium"});
+    if(starts>=5&&done/starts<0.3) issues.push({code:"RESERVATION_COMPLETION_LEAKAGE",severity:"high"});
+  }
+  return {status:issues.some(i=>i.severity==="critical")?"blocked":issues.length?"attention_required":"healthy",issues,metrics:{ad_clicks:clicks,landing_views:views,reservation_starts:starts,bookings:done},tracking:{booking_started:bookingStartedTracked!==false}};
 }
 
 function buildDailyManager({recommendations=[], anomalies=[], funnel=null, budget=[]}={}){
