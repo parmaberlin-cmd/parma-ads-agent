@@ -1,3 +1,6 @@
+const { META_API_VERSION } = require("./meta-paused-draft-next");
+if (!process.env.META_API_VERSION) process.env.META_API_VERSION = META_API_VERSION;
+
 const realExpress = require("express");
 const { collectFullLiveShadowInput } = require("./full-live-shadow-data");
 const { buildShadowAgentReport } = require("./agent-shadow");
