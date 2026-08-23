@@ -66,9 +66,42 @@ test("missing kill switch is a hard safety blocker", () => {
   assert.equal(readiness.supervised_write_candidate, false);
 });
 
+test("missing idempotency is a hard blocker even when score remains high", () => {
+  const input = strongInput();
+  input.safety.idempotency_enforced = false;
+  const readiness = assessAgentReadiness(input);
+  assert.ok(readiness.score >= 80);
+  assert.ok(readiness.hard_blockers.includes("idempotency_not_enforced"));
+  assert.equal(readiness.supervised_write_candidate, false);
+});
+
+test("missing central orchestrator is a hard blocker", () => {
+  const input = strongInput();
+  input.safety.safe_orchestrator_mandatory = false;
+  const readiness = assessAgentReadiness(input);
+  assert.ok(readiness.hard_blockers.includes("safe_orchestrator_not_mandatory"));
+  assert.equal(readiness.supervised_write_candidate, false);
+});
+
+test("unverified regression suite blocks supervised promotion", () => {
+  const input = strongInput();
+  input.reliability.regression_suite_green = false;
+  const readiness = assessAgentReadiness(input);
+  assert.ok(readiness.hard_blockers.includes("regression_suite_not_verified"));
+  assert.equal(readiness.supervised_write_candidate, false);
+});
+
+test("missing post-action verification blocks supervised promotion", () => {
+  const input = strongInput();
+  input.reliability.post_action_verification_ready = false;
+  const readiness = assessAgentReadiness(input);
+  assert.ok(readiness.hard_blockers.includes("post_action_verification_not_ready"));
+  assert.equal(readiness.supervised_write_candidate, false);
+});
+
 test("weak incomplete system remains in foundation", () => {
   const readiness = assessAgentReadiness({
-    safety: { zero_write_default: true, fail_closed: true },
+    safety: { zero_write_default: true },
     reliability: { fail_closed: true },
   });
   assert.ok(readiness.score < 60);
