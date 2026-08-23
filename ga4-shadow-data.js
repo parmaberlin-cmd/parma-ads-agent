@@ -1,6 +1,11 @@
 const axios = require("axios");
 const { getDateRange } = require("./live-shadow-data");
-const { runFunnelReport, summarizeFunnel } = require("./ga4-funnel-intelligence");
+const {
+  runFunnelReport,
+  summarizeFunnel,
+  funnelCompleteness,
+  funnelRates,
+} = require("./ga4-funnel-intelligence");
 
 const DEFAULT_FUNNEL_EVENTS = ["reservation_page_view", "reservation_start", "booking_completed"];
 
@@ -102,6 +107,11 @@ async function collectGa4ShadowData({ env = process.env, days = 30, now = new Da
       runBookingReport({ accessToken, propertyId: env.GA4_PROPERTY_ID, start, end, googleCpcOnly: true }),
       runFunnelReport({ accessToken, propertyId: env.GA4_PROPERTY_ID, start, end, eventNames }),
     ]);
+    const summarized = summarizeFunnel(funnelRows, eventNames);
+    const funnel = {
+      event_names: eventNames,
+      ...summarized,
+    };
     return {
       access_ok: true,
       configuration_complete: true,
@@ -112,8 +122,9 @@ async function collectGa4ShadowData({ env = process.env, days = 30, now = new Da
       google_cpc_booking_completed: googleCpcBookings.event_count,
       last_seen_at: googleCpcBookings.last_seen_at || allBookings.last_seen_at,
       funnel: {
-        event_names: eventNames,
-        ...summarizeFunnel(funnelRows, eventNames),
+        ...funnel,
+        completeness: funnelCompleteness(funnel, DEFAULT_FUNNEL_EVENTS),
+        rates: funnelRates(funnel),
       },
     };
   } catch (error) {
