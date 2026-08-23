@@ -10,6 +10,13 @@ const { buildShadowAgentReport } = require("./agent-shadow");
 const { registerMetaRealPreflightRoute } = require("./meta-runtime-preflight");
 const { registerMetaSafeCreateRoute } = require("./meta-safe-create-route");
 const { buildSanitizedPromotionStatus } = require("./promotion-status");
+const {
+  loadHistory,
+  appendAndPersist,
+  buildSanitizedHistoryRecord,
+  publicHistorySummary,
+  historyPath,
+} = require("./shadow-history-store");
 const metaPreflightStatus = require("./meta-preflight-status");
 
 const state = {
@@ -23,6 +30,7 @@ const state = {
 };
 
 let refreshPromise = null;
+let shadowHistory = loadHistory(historyPath(process.env));
 
 function authorized(req) {
   const supplied = req.headers["x-api-key"] || String(req.headers["authorization"] || "").replace(/^Bearer\s+/i, "");
@@ -36,7 +44,7 @@ function sanitizedSummary() {
     shadowResult: { ...r, refresh_error: state.last_refresh_error },
     metaPreflightState: metaPreflightStatus.state,
     buildValidated: process.env.AGENT_BUILD_VALIDATED === "true",
-    shadowRecords: [],
+    shadowRecords: shadowHistory,
   });
   const ga4Events = Array.isArray(r.live_sources?.ga4?.funnel?.event_names) ? r.live_sources.ga4.funnel.event_names : [];
 
@@ -82,6 +90,7 @@ function sanitizedSummary() {
       optimization_allowed: Boolean(r.conversion_integrity?.optimization_allowed),
       issues: r.conversion_integrity?.issues || [],
     },
+    history: publicHistorySummary(shadowHistory),
     promotion,
     anomalies: (r.anomalies || []).map((a) => ({ code: a.code, severity: a.severity, reason: a.reason, channel: a.channel })),
     primary_priorities: (r.daily_manager?.primary_priorities || []).map((p) => ({ code: p.code, severity: p.severity, source: p.source, reason: p.reason, requires_authorization: Boolean(p.requires_authorization) })),
@@ -118,6 +127,14 @@ function triggerShadowReport() {
         business_value: report.business_value,
         journal: report.journal,
       };
+
+      const record = buildSanitizedHistoryRecord({ snapshot: input, report, generatedAt: state.finished_at });
+      try {
+        shadowHistory = appendAndPersist({ records: shadowHistory, record, filePath: historyPath(process.env) });
+      } catch (error) {
+        console.error(JSON.stringify({ event: "shadow_history_persist", success: false, error: String(error?.message || error).slice(0, 120), writes_allowed: false }));
+      }
+
       console.log(JSON.stringify({
         event: "agent_shadow_live_report",
         success: true,
@@ -130,6 +147,7 @@ function triggerShadowReport() {
         data_confidence: input.data_quality?.confidence || null,
         conversion_integrity: report.conversion_integrity?.status || null,
         priority_count: report.daily_manager?.primary_priorities?.length || 0,
+        history_runs: shadowHistory.length,
         writes_allowed: false,
       }));
       return state.result;
@@ -162,37 +180,36 @@ function wrappedExpress(...args) {
   registerMetaRealPreflightRoute(app, { authorized });
   registerMetaSafeCreateRoute(app, { authorized });
   metaPreflightStatus.register(app);
+
   app.get("/health/agent-shadow-summary", (req, res) => {
     if (state.status === "starting" && !state.result) return res.status(202).json({ success: true, status: "running", mode: "shadow", writes_allowed: false, started_at: state.started_at });
     if (state.status === "failed" && !state.result) return res.status(500).json({ success: false, status: "failed", mode: "shadow", writes_allowed: false, error: String(state.error || "shadow_report_failed").slice(0, 160) });
     return res.json({ success: true, status: "completed", refreshing: Boolean(refreshPromise), refresh_error: state.last_refresh_error ? String(state.last_refresh_error).slice(0, 160) : null, last_refresh_failed_at: state.last_refresh_failed_at, ...sanitizedSummary() });
   });
+
   app.get("/tools/agent/shadow/live", (req, res) => {
     if (!authorized(req)) return res.status(401).json({ success: false, error: "Unauthorized" });
     if (state.status === "starting" && !state.result) return res.status(202).json({ success: true, mode: "shadow", status: "running", writes_allowed: false, started_at: state.started_at });
     if (state.status === "failed" && !state.result) return res.status(500).json({ success: false, mode: "shadow", status: "failed", writes_allowed: false, started_at: state.started_at, finished_at: state.finished_at, error: state.error });
     return res.json({ success: true, mode: "shadow", status: refreshPromise ? "refreshing" : "completed", writes_allowed: false, started_at: state.started_at, finished_at: state.finished_at, refresh_error: state.last_refresh_error, last_refresh_failed_at: state.last_refresh_failed_at, ...state.result });
   });
+
   app.post("/tools/agent/shadow/refresh", (req, res) => {
     if (!authorized(req)) return res.status(401).json({ success: false, error: "Unauthorized" });
     const alreadyRunning = Boolean(refreshPromise);
     if (!alreadyRunning) triggerShadowReport().catch(() => {});
     return res.status(202).json({ success: true, mode: "shadow", status: alreadyRunning ? "already_running" : "started", writes_allowed: false, started_at: state.started_at });
   });
+
   return app;
 }
 Object.assign(wrappedExpress, realExpress);
 require.cache[require.resolve("express")].exports = wrappedExpress;
 
 if (legacyMetaOneShotRequested) {
-  console.warn(JSON.stringify({
-    event: "meta_legacy_one_shot_disabled",
-    reason: "central_safe_route_required",
-    activates_spend: false,
-  }));
+  console.warn(JSON.stringify({ event: "meta_legacy_one_shot_disabled", reason: "central_safe_route_required", activates_spend: false }));
 }
 
 triggerShadowReport().catch(() => {});
 metaPreflightStatus.run().catch(() => {});
-
 require("./server");
