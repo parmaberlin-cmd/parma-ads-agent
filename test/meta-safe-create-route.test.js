@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const { APPROVAL_TOKEN, META_API_VERSION } = require('../meta-paused-draft-next');
 const {
   createWriteTransport,
+  resolveApprovalToken,
   operationKey,
   acquireOperationLock,
   releaseOperationLock,
@@ -35,6 +36,18 @@ test('write transport pins the current Meta API generation', () => {
   assert.equal(config.baseURL, `https://graph.facebook.com/${META_API_VERSION}`);
 });
 
+test('canonical approval_token matches OpenAPI and legacy confirmation remains compatible', () => {
+  assert.deepEqual(resolveApprovalToken({ approval_token: APPROVAL_TOKEN }), { valid: true, reason: null, token: APPROVAL_TOKEN });
+  assert.deepEqual(resolveApprovalToken({ confirmation: APPROVAL_TOKEN }), { valid: true, reason: null, token: APPROVAL_TOKEN });
+});
+
+test('conflicting approval fields fail closed', () => {
+  const result = resolveApprovalToken({ approval_token: APPROVAL_TOKEN, confirmation: 'DIFFERENT' });
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, 'conflicting_approval_tokens');
+  assert.equal(result.token, null);
+});
+
 test('sanitized create result never exposes Meta object ids', () => {
   const safe = sanitizeCreateResult({
     success: true,
@@ -57,12 +70,12 @@ test('safe create route rejects missing exact approval before any network work',
   assert.equal(res.body.activates_spend, false);
 });
 
-test('kill switch blocks even with the exact approval token', async () => {
+test('kill switch blocks even with canonical approval token', async () => {
   let handler;
   const app = { post(route, fn) { handler = fn; } };
   registerMetaSafeCreateRoute(app, { authorized: () => true, env: { PARMA_AGENT_KILL_SWITCH: 'true' } });
   const res = responseStub();
-  await handler({ body: { confirmation: APPROVAL_TOKEN } }, res);
+  await handler({ body: { approval_token: APPROVAL_TOKEN } }, res);
   assert.equal(res.statusCode, 423);
   assert.equal(res.body.blocked, true);
   assert.equal(res.body.reason, 'kill_switch_enabled');
