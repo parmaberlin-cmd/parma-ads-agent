@@ -1,0 +1,4 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {inspectKnownPartial}=require('../meta-partial-inspection');
+function transport(map){return {get:async(path)=>map[path.slice(1)]}};
+test('known partial chain is reusable only when paused and related',async()=>{const r=await inspectKnownPartial({transport:transport({'1':{id:'1',status:'PAUSED'},'2':{id:'2',status:'PAUSED',campaign_id:'1'},'3':{id:'3'},'4':{id:'4',status:'PAUSED',adset_id:'2',creative:{id:'3'}}}),knownPartial:{campaign_id:'1',adset_id:'2',creative_id:'3',ad_id:'4'}});assert.equal(r.consistent,true);assert.equal(r.safe_to_reuse.ad,true)});
+test('mismatched adset relationship fails closed',async()=>{const r=await inspectKnownPartial({transport:transport({'1':{id:'1',status:'PAUSED'},'2':{id:'2',status:'PAUSED',campaign_id:'999'}}),knownPartial:{campaign_id:'1',adset_id:'2'}});assert.equal(r.consistent,false);assert.ok(r.blockers.includes('adset_campaign_mismatch'))});
