@@ -52,7 +52,11 @@ async function inspectNamedDraftChain({transport,adAccountId,draft}){
 async function runMetaRealPreflight({transport,adAccountId,draft,assets,writeGateEnabled,approvalTokenOk}){
   const chain=await inspectNamedDraftChain({transport,adAccountId,draft});
   const staticPreflight=runMetaPausedPreflight({draft,assets,writeGateEnabled,approvalTokenOk,knownPartial:chain.knownPartial});
-  const blockers=[...chain.blockers,...(staticPreflight.level_1_readiness?.blockers||[]),...(staticPreflight.level_2_payload?.blockers||[])];
-  return {success:true,mode:'read_only',ready:chain.safe&&staticPreflight.ready&&blockers.length===0,chain:{safe:chain.safe,campaign_matches:chain.campaign_matches,creative_matches:chain.creative_matches||0,has_campaign:Boolean(chain.knownPartial.campaign_id),has_adset:Boolean(chain.knownPartial.adset_id),has_creative:Boolean(chain.knownPartial.creative_id),has_ad:Boolean(chain.knownPartial.ad_id)},blockers:[...new Set(blockers)],maximum_attempts:1,may_activate:false,may_spend:false,duplicates_allowed:false};
+  const level1Blockers=staticPreflight.level_1_readiness?.blockers||[];
+  const level2Blockers=staticPreflight.level_2_payload?.blockers||[];
+  const blockers=[...chain.blockers,...level1Blockers,...level2Blockers];
+  const level1Green=chain.safe&&level1Blockers.length===0;
+  const level2Green=level2Blockers.length===0&&staticPreflight.level_2_payload?.contract?.valid===true;
+  return {success:true,mode:'read_only',ready:level1Green&&level2Green&&blockers.length===0,levels:{level_1_green:level1Green,level_2_green:level2Green,payload_contract_green:staticPreflight.level_2_payload?.contract?.valid===true},chain:{safe:chain.safe,campaign_matches:chain.campaign_matches,creative_matches:chain.creative_matches||0,has_campaign:Boolean(chain.knownPartial.campaign_id),has_adset:Boolean(chain.knownPartial.adset_id),has_creative:Boolean(chain.knownPartial.creative_id),has_ad:Boolean(chain.knownPartial.ad_id)},blockers:[...new Set(blockers)],maximum_attempts:1,may_activate:false,may_spend:false,duplicates_allowed:false};
 }
 module.exports={exactName,findMatchingCreative,inspectNamedDraftChain,runMetaRealPreflight,isPaused};
