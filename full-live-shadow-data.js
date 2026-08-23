@@ -3,13 +3,28 @@ const { collectGa4ShadowData } = require("./ga4-shadow-data");
 const { analyzeFunnel } = require("./funnel-analysis");
 const { evaluateShadowDataQuality, assertQualityFailClosed } = require("./shadow-data-quality");
 
+function positiveCount(value) {
+  const count = Number(value || 0);
+  return Number.isFinite(count) && count > 0;
+}
+
 function buildFunnelInput(base, ga4) {
   const totals = ga4?.funnel?.totals || {};
   const googleCpc = ga4?.funnel?.google_cpc || {};
   const eventNames = ga4?.funnel?.event_names || ["reservation_page_view", "reservation_start", "booking_completed"];
+  const configured = new Set(eventNames);
+  const reservationPageObserved = positiveCount(totals.reservation_page_view);
+  const reservationStartObserved = positiveCount(totals.reservation_start);
+  const bookingObserved = positiveCount(totals.booking_completed);
   return {
-    landingAvailable: ga4?.access_ok === true,
-    bookingStartedTracked: eventNames.includes("reservation_start"),
+    landingAvailable: ga4?.access_ok === true && reservationPageObserved,
+    reservationPageConfigured: configured.has("reservation_page_view"),
+    reservationPageObserved,
+    bookingStartedConfigured: configured.has("reservation_start"),
+    bookingStartedTracked: ga4?.access_ok === true && configured.has("reservation_start") && reservationStartObserved,
+    bookingStartedObserved: reservationStartObserved,
+    bookingCompletedConfigured: configured.has("booking_completed"),
+    bookingCompletedObserved: bookingObserved,
     adClicks: Number(base?.live_sources?.google?.totals?.clicks || 0),
     landingViews: Number(googleCpc.reservation_page_view || 0),
     reservationStarts: Number(googleCpc.reservation_start || 0),
@@ -33,7 +48,7 @@ async function collectFullLiveShadowInput({ env = process.env, days = 30, now = 
     ...base,
     funnel: ga4.access_ok
       ? buildFunnelInput(base, ga4)
-      : { landingAvailable: false, bookingStartedTracked: false, analysis: null },
+      : { landingAvailable: false, bookingStartedConfigured: false, bookingStartedTracked: false, bookingStartedObserved: false, analysis: null },
     conversions: {
       ...base.conversions,
       booking_completed: ga4.access_ok ? Number(ga4.google_cpc_booking_completed || 0) : null,
@@ -59,4 +74,4 @@ async function collectFullLiveShadowInput({ env = process.env, days = 30, now = 
   };
 }
 
-module.exports = { collectFullLiveShadowInput, buildFunnelInput };
+module.exports = { collectFullLiveShadowInput, buildFunnelInput, positiveCount };
