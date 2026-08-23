@@ -2,6 +2,7 @@ const realExpress = require("express");
 const { collectFullLiveShadowInput } = require("./full-live-shadow-data");
 const { buildShadowAgentReport } = require("./agent-shadow");
 const { registerMetaRealPreflightRoute } = require("./meta-runtime-preflight");
+const { registerMetaSafeCreateRoute } = require("./meta-safe-create-route");
 const metaPreflightStatus = require("./meta-preflight-status");
 
 const state = {
@@ -28,6 +29,12 @@ function sanitizedSummary() {
     generated_at: r.generated_at,
     mode: "shadow",
     writes_allowed: false,
+    data_quality: {
+      confidence: r.data_quality?.confidence || "unknown",
+      channel_ready: r.data_quality?.channel_ready || {},
+      blockers: r.data_quality?.blockers || [],
+      integrity_ok: r.data_quality?.integrity_ok === true,
+    },
     source_health: {
       google: Boolean(r.live_sources?.google?.access_ok),
       ga4: Boolean(r.live_sources?.ga4?.access_ok),
@@ -78,6 +85,7 @@ function triggerShadowReport() {
       state.last_refresh_failed_at = null;
       state.result = {
         generated_at: state.finished_at,
+        data_quality: input.data_quality,
         live_sources: input.live_sources,
         conversions: input.conversions,
         conversion_integrity: report.conversion_integrity,
@@ -97,6 +105,7 @@ function triggerShadowReport() {
           ga4: Boolean(input.access?.ga4_ok),
           meta: Boolean(input.access?.meta_ok),
         },
+        data_confidence: input.data_quality?.confidence || null,
         conversion_integrity: report.conversion_integrity?.status || null,
         priority_count: report.daily_manager?.primary_priorities?.length || 0,
         writes_allowed: false,
@@ -129,6 +138,7 @@ function triggerShadowReport() {
 function wrappedExpress(...args) {
   const app = realExpress(...args);
   registerMetaRealPreflightRoute(app, { authorized });
+  registerMetaSafeCreateRoute(app, { authorized });
   metaPreflightStatus.register(app);
   app.get("/health/agent-shadow-summary", (req, res) => {
     if (state.status === "starting" && !state.result) return res.status(202).json({ success: true, status: "running", mode: "shadow", writes_allowed: false, started_at: state.started_at });
@@ -144,16 +154,8 @@ function wrappedExpress(...args) {
   app.post("/tools/agent/shadow/refresh", (req, res) => {
     if (!authorized(req)) return res.status(401).json({ success: false, error: "Unauthorized" });
     const alreadyRunning = Boolean(refreshPromise);
-    if (!alreadyRunning) {
-      triggerShadowReport().catch(() => {});
-    }
-    return res.status(202).json({
-      success: true,
-      mode: "shadow",
-      status: alreadyRunning ? "already_running" : "started",
-      writes_allowed: false,
-      started_at: state.started_at,
-    });
+    if (!alreadyRunning) triggerShadowReport().catch(() => {});
+    return res.status(202).json({ success: true, mode: "shadow", status: alreadyRunning ? "already_running" : "started", writes_allowed: false, started_at: state.started_at });
   });
   return app;
 }
