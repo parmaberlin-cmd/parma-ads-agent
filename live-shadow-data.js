@@ -9,8 +9,44 @@ function normalizeGoogleCustomerId(value) { return String(value || "").replace(/
 function googleConfigured(env = process.env) { return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_DEVELOPER_TOKEN && env.GOOGLE_REFRESH_TOKEN && env.GOOGLE_CUSTOMER_ID); }
 function metaConfigured(env = process.env) { return Boolean(env.META_ACCESS_TOKEN && env.META_AD_ACCOUNT_ID); }
 function getDateRange(days = 30, now = new Date()) { const end = new Date(now); end.setUTCHours(0,0,0,0); end.setUTCDate(end.getUTCDate()-1); const start = new Date(end); start.setUTCDate(start.getUTCDate()-(days-1)); return { start:start.toISOString().slice(0,10), end:end.toISOString().slice(0,10) }; }
-function googleDiagnosticReason(category,message,code){const text=`${message||''} ${code||''}`;if(category==='developer_token'){if(/basic access|standard access|test account|not approved|access level/i.test(text))return'basic_access_required';if(/invalid|not valid/i.test(text))return'developer_token_invalid';return'developer_token_rejected';}if(category==='oauth')return'oauth_refresh_required';if(category==='account_access')return'account_access_required';if(category==='query')return'query_rejected';if(category==='network')return'transient_network';return'unknown';}
-function cleanGoogleDiagnostic(error) { const first=Array.isArray(error?.errors)?error.errors[0]:null; const rawCode=first?.error_code||null; const code=rawCode&&typeof rawCode==="object"?Object.keys(rawCode)[0]||null:rawCode; const message=String(first?.message||error?.message||"google_read_failed").slice(0,180); let category="unknown"; if(/invalid_grant|refresh token|oauth/i.test(message)) category="oauth"; else if(/developer token|DEVELOPER_TOKEN/i.test(message)||/developer_token/i.test(String(code))) category="developer_token"; else if(/login customer|manager|customer.*not enabled|CUSTOMER_NOT_FOUND|USER_PERMISSION_DENIED/i.test(message)||/customer|authorization|permission/i.test(String(code))) category="account_access"; else if(/query|SELECT|GAQL|field/i.test(message)) category="query"; else if(/deadline|timeout|network|ENOTFOUND|ECONN/i.test(message)) category="network"; return {error:"google_read_failed",category,reason:googleDiagnosticReason(category,message,code),code:code||null,message}; }
+
+function flattenGoogleErrorCode(rawCode) {
+  if (rawCode == null) return { family: null, detail: null };
+  if (typeof rawCode !== "object") return { family: null, detail: String(rawCode) };
+  const [family, rawDetail] = Object.entries(rawCode)[0] || [];
+  const detail = rawDetail == null ? null : typeof rawDetail === "object" ? Object.values(rawDetail)[0] : rawDetail;
+  return { family: family || null, detail: detail == null ? null : String(detail) };
+}
+
+function googleDiagnosticReason(category,message,code){
+  const text=`${message||''} ${code||''}`;
+  if(category==='developer_token'){
+    if(/basic access|standard access|test account|not approved|access level|DEVELOPER_TOKEN_NOT_APPROVED/i.test(text))return'basic_access_required';
+    if(/invalid|not valid|DEVELOPER_TOKEN_INVALID/i.test(text))return'developer_token_invalid';
+    return'developer_token_rejected';
+  }
+  if(category==='oauth')return'oauth_refresh_required';
+  if(category==='account_access')return'account_access_required';
+  if(category==='query')return'query_rejected';
+  if(category==='network')return'transient_network';
+  return'unknown';
+}
+
+function cleanGoogleDiagnostic(error) {
+  const first=Array.isArray(error?.errors)?error.errors[0]:null;
+  const flattened=flattenGoogleErrorCode(first?.error_code||error?.error_code||null);
+  const codeText=`${flattened.family||''} ${flattened.detail||''}`;
+  const message=String(first?.message||error?.message||"google_read_failed").slice(0,180);
+  let category="unknown";
+  if(/invalid_grant|refresh token|oauth/i.test(`${message} ${codeText}`)) category="oauth";
+  else if(/developer token|DEVELOPER_TOKEN/i.test(`${message} ${codeText}`)) category="developer_token";
+  else if(/login customer|manager|customer.*not enabled|CUSTOMER_NOT_FOUND|USER_PERMISSION_DENIED|CUSTOMER_NOT_ENABLED|AUTHORIZATION/i.test(`${message} ${codeText}`)) category="account_access";
+  else if(/query|SELECT|GAQL|field|QUERY_ERROR/i.test(`${message} ${codeText}`)) category="query";
+  else if(/deadline|timeout|network|ENOTFOUND|ECONN|UNAVAILABLE/i.test(`${message} ${codeText}`)) category="network";
+  const code=flattened.detail||flattened.family||null;
+  return {error:"google_read_failed",category,reason:googleDiagnosticReason(category,message,code),code,family:flattened.family,message};
+}
+
 function sanitizeMetaIssues(issues) { if (!Array.isArray(issues)) return []; return issues.slice(0,20).map((issue)=>({ level:String(issue?.level||"unknown").slice(0,40), code:issue?.error_code == null ? null : String(issue.error_code).slice(0,40), summary:String(issue?.error_summary||issue?.title||"meta_delivery_issue").replace(/[\r\n\t]+/g," ").slice(0,180), message:String(issue?.error_message||issue?.message||"").replace(/[\r\n\t]+/g," ").slice(0,300) })); }
 function buildGoogleCustomer(env) { const client=new GoogleAdsApi({client_id:env.GOOGLE_CLIENT_ID,client_secret:env.GOOGLE_CLIENT_SECRET,developer_token:env.GOOGLE_DEVELOPER_TOKEN}); return client.Customer({customer_id:normalizeGoogleCustomerId(env.GOOGLE_CUSTOMER_ID),refresh_token:env.GOOGLE_REFRESH_TOKEN,...(env.GOOGLE_LOGIN_CUSTOMER_ID?{login_customer_id:normalizeGoogleCustomerId(env.GOOGLE_LOGIN_CUSTOMER_ID)}:{})}); }
 
@@ -32,13 +68,33 @@ async function collectGoogleShadowData({env=process.env,days=30,now=new Date()}=
   }
 }
 
+async function collectMetaPages({client,endpoint,params={},accessToken,maxPages=20}) {
+  const items=[];
+  let after=null;
+  let pages=0;
+  while(pages<maxPages){
+    const response=await client.get(endpoint,{params:{...params,limit:100,...(after?{after}:{}),access_token:accessToken}});
+    const body=response.data||{};
+    items.push(...(body.data||[]));
+    pages+=1;
+    const nextAfter=body.paging?.cursors?.after||null;
+    if(!body.paging?.next||!nextAfter)return{items,pages,truncated:false};
+    after=nextAfter;
+  }
+  return{items,pages,truncated:true};
+}
+
 async function collectMetaShadowData({env=process.env,datePreset="last_30d",now=new Date()}={}) {
   const collectedAt = now.toISOString();
   if(!metaConfigured(env)) return {access_ok:false,configuration_complete:false,collected_at:collectedAt,error:"meta_configuration_incomplete",overview:null};
   const accountId=String(env.META_AD_ACCOUNT_ID).startsWith("act_")?String(env.META_AD_ACCOUNT_ID):`act_${env.META_AD_ACCOUNT_ID}`;
   const candidate=String(env.META_API_VERSION||META_API_VERSION);const apiVersion=/^v\d+\.0$/.test(candidate)?candidate:META_API_VERSION;
   const client=axios.create({baseURL:`https://graph.facebook.com/${apiVersion}`,timeout:20000});
-  const getCollection=async(endpoint,params)=>{const response=await client.get(endpoint,{params:{...params,access_token:env.META_ACCESS_TOKEN,limit:100}});return response.data.data||[];};
+  const getCollection=async(endpoint,params)=>{
+    const collected=await collectMetaPages({client,endpoint,params,accessToken:env.META_ACCESS_TOKEN});
+    if(collected.truncated)throw new Error('meta_collection_truncated');
+    return collected.items;
+  };
   try {
     const [campaigns,insights,adsets,ads]=await Promise.all([
       getCollection(`/${accountId}/campaigns`,{fields:"id,name,status,effective_status,objective,created_time,updated_time,issues_info"}),
@@ -51,7 +107,7 @@ async function collectMetaShadowData({env=process.env,datePreset="last_30d",now=
     overview.issue_report=buildMetaIssueReport(overview.issue_diagnostics);
     return {access_ok:true,configuration_complete:true,collected_at:collectedAt,api_version:apiVersion,date_preset:datePreset,overview};
   } catch(error) {
-    return {access_ok:false,configuration_complete:true,collected_at:collectedAt,api_version:apiVersion,error:error?.response?.data?.error?.message||error?.message||"meta_read_failed",overview:null};
+    return {access_ok:false,configuration_complete:true,collected_at:collectedAt,api_version:apiVersion,error:/^[a-z0-9_.:-]{1,64}$/i.test(String(error?.message||''))?String(error.message):"meta_read_failed",overview:null};
   }
 }
 
@@ -71,4 +127,4 @@ async function collectLiveShadowInput({env=process.env,days=30,now=new Date()}={
   };
 }
 
-module.exports={collectGoogleShadowData,collectMetaShadowData,collectLiveShadowInput,getDateRange,googleConfigured,metaConfigured,googleDiagnosticReason,cleanGoogleDiagnostic,sanitizeMetaIssues};
+module.exports={collectGoogleShadowData,collectMetaPages,collectMetaShadowData,collectLiveShadowInput,getDateRange,googleConfigured,metaConfigured,flattenGoogleErrorCode,googleDiagnosticReason,cleanGoogleDiagnostic,sanitizeMetaIssues};
