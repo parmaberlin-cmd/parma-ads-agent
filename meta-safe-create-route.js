@@ -15,12 +15,13 @@ const {
 } = require('./meta-runtime-preflight');
 const { inspectNamedDraftChain } = require('./meta-real-preflight');
 const { executePausedMetaDraftSafely } = require('./meta-safe-orchestrator');
-const { AUTONOMY_LEVELS } = require('./safe-execution');
+const { AUTONOMY_LEVELS, stableKey } = require('./safe-execution');
 
 const DEFAULT_REEL = 'https://www.instagram.com/reel/C9M7_b6MayR/';
 const DEFAULT_USERNAME = 'parma.divinibenedetti';
 const DEFAULT_LATITUDE = 52.499492;
 const DEFAULT_LONGITUDE = 13.4399793;
+const inFlightOperations = new Set();
 
 function createWriteTransport({ accessToken, apiVersion = META_API_VERSION, client = axios }) {
   const normalized = normalizeApiVersion(apiVersion);
@@ -44,6 +45,26 @@ function createWriteTransport({ accessToken, apiVersion = META_API_VERSION, clie
       return response.data;
     },
   };
+}
+
+function operationKey({ env = process.env, startsAt } = {}) {
+  const config = runtimeConfig(env);
+  const normalizedStart = parseFutureStart(startsAt) || String(startsAt || '').trim();
+  return stableKey({
+    ad_account: config.adAccountId || 'unknown',
+    starts_at: normalizedStart,
+    operation: 'paused_reservation_draft',
+  });
+}
+
+function acquireOperationLock(key) {
+  if (!key || inFlightOperations.has(key)) return false;
+  inFlightOperations.add(key);
+  return true;
+}
+
+function releaseOperationLock(key) {
+  inFlightOperations.delete(key);
 }
 
 async function prepareSafeCreateContext({ env = process.env, startsAt, httpClient = axios } = {}) {
@@ -122,6 +143,19 @@ function registerMetaSafeCreateRoute(app, { authorized, env = process.env, httpC
     if (typeof authorized === 'function' && !authorized(req)) return res.status(401).json({ success: false, error: 'Unauthorized' });
     if (req.body?.confirmation !== APPROVAL_TOKEN) return res.status(400).json({ success: false, error: 'Exact paused-draft approval token is required', activates_spend: false });
     if (env.PARMA_AGENT_KILL_SWITCH === 'true') return res.status(423).json({ success: false, blocked: true, reason: 'kill_switch_enabled', activates_spend: false });
+
+    const lockKey = operationKey({ env, startsAt: req.body?.starts_at });
+    if (!acquireOperationLock(lockKey)) {
+      return res.status(409).json({
+        success: false,
+        blocked: true,
+        reason: 'duplicate_operation_in_flight',
+        activates_spend: false,
+        may_activate: false,
+        may_spend: false,
+      });
+    }
+
     try {
       const prepared = await prepareSafeCreateContext({ env, startsAt: req.body?.starts_at, httpClient });
       if (!prepared.ready) return res.status(409).json({ success: false, blocked: true, blockers: prepared.blockers, activates_spend: false, may_activate: false, may_spend: false });
@@ -153,8 +187,18 @@ function registerMetaSafeCreateRoute(app, { authorized, env = process.env, httpC
         may_activate: false,
         may_spend: false,
       });
+    } finally {
+      releaseOperationLock(lockKey);
     }
   });
 }
 
-module.exports = { createWriteTransport, prepareSafeCreateContext, sanitizeCreateResult, registerMetaSafeCreateRoute };
+module.exports = {
+  createWriteTransport,
+  operationKey,
+  acquireOperationLock,
+  releaseOperationLock,
+  prepareSafeCreateContext,
+  sanitizeCreateResult,
+  registerMetaSafeCreateRoute,
+};
