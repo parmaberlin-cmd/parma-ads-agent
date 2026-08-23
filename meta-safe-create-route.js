@@ -47,6 +47,14 @@ function createWriteTransport({ accessToken, apiVersion = META_API_VERSION, clie
   };
 }
 
+function resolveApprovalToken(body = {}) {
+  const canonical = body.approval_token;
+  const legacy = body.confirmation;
+  if (canonical != null && legacy != null && canonical !== legacy) return { valid: false, reason: 'conflicting_approval_tokens', token: null };
+  const token = canonical ?? legacy ?? null;
+  return { valid: token === APPROVAL_TOKEN, reason: token === APPROVAL_TOKEN ? null : 'approval_token_invalid', token };
+}
+
 function operationKey({ env = process.env, startsAt } = {}) {
   const config = runtimeConfig(env);
   const normalizedStart = parseFutureStart(startsAt) || String(startsAt || '').trim();
@@ -141,7 +149,8 @@ function registerMetaSafeCreateRoute(app, { authorized, env = process.env, httpC
   app.post('/tools/meta/reservation-draft/create', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     if (typeof authorized === 'function' && !authorized(req)) return res.status(401).json({ success: false, error: 'Unauthorized' });
-    if (req.body?.confirmation !== APPROVAL_TOKEN) return res.status(400).json({ success: false, error: 'Exact paused-draft approval token is required', activates_spend: false });
+    const approval = resolveApprovalToken(req.body || {});
+    if (!approval.valid) return res.status(400).json({ success: false, blocked: true, reason: approval.reason, error: 'Exact paused-draft approval token is required', activates_spend: false, may_activate: false, may_spend: false });
     if (env.PARMA_AGENT_KILL_SWITCH === 'true') return res.status(423).json({ success: false, blocked: true, reason: 'kill_switch_enabled', activates_spend: false });
 
     const lockKey = operationKey({ env, startsAt: req.body?.starts_at });
@@ -163,7 +172,7 @@ function registerMetaSafeCreateRoute(app, { authorized, env = process.env, httpC
         transport: prepared.writeTransport,
         adAccountId: prepared.config.adAccountId,
         draft: prepared.draft,
-        approvalToken: req.body.confirmation,
+        approvalToken: approval.token,
         existing: prepared.knownPartial,
         assets: prepared.assets,
         writeGateEnabled: prepared.config.writeGateEnabled,
@@ -195,6 +204,7 @@ function registerMetaSafeCreateRoute(app, { authorized, env = process.env, httpC
 
 module.exports = {
   createWriteTransport,
+  resolveApprovalToken,
   operationKey,
   acquireOperationLock,
   releaseOperationLock,

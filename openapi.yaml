@@ -12,6 +12,30 @@ paths:
       responses:
         "200":
           description: OK
+  /health/agent-shadow-summary:
+    get:
+      operationId: getSanitizedShadowHealth
+      summary: Get sanitized read-only Shadow health
+      description: Returns source health, data confidence, tracking availability and promotion blockers without credentials or advertising object IDs. Writes are always disabled.
+      responses:
+        "200":
+          description: Latest completed sanitized Shadow snapshot
+        "202":
+          description: First Shadow snapshot is still running
+        "500":
+          description: No completed Shadow snapshot is available because collection failed safely
+  /health/meta-real-preflight-summary:
+    get:
+      operationId: getSanitizedMetaPreflightHealth
+      summary: Get sanitized Meta read-only preflight health
+      description: Separates read-only readiness from write readiness. This endpoint never authorizes a write, delivery, or spend.
+      responses:
+        "200":
+          description: Sanitized Meta preflight completed
+        "202":
+          description: Meta preflight is pending or running
+        "500":
+          description: Meta preflight failed safely
   /tools/status:
     get:
       operationId: getStatus
@@ -220,7 +244,7 @@ paths:
     post:
       operationId: createPausedMetaReservationDraft
       summary: Create the approved Parma reservations campaign as PAUSED Meta objects only
-      description: This operation never activates delivery or spend. It is blocked unless the server write gate is temporarily enabled and the exact human-approval phrase is supplied.
+      description: This operation never activates delivery or spend. It is blocked unless the server write gate is temporarily enabled, the kill switch is clear, the live preflight is safe and the exact human-approval phrase is supplied. The canonical request field is approval_token; the runtime accepts the former confirmation field only for backward compatibility and fails closed if both disagree.
       security:
         - ApiKeyAuth: []
       requestBody:
@@ -243,15 +267,17 @@ paths:
                   description: Exact scoped phrase confirming creation of paused draft objects only
       responses:
         "201":
-          description: Campaign, ad set, creative and ad created and verified PAUSED
+          description: Missing draft stages created and the complete chain verified PAUSED; no delivery or spend is activated
         "400":
-          description: Invalid request
-        "403":
-          description: Server write gate disabled or approval phrase missing
+          description: Invalid request or missing/conflicting approval token
+        "401":
+          description: Unauthorized
         "409":
-          description: A draft already exists for the selected start date
+          description: Write gate disabled, duplicate operation in flight, unsafe existing chain, or another fail-closed preflight blocker
+        "423":
+          description: Kill switch enabled
         "502":
-          description: Partial paused draft; returned object IDs require inspection
+          description: Meta execution failed safely; response contains only sanitized stage and error diagnostics
 components:
   schemas: {}
   securitySchemes:
