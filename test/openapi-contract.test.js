@@ -49,9 +49,13 @@ test("Meta campaign metrics remain on a distinct namespace", () => {
 
 test("protected shadow refresh is declared in OpenAPI and wired through bootstrap", () => {
   assert.ok(openapi.includes("/tools/agent/shadow/refresh:"));
-  assert.ok(openapi.includes("operationId: refreshAgentShadow"));
-  assert.ok(bootstrap.includes('"/tools/agent/shadow/refresh"'));
-  assert.ok(bootstrap.includes("runFullLiveShadowReport"));
+  assert.ok(openapi.includes("operationId: refreshLiveShadowAgentReport"));
+  assert.ok(openapi.includes("- ApiKeyAuth: []"));
+  assert.ok(bootstrap.includes('app.post("/tools/agent/shadow/refresh"'));
+  assert.ok(bootstrap.includes("if (!authorized(req))"));
+  assert.ok(bootstrap.includes("triggerShadowReport().catch(() => {})"));
+  assert.ok(bootstrap.includes("collectFullLiveShadowInput"));
+  assert.ok(bootstrap.includes('writes_allowed: false'));
 });
 
 test("OpenAPI is served by the application", () => {
