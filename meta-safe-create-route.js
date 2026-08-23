@@ -131,6 +131,8 @@ function registerMetaSafeCreateRoute(app, { authorized, env = process.env, httpC
         draft: prepared.draft,
         approvalToken: req.body.confirmation,
         existing: prepared.knownPartial,
+        assets: prepared.assets,
+        writeGateEnabled: prepared.config.writeGateEnabled,
         killSwitch: false,
         autonomyLevel: AUTONOMY_LEVELS.SAFE_WRITE,
       });
