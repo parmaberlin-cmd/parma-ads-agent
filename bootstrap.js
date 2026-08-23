@@ -8,6 +8,8 @@ const state = {
   finished_at: null,
   result: null,
   error: null,
+  last_refresh_error: null,
+  last_refresh_failed_at: null,
 };
 
 let refreshPromise = null;
@@ -18,7 +20,7 @@ function authorized(req) {
 }
 
 function sanitizedSummary() {
-  if (state.status !== "completed" || !state.result) return null;
+  if (!state.result) return null;
   const r = state.result;
   return {
     generated_at: r.generated_at,
@@ -58,6 +60,7 @@ function sanitizedSummary() {
 function triggerShadowReport() {
   if (refreshPromise) return refreshPromise;
 
+  const hadPreviousResult = Boolean(state.result);
   state.status = "starting";
   state.started_at = new Date().toISOString();
   state.finished_at = null;
@@ -68,6 +71,9 @@ function triggerShadowReport() {
       const report = buildShadowAgentReport(input);
       state.status = "completed";
       state.finished_at = new Date().toISOString();
+      state.error = null;
+      state.last_refresh_error = null;
+      state.last_refresh_failed_at = null;
       state.result = {
         generated_at: state.finished_at,
         live_sources: input.live_sources,
@@ -96,10 +102,19 @@ function triggerShadowReport() {
       return state.result;
     })
     .catch((error) => {
-      state.status = "failed";
-      state.finished_at = new Date().toISOString();
-      state.error = String(error?.message || error);
-      console.error(JSON.stringify({ event: "agent_shadow_live_report", success: false, error: state.error, writes_allowed: false }));
+      const failedAt = new Date().toISOString();
+      const errorMessage = String(error?.message || error);
+      state.finished_at = failedAt;
+      state.last_refresh_error = errorMessage;
+      state.last_refresh_failed_at = failedAt;
+      if (hadPreviousResult && state.result) {
+        state.status = "completed";
+        state.error = null;
+      } else {
+        state.status = "failed";
+        state.error = errorMessage;
+      }
+      console.error(JSON.stringify({ event: "agent_shadow_live_report", success: false, error: errorMessage, stale_result_preserved: Boolean(hadPreviousResult && state.result), writes_allowed: false }));
       throw error;
     })
     .finally(() => {
@@ -112,15 +127,15 @@ function triggerShadowReport() {
 function wrappedExpress(...args) {
   const app = realExpress(...args);
   app.get("/health/agent-shadow-summary", (req, res) => {
-    if (state.status === "starting") return res.status(202).json({ success: true, status: "running", mode: "shadow", writes_allowed: false, started_at: state.started_at });
-    if (state.status === "failed") return res.status(500).json({ success: false, status: "failed", mode: "shadow", writes_allowed: false, error: String(state.error || "shadow_report_failed").slice(0, 160) });
-    return res.json({ success: true, status: "completed", ...sanitizedSummary() });
+    if (state.status === "starting" && !state.result) return res.status(202).json({ success: true, status: "running", mode: "shadow", writes_allowed: false, started_at: state.started_at });
+    if (state.status === "failed" && !state.result) return res.status(500).json({ success: false, status: "failed", mode: "shadow", writes_allowed: false, error: String(state.error || "shadow_report_failed").slice(0, 160) });
+    return res.json({ success: true, status: refreshPromise ? "refreshing" : "completed", refresh_error: state.last_refresh_error ? String(state.last_refresh_error).slice(0, 160) : null, last_refresh_failed_at: state.last_refresh_failed_at, ...sanitizedSummary() });
   });
   app.get("/tools/agent/shadow/live", (req, res) => {
     if (!authorized(req)) return res.status(401).json({ success: false, error: "Unauthorized" });
-    if (state.status === "starting") return res.status(202).json({ success: true, mode: "shadow", status: "running", writes_allowed: false, started_at: state.started_at });
-    if (state.status === "failed") return res.status(500).json({ success: false, mode: "shadow", status: "failed", writes_allowed: false, started_at: state.started_at, finished_at: state.finished_at, error: state.error });
-    return res.json({ success: true, mode: "shadow", status: "completed", writes_allowed: false, started_at: state.started_at, finished_at: state.finished_at, ...state.result });
+    if (state.status === "starting" && !state.result) return res.status(202).json({ success: true, mode: "shadow", status: "running", writes_allowed: false, started_at: state.started_at });
+    if (state.status === "failed" && !state.result) return res.status(500).json({ success: false, mode: "shadow", status: "failed", writes_allowed: false, started_at: state.started_at, finished_at: state.finished_at, error: state.error });
+    return res.json({ success: true, mode: "shadow", status: refreshPromise ? "refreshing" : "completed", writes_allowed: false, started_at: state.started_at, finished_at: state.finished_at, refresh_error: state.last_refresh_error, last_refresh_failed_at: state.last_refresh_failed_at, ...state.result });
   });
   app.post("/tools/agent/shadow/refresh", (req, res) => {
     if (!authorized(req)) return res.status(401).json({ success: false, error: "Unauthorized" });
