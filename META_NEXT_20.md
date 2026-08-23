@@ -1,24 +1,35 @@
-# Meta next 20 — PAUSED-only path
+# Meta second 20 — real preflight hardening
 
-1. Account-specific read-only preflight core — done.
-2. Detect duplicate named campaigns — done.
-3. Reject non-PAUSED campaign recovery — done.
-4. Inspect existing ad sets read-only — done.
-5. Reject multiple ad sets in one-shot chain — done.
-6. Inspect existing ads read-only — done.
-7. Reject multiple ads in one-shot chain — done.
-8. Recover campaign ID without creating duplicate — done.
-9. Recover ad set ID without creating duplicate — done.
-10. Recover creative ID from existing ad — done.
-11. Recover ad ID for verification-only path — done.
-12. Combine account inspection with two-level static preflight — done.
-13. Return explicit blockers without IDs/tokens — done.
-14. Guarantee maximum_attempts=1 — done.
-15. Guarantee may_activate=false — done.
-16. Guarantee may_spend=false — done.
-17. Add reusable HTTP read-only preflight handler — done.
-18. Add regression tests for empty/duplicate/active/partial account states — done.
-19. Add new modules to syntax/CI validation — in progress on latest head.
-20. Runtime account-specific read-only execution — intentionally pending CI green and deployment/runtime availability; no write is authorized by this step.
+1. Register the real preflight endpoint in the runtime bootstrap — done.
+2. Require the existing Parma API-key authorization — done.
+3. Add `Cache-Control: no-store` and `Pragma: no-cache` — done.
+4. Normalize and validate the Meta ad-account identifier — done.
+5. Fail closed before HTTP when required runtime configuration is incomplete — done.
+6. Require the proposed start time to be at least 15 minutes in the future — done.
+7. Use a GET-only Meta transport for the entire endpoint — done.
+8. Verify the ad account is readable without returning its ID — done.
+9. Verify the account timezone matches `Europe/Berlin` (configurable) — done.
+10. Verify the account currency matches `EUR` (configurable) — done.
+11. Reuse the existing Page / Instagram / Reel discovery path — done.
+12. Paginate campaign inspection so hidden duplicates are not missed — done.
+13. Detect duplicate campaign names even when the duplicate is on a later page — done.
+14. Paginate creative inspection and reuse one exact matching creative — done.
+15. Block duplicate creatives instead of creating another one — done.
+16. Validate campaign→adset, adset→ad and ad→creative relationships and fail closed on mismatch — done.
+17. Return explicit `level_1_green`, `level_2_green`, and `payload_contract_green` booleans — done.
+18. Add deterministic blocker grouping and safe next-action guidance; it never grants writes — done.
+19. Expand regression/adversarial tests for runtime config, auth, cache headers, pagination, duplicates, account timezone/currency and relationships — done.
+20. Add all new runtime/preflight modules to syntax CI and document the endpoint safety contract — done.
 
-Exit criteria before live PAUSED creation: latest CI green; real account preflight ready=true; zero blockers; known partial chain reconciled; conservative payload contract green; exactly one explicit PAUSED-only attempt authorized separately.
+## Exit criteria before the real PAUSED one-shot
+
+- latest GitHub CI green on the exact head commit;
+- runtime real-preflight endpoint deployed and called read-only;
+- `ready=true`;
+- `levels.level_1_green=true`;
+- `levels.level_2_green=true`;
+- `levels.payload_contract_green=true`;
+- `blockers=[]`;
+- any partial chain is recognized and reusable rather than duplicated;
+- `maximum_attempts=1`, `may_activate=false`, `may_spend=false`;
+- the actual write remains a separate explicitly authorized PAUSED-only action.
