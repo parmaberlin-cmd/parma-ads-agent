@@ -1,0 +1,8 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+
+test('diagnostic workflow uses no repository variables or dispatch inputs',()=>{
+ const workflow=fs.readFileSync('.github/workflows/meta-issue-report.yml','utf8');
+ assert.doesNotMatch(workflow,/vars\.|inputs\.|github\.event/);
+});
