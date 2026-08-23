@@ -21,9 +21,15 @@
 19. Expand regression/adversarial tests for runtime config, auth, cache headers, pagination, duplicates, account timezone/currency and relationships — done.
 20. Add all new runtime/preflight modules to syntax CI and document the endpoint safety contract — done.
 
+## Two-level validation before runtime execution
+
+**Level 1 — executable validation:** exact-head GitHub CI must pass syntax checks and the complete test suite.
+
+**Level 2 — architecture/safety validation:** verify the runtime route is API-key protected, uses a GET-only Meta transport, returns no Meta object IDs/tokens, does not import or invoke the Meta write transport, leaves the actual create route separately gated, and is evaluated against the current `main` merge result.
+
 ## Exit criteria before the real PAUSED one-shot
 
-- latest GitHub CI green on the exact head commit;
+- latest GitHub CI green on the exact head/merge result;
 - runtime real-preflight endpoint deployed and called read-only;
 - `ready=true`;
 - `levels.level_1_green=true`;
