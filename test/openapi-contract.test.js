@@ -6,6 +6,7 @@ const path = require("node:path");
 const root = path.join(__dirname, "..");
 const openapi = fs.readFileSync(path.join(root, "openapi.yaml"), "utf8");
 const server = fs.readFileSync(path.join(root, "server.js"), "utf8");
+const bootstrap = fs.readFileSync(path.join(root, "bootstrap.js"), "utf8");
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 
 test("OpenAPI version matches package version", () => {
@@ -44,6 +45,17 @@ test("Meta campaign metrics remain on a distinct namespace", () => {
   assert.ok(openapi.includes("/tools/meta/campaign/{id}/metrics:"));
   assert.ok(openapi.includes("operationId: getMetaCampaignMetrics"));
   assert.ok(server.includes('"/tools/meta/campaign/:id/metrics"'));
+});
+
+test("protected shadow refresh is declared in OpenAPI and wired through bootstrap", () => {
+  assert.ok(openapi.includes("/tools/agent/shadow/refresh:"));
+  assert.ok(openapi.includes("operationId: refreshLiveShadowAgentReport"));
+  assert.ok(openapi.includes("- ApiKeyAuth: []"));
+  assert.ok(bootstrap.includes('app.post("/tools/agent/shadow/refresh"'));
+  assert.ok(bootstrap.includes("if (!authorized(req))"));
+  assert.ok(bootstrap.includes("triggerShadowReport().catch(() => {})"));
+  assert.ok(bootstrap.includes("collectFullLiveShadowInput"));
+  assert.ok(bootstrap.includes('writes_allowed: false'));
 });
 
 test("OpenAPI is served by the application", () => {
