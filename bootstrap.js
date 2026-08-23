@@ -1,6 +1,9 @@
 const { META_API_VERSION } = require("./meta-paused-draft-next");
 if (!process.env.META_API_VERSION) process.env.META_API_VERSION = META_API_VERSION;
 
+const legacyMetaOneShotRequested = Boolean(process.env.META_PAUSED_DRAFT_ONE_SHOT);
+process.env.META_PAUSED_DRAFT_ONE_SHOT = "";
+
 const realExpress = require("express");
 const { collectFullLiveShadowInput } = require("./full-live-shadow-data");
 const { buildShadowAgentReport } = require("./agent-shadow");
@@ -164,6 +167,14 @@ function wrappedExpress(...args) {
 }
 Object.assign(wrappedExpress, realExpress);
 require.cache[require.resolve("express")].exports = wrappedExpress;
+
+if (legacyMetaOneShotRequested) {
+  console.warn(JSON.stringify({
+    event: "meta_legacy_one_shot_disabled",
+    reason: "central_safe_route_required",
+    activates_spend: false,
+  }));
+}
 
 triggerShadowReport().catch(() => {});
 metaPreflightStatus.run().catch(() => {});
