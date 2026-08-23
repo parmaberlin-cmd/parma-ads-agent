@@ -40,13 +40,16 @@ jobs:
           if [ "$ready" = "true" ]; then
             state="success"
             description="ready=true; blockers=none"
+            context="meta-runtime-preflight:ready"
           else
             state="failure"
             if [ -z "$blockers" ]; then blockers="unknown"; fi
+            safe_blockers=$(printf '%s' "$blockers" | tr -cs 'A-Za-z0-9_,-' '_' | cut -c1-70)
             description="ready=false; blockers=${blockers:0:100}"
+            context="meta-runtime-preflight:${safe_blockers}"
           fi
 
-          payload=$(jq -n --arg state "$state" --arg description "$description" '{state:$state,context:"meta-runtime-preflight",description:$description}')
+          payload=$(jq -n --arg state "$state" --arg description "$description" --arg context "$context" '{state:$state,context:$context,description:$description}')
           curl -sS -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
