@@ -18,6 +18,7 @@ const {
   buildSanitizedHistoryRecord,
   publicHistorySummary,
   historyPath,
+  historyStorageStatus,
 } = require("./shadow-history-store");
 const metaPreflightStatus = require("./meta-preflight-status");
 
@@ -32,6 +33,7 @@ const state = {
 };
 
 let refreshPromise = null;
+const historyStorage = historyStorageStatus(process.env);
 let shadowHistory = loadHistory(historyPath(process.env));
 
 function authorized(req) {
@@ -47,6 +49,7 @@ function buildRuntimeViews() {
     metaPreflightState: metaPreflightStatus.state,
     buildValidated: process.env.AGENT_BUILD_VALIDATED === "true",
     shadowRecords: shadowHistory,
+    historyDurable: historyStorage.durable,
   });
   const ga4Events = Array.isArray(r.live_sources?.ga4?.funnel?.event_names) ? r.live_sources.ga4.funnel.event_names : [];
   const summary = {
@@ -91,7 +94,7 @@ function buildRuntimeViews() {
       optimization_allowed: Boolean(r.conversion_integrity?.optimization_allowed),
       issues: r.conversion_integrity?.issues || [],
     },
-    history: publicHistorySummary(shadowHistory),
+    history: publicHistorySummary(shadowHistory, historyStorage),
     promotion,
     anomalies: (r.anomalies || []).map((a) => ({ code: a.code, severity: a.severity, reason: a.reason, channel: a.channel })),
     primary_priorities: (r.daily_manager?.primary_priorities || []).map((p) => ({ code: p.code, severity: p.severity, source: p.source, reason: p.reason, requires_authorization: Boolean(p.requires_authorization) })),
@@ -162,6 +165,7 @@ function triggerShadowReport() {
         conversion_integrity: report.conversion_integrity?.status || null,
         priority_count: report.daily_manager?.primary_priorities?.length || 0,
         history_runs: shadowHistory.length,
+        history_durable: historyStorage.durable,
         cycle_blocked_stages: cycle?.blocked_stages || [],
         writes_allowed: false,
       }));

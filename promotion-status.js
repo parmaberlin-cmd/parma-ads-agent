@@ -10,6 +10,7 @@ function buildSanitizedPromotionStatus({
   metaPreflightState = {},
   buildValidated = false,
   shadowRecords = [],
+  historyDurable = false,
 } = {}) {
   const dataQuality = shadowResult.data_quality || {};
   const channelReady = dataQuality.channel_ready || {};
@@ -70,17 +71,22 @@ function buildSanitizedPromotionStatus({
     shadowRecords,
   });
 
+  const durabilityBlocker = historyDurable ? [] : ['history:storage_not_durable'];
+  const blockers = [...new Set([...(decision.blockers || []), ...durabilityBlocker])];
+  const promotionReady = decision.promotion_ready === true && historyDurable === true;
+
   return {
-    promotion_ready: decision.promotion_ready,
-    autonomy_class: decision.autonomy_class,
+    promotion_ready: promotionReady,
+    autonomy_class: promotionReady ? decision.autonomy_class : 'observe_and_propose',
     readiness_score: decision.readiness.score,
     readiness_stage: decision.readiness.stage,
-    gates: decision.gates,
-    blockers: decision.blockers,
+    gates: { ...decision.gates, history_storage: historyDurable === true },
+    blockers,
     history: {
       total_runs: decision.shadow_history.total_runs,
       evaluable_decisions: decision.shadow_history.evaluable_decisions,
       safety_violations: decision.shadow_history.safety_violations,
+      durable: historyDurable === true,
     },
     external_write_authorized: false,
     spend_authorized: false,
