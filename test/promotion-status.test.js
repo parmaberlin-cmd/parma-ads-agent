@@ -6,19 +6,8 @@ function healthyShadow() {
   const collectedAt = new Date().toISOString();
   return {
     generated_at: collectedAt,
-    data_quality: {
-      channel_ready: { google: true, meta: true },
-      sources: {
-        google: { state: "fresh" },
-        ga4: { state: "fresh" },
-        meta: { state: "fresh" },
-      },
-    },
-    live_sources: {
-      google: { access_ok: true, configuration_complete: true },
-      ga4: { access_ok: true, configuration_complete: true },
-      meta: { access_ok: true, configuration_complete: true },
-    },
+    data_quality: { channel_ready: { google: true, meta: true }, sources: { google: { state: "fresh" }, ga4: { state: "fresh" }, meta: { state: "fresh" } } },
+    live_sources: { google: { access_ok: true, configuration_complete: true }, ga4: { access_ok: true, configuration_complete: true }, meta: { access_ok: true, configuration_complete: true } },
     conversion_integrity: { status: "healthy", optimization_allowed: true },
   };
 }
@@ -26,6 +15,7 @@ function healthyShadow() {
 function goodHistory() {
   return Array.from({ length: 20 }, (_, index) => ({
     id: `r-${index}`,
+    evidence_kind: "forecast_observation",
     before: 1,
     after: 2,
     outcome: "observed",
@@ -44,14 +34,7 @@ test("source freshness requires all three live sources", () => {
 });
 
 test("runtime status fails closed when build validation and history are missing", () => {
-  const status = buildSanitizedPromotionStatus({
-    shadowResult: healthyShadow(),
-    metaPreflightState: { result: { read_only_ready: true, write_ready: false } },
-    buildValidated: false,
-    shadowRecords: [],
-    historyDurable: false,
-    historyHealthy: true,
-  });
+  const status = buildSanitizedPromotionStatus({ shadowResult: healthyShadow(), metaPreflightState: { result: { read_only_ready: true, write_ready: false } }, buildValidated: false, shadowRecords: [], historyDurable: false, historyHealthy: true });
   assert.equal(status.promotion_ready, false);
   assert.equal(status.autonomy_class, "observe_and_propose");
   assert.ok(status.blockers.includes("readiness:regression_suite_not_verified"));
@@ -62,14 +45,7 @@ test("runtime status fails closed when build validation and history are missing"
 });
 
 test("missing Meta read preflight remains an independent live blocker", () => {
-  const status = buildSanitizedPromotionStatus({
-    shadowResult: healthyShadow(),
-    metaPreflightState: { result: { read_only_ready: false, write_ready: false } },
-    buildValidated: true,
-    shadowRecords: goodHistory(),
-    historyDurable: true,
-    historyHealthy: true,
-  });
+  const status = buildSanitizedPromotionStatus({ shadowResult: healthyShadow(), metaPreflightState: { result: { read_only_ready: false, write_ready: false } }, buildValidated: true, shadowRecords: goodHistory(), historyDurable: true, historyHealthy: true });
   assert.equal(status.gates.readiness, true);
   assert.equal(status.gates.live_validation, false);
   assert.ok(status.blockers.includes("live:meta_preflight_ready"));
@@ -77,14 +53,7 @@ test("missing Meta read preflight remains an independent live blocker", () => {
 });
 
 test("ephemeral history blocks promotion even when all other evidence is green", () => {
-  const status = buildSanitizedPromotionStatus({
-    shadowResult: healthyShadow(),
-    metaPreflightState: { result: { read_only_ready: true, write_ready: false } },
-    buildValidated: true,
-    shadowRecords: goodHistory(),
-    historyDurable: false,
-    historyHealthy: true,
-  });
+  const status = buildSanitizedPromotionStatus({ shadowResult: healthyShadow(), metaPreflightState: { result: { read_only_ready: true, write_ready: false } }, buildValidated: true, shadowRecords: goodHistory(), historyDurable: false, historyHealthy: true });
   assert.equal(status.gates.readiness, true);
   assert.equal(status.gates.live_validation, true);
   assert.equal(status.gates.shadow_history, true);
@@ -95,14 +64,7 @@ test("ephemeral history blocks promotion even when all other evidence is green",
 });
 
 test("corrupt or unhealthy history blocks promotion independently of durability", () => {
-  const status = buildSanitizedPromotionStatus({
-    shadowResult: healthyShadow(),
-    metaPreflightState: { result: { read_only_ready: true, write_ready: false } },
-    buildValidated: true,
-    shadowRecords: goodHistory(),
-    historyDurable: true,
-    historyHealthy: false,
-  });
+  const status = buildSanitizedPromotionStatus({ shadowResult: healthyShadow(), metaPreflightState: { result: { read_only_ready: true, write_ready: false } }, buildValidated: true, shadowRecords: goodHistory(), historyDurable: true, historyHealthy: false });
   assert.equal(status.gates.shadow_history, true);
   assert.equal(status.gates.history_storage, false);
   assert.ok(status.blockers.includes("history:storage_unhealthy"));
@@ -111,14 +73,7 @@ test("corrupt or unhealthy history blocks promotion independently of durability"
 });
 
 test("even fully green durable healthy evidence cannot authorize external execution", () => {
-  const status = buildSanitizedPromotionStatus({
-    shadowResult: healthyShadow(),
-    metaPreflightState: { result: { read_only_ready: true, write_ready: false } },
-    buildValidated: true,
-    shadowRecords: goodHistory(),
-    historyDurable: true,
-    historyHealthy: true,
-  });
+  const status = buildSanitizedPromotionStatus({ shadowResult: healthyShadow(), metaPreflightState: { result: { read_only_ready: true, write_ready: false } }, buildValidated: true, shadowRecords: goodHistory(), historyDurable: true, historyHealthy: true });
   assert.equal(status.promotion_ready, true);
   assert.equal(status.autonomy_class, "supervised_reversible_candidate");
   assert.equal(status.external_write_authorized, false);
