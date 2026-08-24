@@ -1,5 +1,5 @@
 const ALLOWED={
- campaign:new Set(['name','objective','buying_type','special_ad_categories','status']),
+ campaign:new Set(['name','objective','buying_type','is_adset_budget_sharing_enabled','special_ad_categories','status']),
  adset:new Set(['name','campaign_id','lifetime_budget','billing_event','optimization_goal','bid_strategy','start_time','end_time','destination_type','dsa_beneficiary','dsa_payor','pacing_type','adset_schedule','targeting','status']),
  creative:new Set(['name','object_id','instagram_user_id','source_instagram_media_id']),
  ad:new Set(['name','adset_id','creative','status']),
