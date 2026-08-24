@@ -24,18 +24,27 @@ jobs:
           BASE="https://supportive-stillness-production-ec37.up.railway.app"
           code="000"
           google="false"
+          category="unknown"
           reason="unreadable"
           for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
             code=$(curl -sS -o shadow.json -w "%{http_code}" "$BASE/health/agent-shadow-summary" || true)
             google=$(jq -r '.source_health.google // false' shadow.json 2>/dev/null || echo false)
-            reason=$(jq -r '.source_diagnostics.google.reason // .source_diagnostics.google.category // "none"' shadow.json 2>/dev/null || echo unreadable)
+            category=$(jq -r '.source_diagnostics.google.category // "unknown"' shadow.json 2>/dev/null || echo unknown)
+            reason=$(jq -r '.source_diagnostics.google.reason // .source_diagnostics.google.category // "unreadable"' shadow.json 2>/dev/null || echo unreadable)
             if [ "$code" = "200" ] && [ "$google" = "true" ]; then break; fi
             sleep 15
           done
-          safe_reason=$(printf '%s' "$reason" | tr -cs 'A-Za-z0-9_-' '_' | cut -c1-24)
-          if [ "$code" = "200" ] && [ "$google" = "true" ]; then state="success"; description="Google live read access verified"; else state="failure"; description="Google live read blocked: ${safe_reason}"; fi
-          context="google-live-access:${safe_reason}"
+          safe_category=$(printf '%s' "$category" | tr -cs 'A-Za-z0-9_-' '_' | cut -c1-20)
+          safe_reason=$(printf '%s' "$reason" | tr -cs 'A-Za-z0-9_-' '_' | cut -c1-28)
+          if [ "$code" = "200" ] && [ "$google" = "true" ]; then
+            state="success"
+            description="Google live read access verified"
+          else
+            state="failure"
+            description="Google live read blocked: ${safe_category}/${safe_reason}"
+          fi
+          context="google-live-access:${safe_category}:${safe_reason}"
           payload=$(jq -n --arg state "$state" --arg description "$description" --arg context "$context" '{state:$state,context:$context,description:$description}')
           curl --fail-with-body -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/$REPO/statuses/$SHA" -d "$payload"
-          echo "google=${google}; reason=${safe_reason}; http=${code}"
+          echo "google=${google}; category=${safe_category}; reason=${safe_reason}; http=${code}"
           if [ "$state" != "success" ]; then exit 1; fi
