@@ -1,3 +1,5 @@
+const { googleRuntimeConfigDiagnostics } = require('./google-runtime-config-diagnostics');
+
 function safeCode(value, fallback = null, max = 64) {
   if (value == null) return fallback;
   const normalized = String(value).replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, max);
@@ -11,13 +13,14 @@ function sourceErrorCode(source = {}, fallback = "unavailable") {
   return fallback;
 }
 
-function publicGoogleDiagnostic(google = {}) {
+function publicGoogleDiagnostic(google = {}, env = process.env) {
   const diagnostic = google.diagnostic || google.search_intelligence_diagnostic || null;
-  if (!diagnostic) return null;
   return {
-    category: safeCode(diagnostic.category, "unknown"),
-    reason: safeCode(diagnostic.reason, "unknown"),
-    code: safeCode(diagnostic.code, null),
+    category: safeCode(diagnostic?.category, diagnostic ? "unknown" : null),
+    reason: safeCode(diagnostic?.reason, diagnostic ? "unknown" : null),
+    code: safeCode(diagnostic?.code, null),
+    family: safeCode(diagnostic?.family, null),
+    config: googleRuntimeConfigDiagnostics(env),
   };
 }
 
@@ -64,7 +67,7 @@ function publicMetaDiagnostic(meta = {}) {
   };
 }
 
-function buildPublicSourceView(liveSources = {}) {
+function buildPublicSourceView(liveSources = {}, env = process.env) {
   const google = liveSources.google || {};
   const ga4 = liveSources.ga4 || {};
   const meta = liveSources.meta || {};
@@ -80,7 +83,7 @@ function buildPublicSourceView(liveSources = {}) {
       meta: sourceErrorCode(meta, "meta_unavailable"),
     },
     source_diagnostics: {
-      google: publicGoogleDiagnostic(google),
+      google: publicGoogleDiagnostic(google, env),
       ga4: publicGa4Diagnostic(ga4),
       meta: publicMetaDiagnostic(meta),
     },
