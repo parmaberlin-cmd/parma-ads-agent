@@ -1,4 +1,5 @@
 const { assertPublicPayloadSafe } = require('./public-output-safety');
+const { buildReadinessActionPlan } = require('./readiness-action-plan');
 
 function safeArray(value, max = 5) {
   return Array.isArray(value) ? value.slice(0, max) : [];
@@ -21,6 +22,7 @@ function buildOperationalDashboard({ summary = {}, cycle = {}, promotion = {} } 
   const alerts = cycle.operational?.alerts || [];
   const priorities = summary.primary_priorities || cycle.operational?.priorities || [];
   const blockers = [...new Set([...(dataQuality.blockers || []), ...(promotion.blockers || []), ...(cycle.blocked_stages || []).map((stage) => `cycle_${stage}`)])];
+  const readinessPlan = buildReadinessActionPlan({ summary, promotion });
   const dashboard = {
     mode: 'shadow',
     generated_at: summary.generated_at || cycle.generated_at || new Date().toISOString(),
@@ -42,6 +44,14 @@ function buildOperationalDashboard({ summary = {}, cycle = {}, promotion = {} } 
       promotion_ready: promotion.promotion_ready === true,
       autonomy_class: promotion.autonomy_class || 'observe_and_propose',
       score: promotion.readiness_score ?? null,
+    },
+    remaining_work: {
+      total: readinessPlan.total_remaining,
+      automatic: readinessPlan.automatic_remaining,
+      human: readinessPlan.human_remaining,
+      next_automatic: readinessPlan.next_automatic,
+      next_human: readinessPlan.next_human,
+      actions: safeArray(readinessPlan.actions, 12),
     },
     blockers: safeArray(blockers, 12),
     alerts: safeArray(alerts.map((alert) => ({ severity: alert.severity, code: alert.code, source: alert.source })), 8),
