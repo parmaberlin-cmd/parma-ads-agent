@@ -11,6 +11,13 @@ async function verifyPaused(transport, ids) {
   return Object.fromEntries(entries);
 }
 
+function pausedVerificationBlockers(verification={}){
+  return Object.entries(verification)
+    .filter(([name])=>name!=="creative_id")
+    .filter(([,object])=>object?.status!=="PAUSED")
+    .map(([name])=>`${name}_not_paused`);
+}
+
 async function resumePausedReservationDraft({transport,adAccountId,draft,approvalToken,existing={}}={}){
   if(approvalToken!==APPROVAL_TOKEN)throw new Error("Exact paused-draft approval token is required");
   if(!transport||typeof transport.post!=="function"||typeof transport.get!=="function")throw new TypeError("transport must provide post and get functions");
@@ -28,14 +35,16 @@ async function resumePausedReservationDraft({transport,adAccountId,draft,approva
     if(!created.creative_id){stage="creative";created.creative_id=requireId((await transport.post(`/${accountId}/adcreatives`,draft.creative))?.id,"created creative id");}
     if(!created.ad_id){stage="ad";created.ad_id=requireId((await transport.post(`/${accountId}/ads`,{...draft.ad,adset_id:created.adset_id,creative:{creative_id:created.creative_id}}))?.id,"created ad id");}
     stage="verification";
-    let verification=await verifyPaused(transport,created);
-    const unsafe=Object.entries(verification).filter(([name,o])=>name!=="creative_id"&&o.status!=="PAUSED");
-    for(const [,o] of unsafe) await transport.post(`/${o.id}`,{status:"PAUSED"});
-    if(unsafe.length) verification=await verifyPaused(transport,created);
-    const stillUnsafe=Object.entries(verification).filter(([name,o])=>name!=="creative_id"&&o.status!=="PAUSED");
-    if(stillUnsafe.length) throw new Error("Meta recovery could not verify PAUSED state");
-    return {success:true,mode:"paused_draft_only",created,reused,recovery_plan:plan,verification,activates_spend:false};
+    const verification=await verifyPaused(transport,created);
+    const blockers=pausedVerificationBlockers(verification);
+    if(blockers.length){
+      const error=new Error(`Meta objects were not verified as PAUSED: ${blockers.join(",")}`);
+      error.code="META_NOT_PAUSED";
+      error.blockers=blockers;
+      throw error;
+    }
+    return {success:true,mode:"paused_draft_only",created,reused,recovery_plan:plan,verification,verification_mode:"read_only",corrective_writes_performed:false,activates_spend:false};
   }catch(error){throw new PartialMetaDraftError("Paused Meta draft recovery did not complete",created,stage,error,reused);}
 }
 
-module.exports={resumePausedReservationDraft,verifyPaused};
+module.exports={resumePausedReservationDraft,verifyPaused,pausedVerificationBlockers};

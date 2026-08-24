@@ -31,14 +31,15 @@ test("complete existing draft performs verification only",async()=>{
   assert.equal(result.success,true);
   assert.equal(transport.posts.length,0);
   assert.equal(result.activates_spend,false);
+  assert.equal(result.verification_mode,"read_only");
+  assert.equal(result.corrective_writes_performed,false);
 });
 
-test("unsafe existing object is emergency-paused and rechecked",async()=>{
+test("unsafe existing object fails closed without emergency corrective write",async()=>{
   const posts=[];let reads=0;
   const transport={posts,async post(endpoint,payload){posts.push({endpoint,payload});return {id:"9"};},async get(endpoint){reads++;return {id:endpoint.slice(1),status:reads===1?"ACTIVE":"PAUSED",effective_status:"PAUSED"};}};
-  const result=await resumePausedReservationDraft({transport,adAccountId:"act_123",draft,approvalToken:APPROVAL_TOKEN,existing:{campaign_id:"1",adset_id:"2",creative_id:"3",ad_id:"4"}});
-  assert.equal(result.success,true);
-  assert.ok(posts.some(x=>x.payload?.status==="PAUSED"));
+  await assert.rejects(()=>resumePausedReservationDraft({transport,adAccountId:"act_123",draft,approvalToken:APPROVAL_TOKEN,existing:{campaign_id:"1",adset_id:"2",creative_id:"3",ad_id:"4"}}),e=>e.name==="PartialMetaDraftError"&&e.stage==="verification");
+  assert.equal(posts.length,0);
 });
 
 test("wrong approval token fails before writes",async()=>{
