@@ -9,8 +9,13 @@ function buildConservativePausedPayloads(draft, ids={}){
     name:draft.campaign?.name,
     objective:draft.campaign?.objective,
     buying_type:draft.campaign?.buying_type,
+    is_adset_budget_sharing_enabled:draft.campaign?.is_adset_budget_sharing_enabled,
     special_ad_categories:draft.campaign?.special_ad_categories||[],
     status:'PAUSED',
+  });
+  const targeting=compact({
+    ...(draft.adSet?.targeting||{}),
+    targeting_automation:draft.adSet?.targeting?.targeting_automation||{advantage_audience:0},
   });
   const adset=compact({
     name:draft.adSet?.name,
@@ -26,7 +31,7 @@ function buildConservativePausedPayloads(draft, ids={}){
     dsa_payor:draft.adSet?.dsa_payor,
     pacing_type:draft.adSet?.pacing_type,
     adset_schedule:draft.adSet?.adset_schedule,
-    targeting:draft.adSet?.targeting,
+    targeting,
     status:'PAUSED',
   });
   const creative=compact({
