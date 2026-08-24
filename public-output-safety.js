@@ -3,8 +3,26 @@ const FORBIDDEN_KEYS = new Set([
   'campaign_id','adset_id','ad_id','creative_id','page_id','instagram_user_id','source_instagram_media_id','customer_id','login_customer_id','ad_account_id',
 ]);
 
+const CREDENTIAL_VALUE_PATTERNS = [
+  /\bBearer\s+[A-Za-z0-9._~+\/-]{8,}/i,
+  /\bya29\.[A-Za-z0-9._-]{10,}/i,
+  /\b1\/\/[A-Za-z0-9._-]{10,}/,
+  /\bEAA[A-Za-z0-9]{12,}\b/,
+  /\b[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\b/,
+];
+
 function normalizeKey(key) {
   return String(key || '').trim().toLowerCase().replace(/[-\s]/g, '_');
+}
+
+function scanString(value, path, findings) {
+  for (const pattern of CREDENTIAL_VALUE_PATTERNS) {
+    if (pattern.test(value)) {
+      findings.push(`${path}:credential_like_value`);
+      break;
+    }
+  }
+  if (/\b\d{10,}\b/.test(value)) findings.push(`${path}:id_like_numeric_value`);
 }
 
 function scanPublicPayload(value, path = '$', findings = []) {
@@ -13,7 +31,7 @@ function scanPublicPayload(value, path = '$', findings = []) {
     return findings;
   }
   if (!value || typeof value !== 'object') {
-    if (typeof value === 'string' && /\bBearer\s+[A-Za-z0-9._~+\/-]{8,}/i.test(value)) findings.push(`${path}:bearer_value`);
+    if (typeof value === 'string') scanString(value, path, findings);
     return findings;
   }
   for (const [key, child] of Object.entries(value)) {
@@ -42,4 +60,12 @@ function safePublicJson(res, payload) {
   }
 }
 
-module.exports = { FORBIDDEN_KEYS, normalizeKey, scanPublicPayload, assertPublicPayloadSafe, safePublicJson };
+module.exports = {
+  FORBIDDEN_KEYS,
+  CREDENTIAL_VALUE_PATTERNS,
+  normalizeKey,
+  scanString,
+  scanPublicPayload,
+  assertPublicPayloadSafe,
+  safePublicJson,
+};

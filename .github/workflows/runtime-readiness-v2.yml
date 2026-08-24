@@ -41,7 +41,8 @@ jobs:
           meta=$(jq -r '.source_health.meta // false' shadow.json 2>/dev/null || echo false)
           writes=$(jq -r '.writes_allowed // true' shadow.json 2>/dev/null || echo true)
           greason=$(jq -r '.source_diagnostics.google.reason // .source_diagnostics.google.category // "none"' shadow.json 2>/dev/null || echo none)
-          reservation_start=$(jq -r '.tracking.reservation_start // false' shadow.json 2>/dev/null || echo false)
+          rs_configured=$(jq -r '.tracking.reservation_start.configured // .tracking.reservation_start // false' shadow.json 2>/dev/null || echo false)
+          rs_observed=$(jq -r '.tracking.reservation_start.observed // .tracking.reservation_start // false' shadow.json 2>/dev/null || echo false)
           read_ready=$(jq -r '.read_only_ready // .ready // false' meta.json 2>/dev/null || echo false)
           write_ready=$(jq -r '.write_ready // false' meta.json 2>/dev/null || echo false)
           meta_blocker=$(jq -r '.blockers[0] // "none"' meta.json 2>/dev/null || echo unreadable)
@@ -51,8 +52,8 @@ jobs:
           safe_mb=$(printf '%s' "$meta_blocker" | tr -cs 'A-Za-z0-9_-' '_' | cut -c1-18)
 
           if [ "$shadow_code" = "200" ] && [ "$meta_code" = "200" ] && [ "$writes" = "false" ] && [ "$read_ready" = "true" ] && [ "$schedule_safe" = "true" ]; then state="success"; else state="failure"; fi
-          context="runtime:g=${google}:${safe_greason}:ga4=${ga4}:rs=${reservation_start}:m=${meta}:mr=${read_ready}"
-          description="g=${google}/${safe_greason}; ga4=${ga4}; rs=${reservation_start}; m=${meta}; mr=${read_ready}; mw=${write_ready}; mb=${safe_mb}"
+          context="runtime:g=${google}:${safe_greason}:ga4=${ga4}:rso=${rs_observed}:m=${meta}:mr=${read_ready}"
+          description="g=${google}/${safe_greason}; ga4=${ga4}; rs_cfg=${rs_configured}; rs_obs=${rs_observed}; m=${meta}; mr=${read_ready}; mw=${write_ready}; mb=${safe_mb}"
           payload=$(jq -n --arg state "$state" --arg description "$description" --arg context "$context" '{state:$state,context:$context,description:$description}')
           curl --fail-with-body -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/$REPO/statuses/$SHA" -d "$payload"
           echo "$description"

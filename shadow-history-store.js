@@ -38,9 +38,7 @@ function validateLoadedRecords(parsed) {
 }
 
 function loadHistoryState(filePath = historyPath()) {
-  if (!fs.existsSync(filePath)) {
-    return { healthy: true, exists: false, records: [], reason: null };
-  }
+  if (!fs.existsSync(filePath)) return { healthy: true, exists: false, records: [], reason: null };
   try {
     const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
     const validated = validateLoadedRecords(parsed);
@@ -56,23 +54,25 @@ function loadHistory(filePath = historyPath()) {
 
 function saveHistory(records = [], filePath = historyPath(), { maxRecords = DEFAULT_MAX_RECORDS } = {}) {
   const bounded = records.slice(-maxRecords);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.mkdirSync(path.dirname(filePath), { recursive:true });
   const tmp = `${filePath}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(bounded)}\n`, { mode: 0o600 });
+  fs.writeFileSync(tmp, `${JSON.stringify(bounded)}\n`, { mode:0o600 });
   fs.renameSync(tmp, filePath);
   const verified = loadHistoryState(filePath);
-  if (!verified.healthy || verified.records.length !== bounded.length) {
-    throw new Error("shadow_history_persistence_verification_failed");
-  }
+  if (!verified.healthy || verified.records.length !== bounded.length) throw new Error("shadow_history_persistence_verification_failed");
   return bounded;
 }
 
+function observedGa4Event(snapshot = {}, eventName) {
+  const explicit = snapshot.live_sources?.ga4?.funnel?.completeness?.tracking?.[eventName];
+  if (explicit && typeof explicit.observed === "boolean") return explicit.observed;
+  const count = Number(snapshot.live_sources?.ga4?.funnel?.totals?.[eventName] || 0);
+  return Number.isFinite(count) && count > 0;
+}
+
 function buildSanitizedHistoryRecord({ snapshot = {}, report = {}, generatedAt = new Date().toISOString() } = {}) {
-  const priorities = (report.daily_manager?.primary_priorities || []).slice(0, 3);
-  const anomalies = (report.anomalies || []).slice(0, 10);
-  const events = Array.isArray(snapshot.live_sources?.ga4?.funnel?.event_names)
-    ? snapshot.live_sources.ga4.funnel.event_names
-    : [];
+  const priorities = (report.daily_manager?.primary_priorities || []).slice(0,3);
+  const anomalies = (report.anomalies || []).slice(0,10);
   return {
     id: generatedAt,
     generated_at: generatedAt,
@@ -84,12 +84,16 @@ function buildSanitizedHistoryRecord({ snapshot = {}, report = {}, generatedAt =
       ga4: snapshot.live_sources?.ga4?.access_ok === true,
       meta: snapshot.live_sources?.meta?.access_ok === true,
     },
-    tracking: { reservation_start: events.includes("reservation_start") },
+    tracking: {
+      reservation_page_view: observedGa4Event(snapshot, "reservation_page_view"),
+      reservation_start: observedGa4Event(snapshot, "reservation_start"),
+      booking_completed: observedGa4Event(snapshot, "booking_completed"),
+    },
     priority_codes: priorities.map((priority) => safeCode(priority.code, "unknown")),
     anomaly_codes: anomalies.map((anomaly) => safeCode(anomaly.code, "unknown")),
-    safety_violation: false,
-    outcome: null,
-    expected_direction: null,
+    safety_violation:false,
+    outcome:null,
+    expected_direction:null,
   };
 }
 
@@ -107,12 +111,8 @@ function publicHistorySummary(records = [], storage = {}) {
   return {
     total_runs: records.length,
     high_data_quality_runs: records.filter((record) => record.data_quality === "high").length,
-    source_healthy_runs: {
-      google: healthyRuns("google"),
-      ga4: healthyRuns("ga4"),
-      meta: healthyRuns("meta"),
-    },
-    reservation_start_tracked_runs: records.filter((record) => record.tracking?.reservation_start === true).length,
+    source_healthy_runs: { google:healthyRuns("google"), ga4:healthyRuns("ga4"), meta:healthyRuns("meta") },
+    reservation_start_observed_runs: records.filter((record) => record.tracking?.reservation_start === true).length,
     storage: {
       durable: storage.durable === true,
       healthy: storage.healthy === true,
@@ -120,23 +120,12 @@ function publicHistorySummary(records = [], storage = {}) {
       source: storage.source || "unknown",
       reason: storage.reason || null,
     },
-    writes_allowed: false,
+    writes_allowed:false,
   };
 }
 
 module.exports = {
-  DEFAULT_MAX_RECORDS,
-  DEFAULT_TMP_HISTORY,
-  VOLUME_HISTORY_FILENAME,
-  safeCode,
-  historyPath,
-  historyStorageStatus,
-  validateLoadedRecords,
-  loadHistoryState,
-  loadHistory,
-  saveHistory,
-  buildSanitizedHistoryRecord,
-  appendHistoryRecord,
-  appendAndPersist,
-  publicHistorySummary,
+  DEFAULT_MAX_RECORDS, DEFAULT_TMP_HISTORY, VOLUME_HISTORY_FILENAME,
+  safeCode, historyPath, historyStorageStatus, validateLoadedRecords, loadHistoryState, loadHistory, saveHistory,
+  observedGa4Event, buildSanitizedHistoryRecord, appendHistoryRecord, appendAndPersist, publicHistorySummary,
 };
