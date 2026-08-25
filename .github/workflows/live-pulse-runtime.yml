@@ -41,6 +41,7 @@ jobs:
           glb=$(jq -r '.today.google.delivery_diagnostics.limited_by_budget // 0' pulse.json)
           glr=$(jq -r '.today.google.delivery_diagnostics.high_rank_loss // 0' pulse.json)
           gls=$(jq -r '.today.google.delivery_diagnostics.not_eligible_or_limited // 0' pulse.json)
+          top_reason=$(jq -r '.today.google.delivery_diagnostics.primary_reason_counts // {} | to_entries | sort_by(-.value) | .[0].key // "none"' pulse.json)
           tmsp=$(jq -r '.today.meta.totals.spend_eur // 0' pulse.json)
           tmi=$(jq -r '.today.meta.totals.impressions // 0' pulse.json)
           tmc=$(jq -r '.today.meta.totals.clicks // 0' pulse.json)
@@ -48,21 +49,28 @@ jobs:
           tb=$(jq -r '.today.ga4.booking_completed // 0' pulse.json)
           bpu=$(jq -r '.today.ga4.booking_quality.events_per_user // 0' pulse.json)
           busers=$(jq -r '.today.ga4.booking_quality.users // 0' pulse.json)
+          gpaid=$(jq -r '.today.ga4.booking_sources.google_paid // 0' pulse.json)
+          mpaid=$(jq -r '.today.ga4.booking_sources.meta_paid // 0' pulse.json)
+          direct=$(jq -r '.today.ga4.booking_sources.direct // 0' pulse.json)
+          organic=$(jq -r '(.today.ga4.booking_sources.google_organic // 0)+(.today.ga4.booking_sources.meta_organic // 0)+(.today.ga4.booking_sources.organic_other // 0)' pulse.json)
+          referral=$(jq -r '.today.ga4.booking_sources.referral // 0' pulse.json)
+          other=$(jq -r '(.today.ga4.booking_sources.other // 0)+(.today.ga4.booking_sources.paid_other // 0)' pulse.json)
           g7=$(jq -r '.last_7d.google.totals.spend_eur // 0' pulse.json)
           m7=$(jq -r '.last_7d.meta.totals.spend_eur // 0' pulse.json)
           b7=$(jq -r '.last_7d.ga4.booking_completed // 0' pulse.json)
-          delivering=$(jq -r '.today.signals.ads_delivering // false' pulse.json)
-          traffic=$(jq -r '.today.signals.traffic_present // false' pulse.json)
-          bookings=$(jq -r '.today.signals.bookings_present // false' pulse.json)
           dup=$(jq -r '.today.signals.booking_event_duplication_risk // false' pulse.json)
           writes=$(jq -r 'if has("writes_allowed") then .writes_allowed else true end' pulse.json)
 
+          safe_reason=$(printf '%s' "$top_reason" | tr -cs 'A-Za-z0-9_-' '_' | cut -c1-30)
           if [ "$writes" = "false" ]; then state="success"; else state="failure"; fi
-          context="pulse:g=${tga}:m=${tma}:lb=${glb}:lr=${glr}:ls=${gls}:dup=${dup}"
-          description="g€${tgsp} i${tgi} c${tgc} cv${tgcv}; Gdiag b${glb}/r${glr}/s${gls}; m€${tmsp} i${tmi} c${tmc}; b${tb}/u${busers}/epu${bpu}; 7d g€${g7} m€${m7} b${b7}"
+          context="pulse:g=${tga}:m=${tma}:reason=${safe_reason}:dup=${dup}"
+          description="g€${tgsp} i${tgi} c${tgc}; reason=${safe_reason}; m€${tmsp}; b${tb}: gP${gpaid} mP${mpaid} dir${direct} org${organic} ref${referral} oth${other}; 7d g€${g7} m€${m7} b${b7}"
           description=$(printf '%s' "$description" | cut -c1-140)
           context=$(printf '%s' "$context" | cut -c1-100)
           payload=$(jq -n --arg state "$state" --arg description "$description" --arg context "$context" '{state:$state,context:$context,description:$description}')
           curl --fail-with-body -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/$REPO/statuses/$SHA" -d "$payload"
+          echo "google_primary_status_counts=$(jq -c '.today.google.delivery_diagnostics.primary_status_counts // {}' pulse.json)"
+          echo "google_primary_reason_counts=$(jq -c '.today.google.delivery_diagnostics.primary_reason_counts // {}' pulse.json)"
+          echo "booking_sources=$(jq -c '.today.ga4.booking_sources // {}' pulse.json)"
           echo "$description"
           if [ "$state" != "success" ]; then exit 1; fi
