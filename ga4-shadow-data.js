@@ -80,7 +80,7 @@ async function runBookingReport({ accessToken, propertyId, start, end, googleCpc
   };
 }
 
-async function collectGa4ShadowData({ env = process.env, days = 30, now = new Date() } = {}) {
+async function collectGa4ShadowData({ env = process.env, days = 30, now = new Date(), startDate = null, endDate = null } = {}) {
   const collectedAt = now.toISOString();
   if (!ga4Configured(env)) {
     return {
@@ -95,7 +95,9 @@ async function collectGa4ShadowData({ env = process.env, days = 30, now = new Da
       funnel: null,
     };
   }
-  const { start, end } = getDateRange(days, now);
+  const fallback = getDateRange(days, now);
+  const start = startDate || fallback.start;
+  const end = endDate || fallback.end;
   try {
     const accessToken = await getGoogleAccessToken(env);
     const eventNames = String(env.GA4_FUNNEL_EVENTS || DEFAULT_FUNNEL_EVENTS.join(","))

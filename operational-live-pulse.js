@@ -1,0 +1,179 @@
+const { collectGoogleShadowData, collectMetaShadowData } = require('./live-shadow-data');
+const { collectGa4ShadowData } = require('./ga4-shadow-data');
+const { assertPublicPayloadSafe } = require('./public-output-safety');
+
+function berlinDate(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+function shiftDays(date, days) {
+  return new Date(date.getTime() + days * 86400000);
+}
+
+function round(value, decimals = 2) {
+  const factor = 10 ** decimals;
+  return Math.round((Number(value || 0) + Number.EPSILON) * factor) / factor;
+}
+
+function sanitizeGoogleCampaign(campaign = {}) {
+  return {
+    name: campaign.campaign_name || null,
+    status: campaign.status || null,
+    channel_type: campaign.channel_type || null,
+    spend_eur: round(campaign.cost_eur),
+    impressions: Number(campaign.impressions || 0),
+    clicks: Number(campaign.clicks || 0),
+    ctr_percent: campaign.impressions ? round((Number(campaign.clicks || 0) / Number(campaign.impressions || 0)) * 100, 2) : 0,
+    cpc_eur: round(campaign.average_cpc_eur, 2),
+    conversions: round(campaign.conversions, 2),
+  };
+}
+
+function sanitizeMetaCampaign(campaign = {}) {
+  const metrics = campaign.metrics || {};
+  return {
+    name: campaign.name || null,
+    delivery_status: campaign.delivery_status || null,
+    status: campaign.status || null,
+    spend_eur: round(metrics.spend_eur),
+    impressions: Number(metrics.impressions || 0),
+    reach: Number(metrics.reach || 0),
+    clicks: Number(metrics.clicks || 0),
+    ctr_percent: round(metrics.ctr_percent, 2),
+    cpc_eur: round(metrics.cpc_eur, 2),
+    cpm_eur: round(metrics.cpm_eur, 2),
+    frequency: round(metrics.frequency, 2),
+  };
+}
+
+function summarizeGoogle(source = {}) {
+  const totals = source.totals || {};
+  const campaigns = (source.campaigns || []).map(sanitizeGoogleCampaign);
+  const active = campaigns.filter((campaign) => campaign.status === 'ENABLED' || campaign.status === 2);
+  return {
+    access_ok: source.access_ok === true,
+    active_campaigns: active.length,
+    totals: {
+      spend_eur: round(totals.spend_eur),
+      impressions: Number(totals.impressions || 0),
+      clicks: Number(totals.clicks || 0),
+      ctr_percent: totals.impressions ? round((Number(totals.clicks || 0) / Number(totals.impressions || 0)) * 100, 2) : 0,
+      cpc_eur: round(totals.cpc_eur, 2),
+      conversions: round(totals.conversions, 2),
+      cost_per_conversion_eur: Number(totals.conversions || 0) > 0 ? round(Number(totals.spend_eur || 0) / Number(totals.conversions), 2) : null,
+    },
+    campaigns: active,
+  };
+}
+
+function summarizeMeta(source = {}) {
+  const overview = source.overview || {};
+  const totals = overview.totals || {};
+  const campaigns = (overview.campaigns || []).map(sanitizeMetaCampaign);
+  const active = campaigns.filter((campaign) => ['active','active_unverified'].includes(campaign.delivery_status));
+  return {
+    access_ok: source.access_ok === true,
+    active_campaigns: active.length,
+    campaign_counts: overview.campaign_counts || {},
+    totals: {
+      spend_eur: round(totals.spend_eur),
+      impressions: Number(totals.impressions || 0),
+      reach: Number(totals.reach_sum || 0),
+      clicks: Number(totals.clicks || 0),
+      ctr_percent: round(totals.ctr_percent, 2),
+      cpc_eur: round(totals.cpc_eur, 2),
+      cpm_eur: round(totals.cpm_eur, 2),
+    },
+    campaigns: active,
+  };
+}
+
+function summarizeGa4(source = {}) {
+  const funnel = source.funnel || {};
+  const totals = funnel.totals || {};
+  return {
+    access_ok: source.access_ok === true,
+    booking_completed: Number(source.total_booking_completed || 0),
+    google_cpc_booking_completed: Number(source.google_cpc_booking_completed || 0),
+    funnel: {
+      reservation_page_view: Number(totals.reservation_page_view || 0),
+      reservation_start: Number(totals.reservation_start || 0),
+      booking_completed: Number(totals.booking_completed || 0),
+      rates: funnel.rates || { page_to_start: null, start_to_booking: null, page_to_booking: null },
+      configuration_complete: funnel.completeness?.configuration_complete === true,
+      observation_complete: funnel.completeness?.observation_complete === true,
+    },
+  };
+}
+
+function deriveSignals(period = {}) {
+  const google = period.google || {};
+  const meta = period.meta || {};
+  const ga4 = period.ga4 || {};
+  const adSpend = Number(google.totals?.spend_eur || 0) + Number(meta.totals?.spend_eur || 0);
+  const clicks = Number(google.totals?.clicks || 0) + Number(meta.totals?.clicks || 0);
+  const bookings = Number(ga4.booking_completed || 0);
+  return {
+    ads_delivering: adSpend > 0 || clicks > 0,
+    traffic_present: clicks > 0,
+    bookings_present: bookings > 0,
+    spend_without_bookings: adSpend > 0 && bookings === 0,
+    clicks_without_bookings: clicks > 0 && bookings === 0,
+    funnel_intermediate_events_observed: Number(ga4.funnel?.reservation_page_view || 0) > 0 && Number(ga4.funnel?.reservation_start || 0) > 0,
+  };
+}
+
+async function collectOperationalLivePulse({ env = process.env, now = new Date() } = {}) {
+  const today = berlinDate(now);
+  const sevenStart = berlinDate(shiftDays(now, -6));
+  const [googleToday, google7d, metaToday, meta7d, ga4Today, ga47d] = await Promise.all([
+    collectGoogleShadowData({ env, now, startDate: today, endDate: today, includeSearchIntelligence: false }),
+    collectGoogleShadowData({ env, now, startDate: sevenStart, endDate: today, includeSearchIntelligence: false }),
+    collectMetaShadowData({ env, now, datePreset: 'today' }),
+    collectMetaShadowData({ env, now, datePreset: 'last_7d' }),
+    collectGa4ShadowData({ env, now, startDate: today, endDate: today }),
+    collectGa4ShadowData({ env, now, startDate: sevenStart, endDate: today }),
+  ]);
+
+  const result = {
+    generated_at: now.toISOString(),
+    timezone: 'Europe/Berlin',
+    mode: 'read_only_live_pulse',
+    today: {
+      date: today,
+      google: summarizeGoogle(googleToday),
+      meta: summarizeMeta(metaToday),
+      ga4: summarizeGa4(ga4Today),
+    },
+    last_7d: {
+      start: sevenStart,
+      end: today,
+      google: summarizeGoogle(google7d),
+      meta: summarizeMeta(meta7d),
+      ga4: summarizeGa4(ga47d),
+    },
+    writes_allowed: false,
+    execution_allowed: false,
+    spend_allowed: false,
+  };
+  result.today.signals = deriveSignals(result.today);
+  result.last_7d.signals = deriveSignals(result.last_7d);
+  return assertPublicPayloadSafe(result);
+}
+
+module.exports = {
+  berlinDate,
+  shiftDays,
+  round,
+  sanitizeGoogleCampaign,
+  sanitizeMetaCampaign,
+  summarizeGoogle,
+  summarizeMeta,
+  summarizeGa4,
+  deriveSignals,
+  collectOperationalLivePulse,
+};

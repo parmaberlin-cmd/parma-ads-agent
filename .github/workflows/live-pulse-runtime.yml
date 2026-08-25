@@ -1,0 +1,62 @@
+name: live-pulse-runtime
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  pulse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Wait for Railway deploy
+        if: github.event_name == 'push'
+        run: sleep 60
+      - name: Read sanitized live pulse and publish compact metrics
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          URL="https://supportive-stillness-production-ec37.up.railway.app/health/agent-live-pulse"
+          code="000"
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -sS -o pulse.json -w "%{http_code}" "$URL" || true)
+            if [ "$code" = "200" ]; then break; fi
+            sleep 15
+          done
+          test "$code" = "200"
+
+          tgsp=$(jq -r '.today.google.totals.spend_eur // 0' pulse.json)
+          tgi=$(jq -r '.today.google.totals.impressions // 0' pulse.json)
+          tgc=$(jq -r '.today.google.totals.clicks // 0' pulse.json)
+          tgcv=$(jq -r '.today.google.totals.conversions // 0' pulse.json)
+          tga=$(jq -r '.today.google.active_campaigns // 0' pulse.json)
+          tmsp=$(jq -r '.today.meta.totals.spend_eur // 0' pulse.json)
+          tmi=$(jq -r '.today.meta.totals.impressions // 0' pulse.json)
+          tmc=$(jq -r '.today.meta.totals.clicks // 0' pulse.json)
+          tma=$(jq -r '.today.meta.active_campaigns // 0' pulse.json)
+          tb=$(jq -r '.today.ga4.booking_completed // 0' pulse.json)
+          g7=$(jq -r '.last_7d.google.totals.spend_eur // 0' pulse.json)
+          m7=$(jq -r '.last_7d.meta.totals.spend_eur // 0' pulse.json)
+          b7=$(jq -r '.last_7d.ga4.booking_completed // 0' pulse.json)
+          delivering=$(jq -r '.today.signals.ads_delivering // false' pulse.json)
+          traffic=$(jq -r '.today.signals.traffic_present // false' pulse.json)
+          bookings=$(jq -r '.today.signals.bookings_present // false' pulse.json)
+          writes=$(jq -r 'if has("writes_allowed") then .writes_allowed else true end' pulse.json)
+
+          if [ "$writes" = "false" ]; then state="success"; else state="failure"; fi
+          context="live-pulse:g=${tga}:m=${tma}:del=${delivering}:traf=${traffic}:book=${bookings}"
+          description="today g€${tgsp} i${tgi} c${tgc} cv${tgcv}; m€${tmsp} i${tmi} c${tmc}; b${tb}; 7d g€${g7} m€${m7} b${b7}"
+          description=$(printf '%s' "$description" | cut -c1-140)
+          context=$(printf '%s' "$context" | cut -c1-100)
+          payload=$(jq -n --arg state "$state" --arg description "$description" --arg context "$context" '{state:$state,context:$context,description:$description}')
+          curl --fail-with-body -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/$REPO/statuses/$SHA" -d "$payload"
+          echo "$description"
+          if [ "$state" != "success" ]; then exit 1; fi

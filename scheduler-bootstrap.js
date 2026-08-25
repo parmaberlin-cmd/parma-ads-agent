@@ -43,7 +43,7 @@ function startReadonlyShadowScheduler({ env = process.env, client = axios } = {}
         interval_minutes: intervalMinutes,
         writes_allowed: false,
       }));
-    } catch (error) {
+    } catch {
       console.error(JSON.stringify({
         event: 'shadow_scheduler_tick',
         success: false,
@@ -69,6 +69,7 @@ function startReadonlyShadowScheduler({ env = process.env, client = axios } = {}
   return { timer, tick, intervalMinutes, url };
 }
 
+require('./operational-live-pulse-preload');
 require('./bootstrap');
 startReadonlyShadowScheduler();
 
