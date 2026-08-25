@@ -39,7 +39,7 @@ jobs:
           google=$(jq -r '.source_health.google // false' shadow.json 2>/dev/null || echo false)
           ga4=$(jq -r '.source_health.ga4 // false' shadow.json 2>/dev/null || echo false)
           meta=$(jq -r '.source_health.meta // false' shadow.json 2>/dev/null || echo false)
-          writes=$(jq -r '.writes_allowed // true' shadow.json 2>/dev/null || echo true)
+          writes=$(jq -r 'if has("writes_allowed") then .writes_allowed else true end' shadow.json 2>/dev/null || echo true)
           greason=$(jq -r '.source_diagnostics.google.reason // .source_diagnostics.google.category // "none"' shadow.json 2>/dev/null || echo none)
           rs_configured=$(jq -r 'if (.tracking.reservation_start | type) == "object" then (.tracking.reservation_start.configured // false) else (.tracking.reservation_start // false) end' shadow.json 2>/dev/null || echo false)
           rs_observed=$(jq -r 'if (.tracking.reservation_start | type) == "object" then (.tracking.reservation_start.observed // false) else (.tracking.reservation_start // false) end' shadow.json 2>/dev/null || echo false)
