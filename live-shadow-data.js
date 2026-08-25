@@ -50,18 +50,22 @@ function cleanGoogleDiagnostic(error) {
 function sanitizeMetaIssues(issues) { if (!Array.isArray(issues)) return []; return issues.slice(0,20).map((issue)=>({ level:String(issue?.level||"unknown").slice(0,40), code:issue?.error_code == null ? null : String(issue.error_code).slice(0,40), summary:String(issue?.error_summary||issue?.title||"meta_delivery_issue").replace(/[\r\n\t]+/g," ").slice(0,180), message:String(issue?.error_message||issue?.message||"").replace(/[\r\n\t]+/g," ").slice(0,300) })); }
 function buildGoogleCustomer(env) { const client=new GoogleAdsApi({client_id:env.GOOGLE_CLIENT_ID,client_secret:env.GOOGLE_CLIENT_SECRET,developer_token:env.GOOGLE_DEVELOPER_TOKEN}); return client.Customer({customer_id:normalizeGoogleCustomerId(env.GOOGLE_CUSTOMER_ID),refresh_token:env.GOOGLE_REFRESH_TOKEN,...(env.GOOGLE_LOGIN_CUSTOMER_ID?{login_customer_id:normalizeGoogleCustomerId(env.GOOGLE_LOGIN_CUSTOMER_ID)}:{})}); }
 
-async function collectGoogleShadowData({env=process.env,days=30,now=new Date()}={}) {
+async function collectGoogleShadowData({env=process.env,days=30,now=new Date(),startDate=null,endDate=null,includeSearchIntelligence=true}={}) {
   const collectedAt = now.toISOString();
   if(!googleConfigured(env)) return {access_ok:false,configuration_complete:false,collected_at:collectedAt,error:"google_configuration_incomplete",campaigns:[],totals:null,search_terms:[],keywords:[],search_intelligence_ok:false};
   const customer=buildGoogleCustomer(env);
-  const {start,end}=getDateRange(days,now);
+  const fallback=getDateRange(days,now);
+  const start=startDate||fallback.start;
+  const end=endDate||fallback.end;
   try {
     const rows=await customer.query(`SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.average_cpc, metrics.conversions, metrics.conversions_value FROM campaign WHERE campaign.status != 'REMOVED' AND segments.date BETWEEN '${start}' AND '${end}'`);
     const campaigns=(rows||[]).map(row=>({campaign_id:String(row.campaign.id),campaign_name:row.campaign.name,status:row.campaign.status,channel_type:row.campaign.advertising_channel_type,impressions:Number(row.metrics.impressions||0),clicks:Number(row.metrics.clicks||0),cost_eur:Number(row.metrics.cost_micros||0)/1_000_000,average_cpc_eur:Number(row.metrics.average_cpc||0)/1_000_000,conversions:Number(row.metrics.conversions||0),conversion_value:Number(row.metrics.conversions_value||0)}));
     const totals=campaigns.reduce((a,r)=>({impressions:a.impressions+r.impressions,clicks:a.clicks+r.clicks,spend_eur:a.spend_eur+r.cost_eur,conversions:a.conversions+r.conversions}),{impressions:0,clicks:0,spend_eur:0,conversions:0});
     totals.cpc_eur=totals.clicks?totals.spend_eur/totals.clicks:0;
     let searchTerms=[];let keywords=[];let searchIntelligenceOk=false;let searchIntelligenceDiagnostic=null;
-    try { const [terms,keywordRows]=await Promise.all([collectGoogleSearchTerms({customer,start,end}),collectGoogleKeywords({customer,start,end})]);searchTerms=analyzeSearchTerms(terms);keywords=analyzeKeywords(keywordRows);searchIntelligenceOk=true; } catch(error) { searchIntelligenceDiagnostic=cleanGoogleDiagnostic(error); }
+    if(includeSearchIntelligence){
+      try { const [terms,keywordRows]=await Promise.all([collectGoogleSearchTerms({customer,start,end}),collectGoogleKeywords({customer,start,end})]);searchTerms=analyzeSearchTerms(terms);keywords=analyzeKeywords(keywordRows);searchIntelligenceOk=true; } catch(error) { searchIntelligenceDiagnostic=cleanGoogleDiagnostic(error); }
+    }
     return {access_ok:true,configuration_complete:true,collected_at:collectedAt,period:{start,end},campaigns,totals,search_terms:searchTerms,keywords,search_intelligence_ok:searchIntelligenceOk,search_intelligence_diagnostic:searchIntelligenceDiagnostic};
   } catch(error) {
     return {access_ok:false,configuration_complete:true,collected_at:collectedAt,diagnostic:cleanGoogleDiagnostic(error),error:"google_read_failed",campaigns:[],totals:null,search_terms:[],keywords:[],search_intelligence_ok:false};
