@@ -59,6 +59,26 @@ function funnelCompleteness(funnel = {}, expectedEvents = []) {
   };
 }
 
+function buildFunnelEvidenceGate(funnel = {}, expectedEvents = []) {
+  const completeness = funnelCompleteness(funnel, expectedEvents);
+  const missingConfiguration = expectedEvents.filter((name) => !completeness.tracking[name]?.configured);
+  const missingObservation = expectedEvents.filter((name) => completeness.tracking[name]?.configured && !completeness.tracking[name]?.observed);
+  const blockers = [
+    ...missingConfiguration.map((name) => `event_not_configured:${name}`),
+    ...missingObservation.map((name) => `event_not_observed:${name}`),
+  ];
+  return {
+    ready: completeness.configuration_complete && completeness.observation_complete,
+    configuration_complete: completeness.configuration_complete,
+    observation_complete: completeness.observation_complete,
+    missing_configuration: missingConfiguration,
+    missing_observation: missingObservation,
+    blockers,
+    automation_safe: blockers.length === 0,
+    writes_allowed: false,
+  };
+}
+
 function safeRate(numerator, denominator) {
   const top = Number(numerator || 0);
   const bottom = Number(denominator || 0);
@@ -92,6 +112,7 @@ module.exports = {
   summarizeFunnel,
   funnelTrackingStatus,
   funnelCompleteness,
+  buildFunnelEvidenceGate,
   funnelRates,
   reconcileConversions,
 };
