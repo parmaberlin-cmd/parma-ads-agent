@@ -38,22 +38,28 @@ jobs:
           tgc=$(jq -r '.today.google.totals.clicks // 0' pulse.json)
           tgcv=$(jq -r '.today.google.totals.conversions // 0' pulse.json)
           tga=$(jq -r '.today.google.active_campaigns // 0' pulse.json)
+          glb=$(jq -r '.today.google.delivery_diagnostics.limited_by_budget // 0' pulse.json)
+          glr=$(jq -r '.today.google.delivery_diagnostics.high_rank_loss // 0' pulse.json)
+          gls=$(jq -r '.today.google.delivery_diagnostics.not_eligible_or_limited // 0' pulse.json)
           tmsp=$(jq -r '.today.meta.totals.spend_eur // 0' pulse.json)
           tmi=$(jq -r '.today.meta.totals.impressions // 0' pulse.json)
           tmc=$(jq -r '.today.meta.totals.clicks // 0' pulse.json)
           tma=$(jq -r '.today.meta.active_campaigns // 0' pulse.json)
           tb=$(jq -r '.today.ga4.booking_completed // 0' pulse.json)
+          bpu=$(jq -r '.today.ga4.booking_quality.events_per_user // 0' pulse.json)
+          busers=$(jq -r '.today.ga4.booking_quality.users // 0' pulse.json)
           g7=$(jq -r '.last_7d.google.totals.spend_eur // 0' pulse.json)
           m7=$(jq -r '.last_7d.meta.totals.spend_eur // 0' pulse.json)
           b7=$(jq -r '.last_7d.ga4.booking_completed // 0' pulse.json)
           delivering=$(jq -r '.today.signals.ads_delivering // false' pulse.json)
           traffic=$(jq -r '.today.signals.traffic_present // false' pulse.json)
           bookings=$(jq -r '.today.signals.bookings_present // false' pulse.json)
+          dup=$(jq -r '.today.signals.booking_event_duplication_risk // false' pulse.json)
           writes=$(jq -r 'if has("writes_allowed") then .writes_allowed else true end' pulse.json)
 
           if [ "$writes" = "false" ]; then state="success"; else state="failure"; fi
-          context="live-pulse:g=${tga}:m=${tma}:del=${delivering}:traf=${traffic}:book=${bookings}"
-          description="today g€${tgsp} i${tgi} c${tgc} cv${tgcv}; m€${tmsp} i${tmi} c${tmc}; b${tb}; 7d g€${g7} m€${m7} b${b7}"
+          context="pulse:g=${tga}:m=${tma}:lb=${glb}:lr=${glr}:ls=${gls}:dup=${dup}"
+          description="g€${tgsp} i${tgi} c${tgc} cv${tgcv}; Gdiag b${glb}/r${glr}/s${gls}; m€${tmsp} i${tmi} c${tmc}; b${tb}/u${busers}/epu${bpu}; 7d g€${g7} m€${m7} b${b7}"
           description=$(printf '%s' "$description" | cut -c1-140)
           context=$(printf '%s' "$context" | cut -c1-100)
           payload=$(jq -n --arg state "$state" --arg description "$description" --arg context "$context" '{state:$state,context:$context,description:$description}')
