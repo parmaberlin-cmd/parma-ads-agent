@@ -50,6 +50,11 @@ function cleanGoogleDiagnostic(error) {
 function sanitizeMetaIssues(issues) { if (!Array.isArray(issues)) return []; return issues.slice(0,20).map((issue)=>({ level:String(issue?.level||"unknown").slice(0,40), code:issue?.error_code == null ? null : String(issue.error_code).slice(0,40), summary:String(issue?.error_summary||issue?.title||"meta_delivery_issue").replace(/[\r\n\t]+/g," ").slice(0,180), message:String(issue?.error_message||issue?.message||"").replace(/[\r\n\t]+/g," ").slice(0,300) })); }
 function buildGoogleCustomer(env) { const client=new GoogleAdsApi({client_id:env.GOOGLE_CLIENT_ID,client_secret:env.GOOGLE_CLIENT_SECRET,developer_token:env.GOOGLE_DEVELOPER_TOKEN}); return client.Customer({customer_id:normalizeGoogleCustomerId(env.GOOGLE_CUSTOMER_ID),refresh_token:env.GOOGLE_REFRESH_TOKEN,...(env.GOOGLE_LOGIN_CUSTOMER_ID?{login_customer_id:normalizeGoogleCustomerId(env.GOOGLE_LOGIN_CUSTOMER_ID)}:{})}); }
 
+function normalizePrimaryStatusReasons(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item)).slice(0, 8);
+}
+
 async function collectGoogleShadowData({env=process.env,days=30,now=new Date(),startDate=null,endDate=null,includeSearchIntelligence=true}={}) {
   const collectedAt = now.toISOString();
   if(!googleConfigured(env)) return {access_ok:false,configuration_complete:false,collected_at:collectedAt,error:"google_configuration_incomplete",campaigns:[],totals:null,search_terms:[],keywords:[],search_intelligence_ok:false};
@@ -58,8 +63,18 @@ async function collectGoogleShadowData({env=process.env,days=30,now=new Date(),s
   const start=startDate||fallback.start;
   const end=endDate||fallback.end;
   try {
-    const rows=await customer.query(`SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.average_cpc, metrics.conversions, metrics.conversions_value FROM campaign WHERE campaign.status != 'REMOVED' AND segments.date BETWEEN '${start}' AND '${end}'`);
-    const campaigns=(rows||[]).map(row=>({campaign_id:String(row.campaign.id),campaign_name:row.campaign.name,status:row.campaign.status,channel_type:row.campaign.advertising_channel_type,impressions:Number(row.metrics.impressions||0),clicks:Number(row.metrics.clicks||0),cost_eur:Number(row.metrics.cost_micros||0)/1_000_000,average_cpc_eur:Number(row.metrics.average_cpc||0)/1_000_000,conversions:Number(row.metrics.conversions||0),conversion_value:Number(row.metrics.conversions_value||0)}));
+    const rows=await customer.query(`SELECT campaign.id, campaign.name, campaign.status, campaign.primary_status, campaign.primary_status_reasons, campaign.advertising_channel_type, campaign.bidding_strategy_type, campaign_budget.amount_micros, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.average_cpc, metrics.conversions, metrics.conversions_value, metrics.search_impression_share, metrics.search_budget_lost_impression_share, metrics.search_rank_lost_impression_share FROM campaign WHERE campaign.status != 'REMOVED' AND segments.date BETWEEN '${start}' AND '${end}'`);
+    const campaigns=(rows||[]).map(row=>({
+      campaign_id:String(row.campaign.id),campaign_name:row.campaign.name,status:row.campaign.status,
+      primary_status:row.campaign.primary_status||null,primary_status_reasons:normalizePrimaryStatusReasons(row.campaign.primary_status_reasons),
+      channel_type:row.campaign.advertising_channel_type,bidding_strategy_type:row.campaign.bidding_strategy_type||null,
+      daily_budget_eur:Number(row.campaign_budget?.amount_micros||0)/1_000_000,
+      impressions:Number(row.metrics.impressions||0),clicks:Number(row.metrics.clicks||0),cost_eur:Number(row.metrics.cost_micros||0)/1_000_000,
+      average_cpc_eur:Number(row.metrics.average_cpc||0)/1_000_000,conversions:Number(row.metrics.conversions||0),conversion_value:Number(row.metrics.conversions_value||0),
+      search_impression_share:row.metrics.search_impression_share==null?null:Number(row.metrics.search_impression_share),
+      search_budget_lost_impression_share:row.metrics.search_budget_lost_impression_share==null?null:Number(row.metrics.search_budget_lost_impression_share),
+      search_rank_lost_impression_share:row.metrics.search_rank_lost_impression_share==null?null:Number(row.metrics.search_rank_lost_impression_share),
+    }));
     const totals=campaigns.reduce((a,r)=>({impressions:a.impressions+r.impressions,clicks:a.clicks+r.clicks,spend_eur:a.spend_eur+r.cost_eur,conversions:a.conversions+r.conversions}),{impressions:0,clicks:0,spend_eur:0,conversions:0});
     totals.cpc_eur=totals.clicks?totals.spend_eur/totals.clicks:0;
     let searchTerms=[];let keywords=[];let searchIntelligenceOk=false;let searchIntelligenceDiagnostic=null;
@@ -131,4 +146,4 @@ async function collectLiveShadowInput({env=process.env,days=30,now=new Date()}={
   };
 }
 
-module.exports={collectGoogleShadowData,collectMetaPages,collectMetaShadowData,collectLiveShadowInput,getDateRange,googleConfigured,metaConfigured,flattenGoogleErrorCode,googleDiagnosticReason,cleanGoogleDiagnostic,sanitizeMetaIssues};
+module.exports={collectGoogleShadowData,collectMetaPages,collectMetaShadowData,collectLiveShadowInput,getDateRange,googleConfigured,metaConfigured,flattenGoogleErrorCode,googleDiagnosticReason,cleanGoogleDiagnostic,sanitizeMetaIssues,normalizePrimaryStatusReasons};
