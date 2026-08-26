@@ -1926,9 +1926,178 @@ app.get("/tools/meta/campaign/:id/metrics", requireApiKey, async (req, res) => {
   }
 });
 
+const GOOGLE_OAUTH_SETUP_TTL_MS = 10 * 60 * 1000;
+let googleOauthSetupState = null;
+
+function getGoogleOauthRedirectUri(req) {
+  if (process.env.GOOGLE_OAUTH_REDIRECT_URI) {
+    return process.env.GOOGLE_OAUTH_REDIRECT_URI;
+  }
+
+  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+    return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/auth/google/callback`;
+  }
+
+  return `${req.protocol}://${req.get("host")}/auth/google/callback`;
+}
+
+function googleOauthSetupIsEnabled() {
+  return (
+    process.env.GOOGLE_OAUTH_SETUP_ENABLED === "true" &&
+    typeof process.env.GOOGLE_OAUTH_SETUP_TOKEN === "string" &&
+    process.env.GOOGLE_OAUTH_SETUP_TOKEN.length >= 24
+  );
+}
+
+function requireGoogleOauthSetup(req, res) {
+  if (!googleOauthSetupIsEnabled()) {
+    res.status(410).json({
+      success: false,
+      error: "Temporary Google OAuth setup is disabled",
+    });
+    return false;
+  }
+
+  const suppliedToken = String(req.query.setup_token || "");
+  if (!apiKeysMatch(suppliedToken, process.env.GOOGLE_OAUTH_SETUP_TOKEN)) {
+    res.status(403).json({
+      success: false,
+      error: "Invalid Google OAuth setup token",
+    });
+    return false;
+  }
+
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    res.status(500).json({
+      success: false,
+      error: "Google OAuth client configuration missing",
+    });
+    return false;
+  }
+
+  return true;
+}
+
+app.get("/auth/google", (req, res) => {
+  if (!requireGoogleOauthSetup(req, res)) return;
+
+  const state = `${randomUUID()}${randomUUID()}`;
+  const redirectUri = getGoogleOauthRedirectUri(req);
+  googleOauthSetupState = {
+    state,
+    redirect_uri: redirectUri,
+    expires_at: Date.now() + GOOGLE_OAUTH_SETUP_TTL_MS,
+  };
+
+  const params = new URLSearchParams({
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    access_type: "offline",
+    prompt: "consent",
+    include_granted_scopes: "true",
+    state,
+    scope: [
+      "https://www.googleapis.com/auth/adwords",
+      "https://www.googleapis.com/auth/analytics.readonly",
+    ].join(" "),
+  });
+
+  res.set({
+    "Cache-Control": "no-store",
+    Pragma: "no-cache",
+    "Referrer-Policy": "no-referrer",
+  });
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+});
+
+app.get("/auth/google/callback", async (req, res) => {
+  if (!googleOauthSetupIsEnabled()) {
+    return res.status(410).json({
+      success: false,
+      error: "Temporary Google OAuth setup is disabled",
+    });
+  }
+
+  const pending = googleOauthSetupState;
+  googleOauthSetupState = null;
+
+  if (
+    !pending ||
+    Date.now() > pending.expires_at ||
+    !apiKeysMatch(String(req.query.state || ""), pending.state)
+  ) {
+    return res.status(400).json({
+      success: false,
+      error: "Google OAuth state is invalid or expired; restart setup",
+    });
+  }
+
+  if (typeof req.query.code !== "string" || !req.query.code) {
+    return res.status(400).json({
+      success: false,
+      error: "Google OAuth authorization code missing",
+    });
+  }
+
+  try {
+    const body = new URLSearchParams({
+      code: req.query.code,
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: pending.redirect_uri,
+      grant_type: "authorization_code",
+    });
+
+    const response = await axios.post(
+      "https://oauth2.googleapis.com/token",
+      body.toString(),
+      {
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        timeout: 20000,
+      }
+    );
+
+    const refreshToken = response.data?.refresh_token;
+    if (!refreshToken) {
+      return res.status(502).json({
+        success: false,
+        error:
+          "Google did not issue a refresh token; revoke access and restart setup",
+      });
+    }
+
+    res.set({
+      "Cache-Control": "no-store, max-age=0",
+      Pragma: "no-cache",
+      Expires: "0",
+      "Referrer-Policy": "no-referrer",
+      "Content-Security-Policy": "default-src 'none'",
+      "X-Content-Type-Options": "nosniff",
+    });
+    res.type("text/plain").send(
+      [
+        "Google OAuth connected.",
+        "",
+        "Copy the refresh token below directly into Railway as GOOGLE_REFRESH_TOKEN.",
+        "Do not paste it into ChatGPT, email, or messages.",
+        "",
+        refreshToken,
+        "",
+        "After Railway is updated, disable GOOGLE_OAUTH_SETUP_ENABLED.",
+      ].join("\n")
+    );
+  } catch (error) {
+    res.status(502).json({
+      success: false,
+      error: "Google OAuth token exchange failed",
+    });
+  }
+});
+
 const disabledGoogleSetupRoutes = [
-  "/auth/google",
-  "/auth/google/callback",
   "/google/ads/test",
   "/google/accounts",
   "/google/accounts-direct",
