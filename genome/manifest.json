@@ -1,7 +1,7 @@
 {
-  "genome_version": "1.2.0-candidate",
-  "status": "FROZEN_FOR_MATERIALIZATION",
-  "minimum_compatible_version": "1.2.0-candidate",
+  "genome_version": "1.2.0",
+  "status": "ACTIVE",
+  "minimum_compatible_version": "1.2.0",
   "constitutional_core": "docs/dna/CORE_DNA.md",
   "policy": "docs/dna/POLICY_DNA.md",
   "validation_protocol": "docs/dna/VALIDATION_PROTOCOL.md",
