@@ -49,8 +49,9 @@
       "id": "CAP-DNA-BOOTSTRAP",
       "domain": "control_tower",
       "name": "Disposable-agent bootstrap from DNA/state",
-      "status": "IN_PROGRESS",
-      "done_criteria": ["fresh agent passes Bootstrap Test", "second fresh agent passes Recovery Test"]
+      "status": "VERIFIED",
+      "done_criteria": ["fresh agent passes Bootstrap Test", "second fresh agent passes Recovery Test"],
+      "evidence": ["Bootstrap PASS 12/12", "Recovery #1 operational PASS with state-loss detected and repaired", "Final Recovery PASS from durable repository state with no remaining state loss"]
     }
   ]
 }
