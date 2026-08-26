@@ -1,0 +1,36 @@
+{
+  "genome_version": "1.2.0-candidate",
+  "status": "FROZEN_FOR_MATERIALIZATION",
+  "minimum_compatible_version": "1.2.0-candidate",
+  "constitutional_core": "docs/dna/CORE_DNA.md",
+  "policy": "docs/dna/POLICY_DNA.md",
+  "validation_protocol": "docs/dna/VALIDATION_PROTOCOL.md",
+  "evolution_protocol": "docs/dna/EVOLUTION_PROTOCOL.md",
+  "agent_genomes": "docs/agents/AGENT_GENOMES.md",
+  "state_schema": "state/STATE_SCHEMA.json",
+  "capability_registry": "state/CAPABILITY_REGISTRY.json",
+  "current_state": "state/CURRENT_STATE.json",
+  "roadmap": "docs/MASTER_ROADMAP.md",
+  "promotion_requirements": [
+    "materialization_schema_check",
+    "bootstrap_test",
+    "recovery_test",
+    "no_open_architecture_p0"
+  ],
+  "self_modifiable_core": false,
+  "mutation_lifecycle": [
+    "PROPOSE",
+    "TARGET",
+    "PRECONDITION_CHECK",
+    "VALIDATE_1",
+    "VALIDATE_2",
+    "OFF_TARGET",
+    "REGRESSION",
+    "SHADOW",
+    "CANARY_IF_APPLICABLE",
+    "COMMIT",
+    "PROPAGATE",
+    "MEASURE",
+    "RETAIN_OR_REVERT"
+  ]
+}
