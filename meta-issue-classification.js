@@ -2,7 +2,20 @@ function issueText(issue = {}) {
   return `${issue.code || ''} ${issue.summary || ''} ${issue.message || ''}`.toLowerCase();
 }
 
+const KNOWN_ISSUE_CODES = Object.freeze({
+  // Meta describes this condition as an automatic pause related to a
+  // potentially compromised user or payment restriction. It is an account
+  // safety/billing condition, not a creative-performance diagnosis.
+  '2490455': { category:'account_or_billing', reason:'account_security_or_payment_restriction' },
+});
+
+function knownIssue(issue = {}) {
+  return KNOWN_ISSUE_CODES[String(issue.code || '').trim()] || null;
+}
+
 function classifyIssue(issue = {}) {
+  const known = knownIssue(issue);
+  if (known) return known.category;
   const text = issueText(issue);
   if (/payment|billing|spend limit|account disabled|account status/.test(text)) return 'account_or_billing';
   if (/permission|access|instagram account|page|asset/.test(text)) return 'asset_or_permission';
@@ -12,6 +25,10 @@ function classifyIssue(issue = {}) {
   if (/budget|bid|optimization|billing event|objective/.test(text)) return 'delivery_configuration';
   if (/schedule|start time|end time|date/.test(text)) return 'schedule';
   return 'unknown';
+}
+
+function issueReason(issue = {}) {
+  return knownIssue(issue)?.reason || classifyIssue(issue);
 }
 
 function safeIssueCode(value) {
@@ -40,6 +57,7 @@ function buildMetaIssueReport(issueDiagnostics = {}) {
     return acc;
   }, {});
   const issueCategories = {};
+  const issueReasons = {};
   const unknownCodes = {};
   let issueCount = 0;
   for (const row of rows) {
@@ -47,6 +65,8 @@ function buildMetaIssueReport(issueDiagnostics = {}) {
       issueCount += 1;
       const category = classifyIssue(issue);
       issueCategories[category] = (issueCategories[category] || 0) + 1;
+      const reason = issueReason(issue);
+      issueReasons[reason] = (issueReasons[reason] || 0) + 1;
       if (category === 'unknown') {
         const code = safeIssueCode(issue.code);
         if (code) unknownCodes[code] = (unknownCodes[code] || 0) + 1;
@@ -59,9 +79,10 @@ function buildMetaIssueReport(issueDiagnostics = {}) {
     // Legacy object-level counts retained for compatibility.
     categories,
     issue_categories: issueCategories,
+    issue_reasons: issueReasons,
     unknown_codes: unknownCodes,
     objects: rows,
   };
 }
 
-module.exports = { classifyIssue, safeIssueCode, buildMetaIssueReport };
+module.exports = { KNOWN_ISSUE_CODES, classifyIssue, issueReason, safeIssueCode, buildMetaIssueReport };

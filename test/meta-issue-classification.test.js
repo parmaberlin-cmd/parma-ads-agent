@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { classifyIssue, safeIssueCode, buildMetaIssueReport } = require('../meta-issue-classification');
+const { classifyIssue, issueReason, safeIssueCode, buildMetaIssueReport } = require('../meta-issue-classification');
 
 test('classifies common Meta issue families', () => {
   assert.equal(classifyIssue({message:'Instagram account permission missing'}), 'asset_or_permission');
@@ -24,6 +24,16 @@ test('builds campaign-adset-ad report without inventing causes', () => {
 
 test('unknown diagnostics remain unknown', () => {
   assert.equal(classifyIssue({message:'Unrecognized Meta condition'}), 'unknown');
+});
+
+test('classifies Meta automatic security or payment pause without inventing a creative fault', () => {
+  const issue = {code:'2490455'};
+  assert.equal(classifyIssue(issue), 'account_or_billing');
+  assert.equal(issueReason(issue), 'account_security_or_payment_restriction');
+  const report = buildMetaIssueReport({ads:[{issues:[issue,issue]}]});
+  assert.deepEqual(report.issue_categories, {account_or_billing:2});
+  assert.deepEqual(report.issue_reasons, {account_security_or_payment_restriction:2});
+  assert.deepEqual(report.unknown_codes, {});
 });
 
 test('report counts individual issues and exposes only safe unknown codes', () => {

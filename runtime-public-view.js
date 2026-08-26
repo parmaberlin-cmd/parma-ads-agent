@@ -67,6 +67,7 @@ function publicMetaDiagnostic(meta = {}) {
     affected_objects: Number(report.affected_objects || 0),
     issue_count: Number(report.issue_count || 0),
     issue_categories: report.issue_categories || report.categories || {},
+    issue_reasons: report.issue_reasons || {},
     unknown_issue_codes: report.unknown_codes || {},
   };
 }

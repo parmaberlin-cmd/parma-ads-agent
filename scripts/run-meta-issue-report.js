@@ -16,6 +16,7 @@ const { collectMetaShadowData } = require("../live-shadow-data");
       affected_objects: Number(issueReport.affected_objects || 0),
       issue_count: Number(issueReport.issue_count || 0),
       categories: issueReport.issue_categories || issueReport.categories || {},
+      reasons: issueReport.issue_reasons || {},
       unknown_codes: issueReport.unknown_codes || {},
     },
     writes_allowed: false,
