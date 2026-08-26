@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.2.0",
+  "genome_version": "1.2.0-candidate",
+  "global": {
+    "project_status": "DNA_MATERIALIZATION",
+    "current_p0": "Promote DNA v1.2 from candidate to active through materialization, bootstrap and recovery validation",
+    "last_meaningful_capability_gain": "Backend health endpoint verified reachable",
+    "infrastructure_progress": 65,
+    "autonomy_progress": 42
+  },
+  "agents": {
+    "control_tower": {"status": "ACTIVE", "focus": "DNA v1.2 materialization and validation"},
+    "google": {"status": "BLOCKED", "blocker": "Parma Agent API authentication prevents /tools/google/test from reaching Google Ads"},
+    "meta": {"status": "PARTIAL", "focus": "Meta read-only and controlled draft path"},
+    "engineering": {"status": "READY", "focus": "Backend, state, CI, automation infrastructure"},
+    "intelligence": {"status": "PARTIAL", "focus": "Decision engine design and validation"},
+    "automation": {"status": "PARTIAL", "focus": "Shadow cycle, scheduler, event/state orchestration"}
+  },
+  "tasks": [
+    {
+      "id": "DNA-001",
+      "owner": "control_tower",
+      "priority": "P0",
+      "status": "LEASED",
+      "evidence": "DNA v1.2 Candidate passed conceptual delta and regression review",
+      "expected_result": "Materialized genome passes schema check, Bootstrap Test and Recovery Test",
+      "dependencies": [],
+      "lease_owner": "control_tower",
+      "lease_until": null,
+      "idempotency_key": "dna-v1.2-materialization"
+    },
+    {
+      "id": "G-017",
+      "owner": "engineering",
+      "priority": "P0",
+      "status": "BLOCKED",
+      "evidence": "/tools/google/test returned Unauthorized before Google Ads was reached",
+      "expected_result": "Authenticated Parma Agent request reaches Google Ads test safely without exposing secrets",
+      "dependencies": [],
+      "lease_owner": null,
+      "lease_until": null,
+      "idempotency_key": "google-agent-auth-g017"
+    }
+  ],
+  "approvals": [],
+  "experiments": [],
+  "history_ref": null,
+  "mutation_graveyard_ref": null
+}
