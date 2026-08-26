@@ -17,7 +17,10 @@ function buildFunnelInput(base, ga4) {
   const reservationStartObserved = positiveCount(totals.reservation_start);
   const bookingObserved = positiveCount(totals.booking_completed);
   return {
-    landingAvailable: ga4?.access_ok === true && reservationPageObserved,
+    // Event observation proves availability, but a missing GA4 event does not
+    // prove that the public landing page is unavailable. Keep that state
+    // unknown so tracking gaps are not promoted to outage alerts.
+    landingAvailable: reservationPageObserved ? true : null,
     reservationPageConfigured: configured.has("reservation_page_view"),
     reservationPageObserved,
     bookingStartedConfigured: configured.has("reservation_start"),
@@ -48,7 +51,7 @@ async function collectFullLiveShadowInput({ env = process.env, days = 30, now = 
     ...base,
     funnel: ga4.access_ok
       ? buildFunnelInput(base, ga4)
-      : { landingAvailable: false, bookingStartedConfigured: false, bookingStartedTracked: false, bookingStartedObserved: false, analysis: null },
+      : { landingAvailable: null, bookingStartedConfigured: false, bookingStartedTracked: false, bookingStartedObserved: false, analysis: null },
     conversions: {
       ...base.conversions,
       booking_completed: ga4.access_ok ? Number(ga4.google_cpc_booking_completed || 0) : null,

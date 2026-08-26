@@ -11,7 +11,7 @@ function sourceStatus(snapshot = {}) {
   };
 }
 
-function buildReadonlyCycleState({ snapshot = {}, report = {}, history = [], now = new Date() } = {}) {
+function buildReadonlyCycleState({ snapshot = {}, report = {}, history = [], historyStorage = {}, now = new Date() } = {}) {
   const quality = snapshot.data_quality || {};
   const sources = sourceStatus(snapshot);
   const validationPassed = quality.integrity_ok === true && quality.confidence !== 'blocked';
@@ -22,7 +22,7 @@ function buildReadonlyCycleState({ snapshot = {}, report = {}, history = [], now
     shadowReport: { ...report, top_priorities: priorities, daily_manager: undefined },
     lastRunAt: snapshot.now || now.toISOString(),
   });
-  const historySummary = publicHistorySummary(history);
+  const historySummary = publicHistorySummary(history, historyStorage);
   const stages = {
     collect: { complete: Boolean(snapshot.now || snapshot.live_sources), sources },
     validate: { complete: true, passed: validationPassed, confidence: quality.confidence || 'unknown', blockers: quality.blockers || [] },

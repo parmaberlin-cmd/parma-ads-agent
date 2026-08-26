@@ -14,6 +14,7 @@ const { buildReadonlyCycleState, assertReadonlyCycleSafe } = require("./shadow-r
 const { buildOperationalDashboard } = require("./operational-dashboard");
 const { buildPublicSourceView } = require("./runtime-public-view");
 const { safePublicJson } = require("./public-output-safety");
+const { apiKeysMatch } = require("./api-key-auth");
 const {
   loadHistoryState,
   appendAndPersist,
@@ -45,7 +46,7 @@ let historyIntegrity = {
 
 function authorized(req) {
   const supplied = req.headers["x-api-key"] || String(req.headers["authorization"] || "").replace(/^Bearer\s+/i, "");
-  return Boolean(process.env.PARMA_AGENT_API_KEY && supplied === process.env.PARMA_AGENT_API_KEY);
+  return apiKeysMatch(supplied, process.env.PARMA_AGENT_API_KEY);
 }
 
 function buildRuntimeViews() {
@@ -107,6 +108,7 @@ function buildRuntimeViews() {
     snapshot: { now: r.generated_at, data_quality: r.data_quality, live_sources: r.live_sources },
     report: { conversion_integrity: r.conversion_integrity, anomalies: r.anomalies, daily_manager: r.daily_manager, mode: "shadow" },
     history: shadowHistory,
+    historyStorage: publicStorage,
   });
   assertReadonlyCycleSafe(cycle);
   const dashboard = buildOperationalDashboard({ summary, cycle, promotion });

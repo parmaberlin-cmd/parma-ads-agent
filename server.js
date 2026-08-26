@@ -2,6 +2,7 @@ const express = require("express");
 const path = require("path");
 const axios = require("axios");
 const { randomUUID } = require("crypto");
+const { apiKeysMatch } = require("./api-key-auth");
 const { GoogleAdsApi } = require("google-ads-api");
 const { buildGoogleReadiness, buildMetaOverview } = require("./reporting");
 const { buildMetaDinnerProposal } = require("./proposals");
@@ -111,7 +112,7 @@ function requireApiKey(req, res, next) {
     });
   }
 
-  if (!apiKey || apiKey !== PARMA_AGENT_API_KEY) {
+  if (!apiKeysMatch(apiKey, PARMA_AGENT_API_KEY)) {
     return res.status(401).json({
       success: false,
       error: "Unauthorized",
