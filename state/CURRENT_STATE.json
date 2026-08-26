@@ -1,18 +1,18 @@
 {
   "schema_version": "1.2.0",
-  "genome_version": "1.2.0-candidate",
+  "genome_version": "1.2.0",
   "global": {
-    "project_status": "DNA_PROMOTION_READY",
-    "current_p0": "Promote validated DNA v1.2 candidate to ACTIVE through the genome patch process",
-    "last_meaningful_capability_gain": "Disposable-agent Bootstrap and Recovery capability verified from durable repository state",
+    "project_status": "DNA_ACTIVE",
+    "current_p0": "Resolve G-017 so authenticated Parma Agent requests reach Google Ads, then verify campaign metrics end-to-end",
+    "last_meaningful_capability_gain": "DNA v1.2 ACTIVE and disposable-agent Bootstrap/Recovery capability verified",
     "infrastructure_progress": 65,
     "autonomy_progress": 42
   },
   "agents": {
-    "control_tower": {"status": "ACTIVE", "focus": "DNA v1.2 promotion gate"},
+    "control_tower": {"status": "ACTIVE", "focus": "Coordinate parallel workstreams from authoritative DNA/state"},
     "google": {"status": "BLOCKED", "blocker": "Parma Agent API authentication prevents /tools/google/test from reaching Google Ads"},
     "meta": {"status": "PARTIAL", "focus": "Meta read-only and controlled draft path"},
-    "engineering": {"status": "READY", "focus": "Backend, state, CI, automation infrastructure"},
+    "engineering": {"status": "ACTIVE", "focus": "G-017 authenticated backend path to Google Ads"},
     "intelligence": {"status": "PARTIAL", "focus": "Decision engine design and validation"},
     "automation": {"status": "PARTIAL", "focus": "Shadow cycle, scheduler, event/state orchestration"}
   },
@@ -21,11 +21,11 @@
       "id": "DNA-001",
       "owner": "control_tower",
       "priority": "P0",
-      "status": "LEASED",
-      "evidence": "Materialization/schema PASS; Bootstrap PASS 12/12; Recovery #1 PASS with state-loss detected and repaired; Final Recovery PASS with no remaining state loss; architecture-P0 gate PASS",
-      "expected_result": "Promote authoritative genome from 1.2.0-candidate/FROZEN_FOR_MATERIALIZATION to DNA v1.2 ACTIVE using validated genome patch process",
+      "status": "DONE",
+      "evidence": "Materialization/schema PASS; Bootstrap PASS 12/12; Recovery #1 state-loss detected and repaired; Final Recovery PASS; architecture-P0 gate PASS; manifest promoted to 1.2.0 ACTIVE; CAP-DNA-BOOTSTRAP VERIFIED",
+      "expected_result": "DNA v1.2 is authoritative ACTIVE genome and fresh agents can bootstrap/recover from durable repository state",
       "dependencies": [],
-      "lease_owner": "control_tower",
+      "lease_owner": null,
       "lease_until": null,
       "idempotency_key": "dna-v1.2-materialization"
     },
@@ -43,30 +43,12 @@
     }
   ],
   "validation_checkpoints": {
-    "materialization_schema": {
-      "status": "PASS",
-      "evidence": "Materialized JSON schema syntax and CURRENT_STATE validation passed before Bootstrap execution"
-    },
-    "bootstrap": {
-      "status": "PASS",
-      "score": "12/12",
-      "evidence": "Fresh conversation reconstructed mission, authoritative candidate genome, invariants, delegation, six agents, global P0, capabilities, G-017 ownership, escalation rules, promotion gates and next tasks exclusively from repository sources"
-    },
-    "recovery_1": {
-      "status": "PASS_WITH_STATE_LOSS_DETECTED",
-      "evidence": "Second fresh instance recovered DNA-001 without duplication and routed G-017 to Engineering, but correctly detected that the prior Bootstrap PASS had not been durably checkpointed",
-      "state_loss": "Bootstrap PASS was real but absent from persistent state at recovery time",
-      "repair": "Persist validation checkpoints before starting any dependent validation stage"
-    },
-    "recovery_final": {
-      "status": "PASS",
-      "evidence": "Fresh instance reconstructed Bootstrap PASS, prior Recovery state-loss, repair, DNA-001 lease/idempotency, G-017 Engineering ownership and remaining promotion gate from repository alone",
-      "state_loss": null
-    },
-    "no_open_architecture_p0": {
-      "status": "PASS",
-      "evidence": "Roadmap M0 separates architecture promotion blockers from parallel domain P0 G-017; all architecture defects discovered by Bootstrap/Recovery are repaired and durably checkpointed. G-017 belongs to Engineering/M1 Google end-to-end and does not block M0."
-    }
+    "materialization_schema": {"status": "PASS", "evidence": "Materialized JSON schema syntax and CURRENT_STATE validation passed before Bootstrap execution"},
+    "bootstrap": {"status": "PASS", "score": "12/12", "evidence": "Fresh conversation reconstructed project and operating rules exclusively from repository sources"},
+    "recovery_1": {"status": "PASS_WITH_STATE_LOSS_DETECTED", "evidence": "Recovery succeeded but detected missing Bootstrap durable checkpoint", "state_loss": "Bootstrap PASS absent from persistent state at recovery time", "repair": "Persist validation checkpoints before starting any dependent validation stage"},
+    "recovery_final": {"status": "PASS", "evidence": "Fresh instance reconstructed complete validation chain and current task from repository alone", "state_loss": null},
+    "no_open_architecture_p0": {"status": "PASS", "evidence": "All M0 architecture defects repaired; G-017 belongs to Engineering/M1 and does not block M0"},
+    "dna_promotion": {"status": "PASS", "evidence": "Authoritative manifest promoted from 1.2.0-candidate/FROZEN_FOR_MATERIALIZATION to 1.2.0/ACTIVE after all promotion gates passed"}
   },
   "approvals": [],
   "experiments": [],
