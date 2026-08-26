@@ -14,7 +14,9 @@ const { collectMetaShadowData } = require("../live-shadow-data");
     campaign_counts: overview.campaign_counts || {},
     issue_report: {
       affected_objects: Number(issueReport.affected_objects || 0),
-      categories: issueReport.categories || {},
+      issue_count: Number(issueReport.issue_count || 0),
+      categories: issueReport.issue_categories || issueReport.categories || {},
+      unknown_codes: issueReport.unknown_codes || {},
     },
     writes_allowed: false,
   }, null, 2));

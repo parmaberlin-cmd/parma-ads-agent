@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { classifyIssue, buildMetaIssueReport } = require('../meta-issue-classification');
+const { classifyIssue, safeIssueCode, buildMetaIssueReport } = require('../meta-issue-classification');
 
 test('classifies common Meta issue families', () => {
   assert.equal(classifyIssue({message:'Instagram account permission missing'}), 'asset_or_permission');
@@ -24,4 +24,19 @@ test('builds campaign-adset-ad report without inventing causes', () => {
 
 test('unknown diagnostics remain unknown', () => {
   assert.equal(classifyIssue({message:'Unrecognized Meta condition'}), 'unknown');
+});
+
+test('report counts individual issues and exposes only safe unknown codes', () => {
+  const report = buildMetaIssueReport({
+    campaigns: [{ id:'private', issues:[
+      { code:'1885316', message:'Unrecognized Meta condition' },
+      { code:'bad secret text', message:'Another unrecognized condition' },
+      { code:'POLICY_REVIEW', message:'Ad rejected by policy review' },
+    ] }],
+  });
+  assert.equal(report.issue_count, 3);
+  assert.deepEqual(report.issue_categories, { unknown:2, policy_or_review:1 });
+  assert.deepEqual(report.unknown_codes, { '1885316':1 });
+  assert.equal(JSON.stringify(report.unknown_codes).includes('secret'), false);
+  assert.equal(safeIssueCode('123456789012345'), null);
 });

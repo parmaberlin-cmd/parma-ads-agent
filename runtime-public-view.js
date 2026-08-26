@@ -61,9 +61,13 @@ function publicGa4Diagnostic(ga4 = {}) {
 
 function publicMetaDiagnostic(meta = {}) {
   if (meta.access_ok !== true) return null;
+  const report = meta.overview?.issue_report || {};
   return {
     campaign_counts: meta.overview?.campaign_counts || {},
-    issue_categories: meta.overview?.issue_report?.categories || {},
+    affected_objects: Number(report.affected_objects || 0),
+    issue_count: Number(report.issue_count || 0),
+    issue_categories: report.issue_categories || report.categories || {},
+    unknown_issue_codes: report.unknown_codes || {},
   };
 }
 

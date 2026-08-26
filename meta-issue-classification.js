@@ -14,6 +14,12 @@ function classifyIssue(issue = {}) {
   return 'unknown';
 }
 
+function safeIssueCode(value) {
+  if (value == null) return null;
+  const code = String(value).trim();
+  return /^[A-Za-z][A-Za-z0-9_.:-]{0,31}$/.test(code) || /^\d{1,9}$/.test(code) ? code : null;
+}
+
 function buildMetaIssueReport(issueDiagnostics = {}) {
   const rows = [];
   for (const level of ['campaigns', 'adsets', 'ads']) {
@@ -33,7 +39,29 @@ function buildMetaIssueReport(issueDiagnostics = {}) {
     for (const category of row.categories) acc[category] = (acc[category] || 0) + 1;
     return acc;
   }, {});
-  return { affected_objects: rows.length, categories, objects: rows };
+  const issueCategories = {};
+  const unknownCodes = {};
+  let issueCount = 0;
+  for (const row of rows) {
+    for (const issue of row.issues) {
+      issueCount += 1;
+      const category = classifyIssue(issue);
+      issueCategories[category] = (issueCategories[category] || 0) + 1;
+      if (category === 'unknown') {
+        const code = safeIssueCode(issue.code);
+        if (code) unknownCodes[code] = (unknownCodes[code] || 0) + 1;
+      }
+    }
+  }
+  return {
+    affected_objects: rows.length,
+    issue_count: issueCount,
+    // Legacy object-level counts retained for compatibility.
+    categories,
+    issue_categories: issueCategories,
+    unknown_codes: unknownCodes,
+    objects: rows,
+  };
 }
 
-module.exports = { classifyIssue, buildMetaIssueReport };
+module.exports = { classifyIssue, safeIssueCode, buildMetaIssueReport };
