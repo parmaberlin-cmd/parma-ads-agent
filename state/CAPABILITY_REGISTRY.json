@@ -1,0 +1,56 @@
+{
+  "registry_version": "1.2.0",
+  "measurement_rule": "Progress increases only when an end-to-end capability is verified against its DONE criteria.",
+  "capabilities": [
+    {
+      "id": "CAP-BACKEND-HEALTH",
+      "domain": "engineering",
+      "name": "Backend health reachable",
+      "status": "VERIFIED",
+      "done_criteria": ["public health endpoint responds successfully"]
+    },
+    {
+      "id": "CAP-GOOGLE-AUTH",
+      "domain": "google",
+      "name": "Authenticated Google Ads reader",
+      "status": "BLOCKED",
+      "done_criteria": ["agent-authenticated /tools/google/test succeeds", "request reaches Google Ads API", "result is independently validated"]
+    },
+    {
+      "id": "CAP-GOOGLE-CAMPAIGN-METRICS",
+      "domain": "google",
+      "name": "Live campaign metrics reader",
+      "status": "PENDING",
+      "depends_on": ["CAP-GOOGLE-AUTH"],
+      "done_criteria": ["campaign metrics are read end-to-end", "values match Google Ads UI for same date window"]
+    },
+    {
+      "id": "CAP-META-READ",
+      "domain": "meta",
+      "name": "Meta read-only diagnostics",
+      "status": "PARTIAL",
+      "done_criteria": ["connected assets and campaign metrics can be collected reliably", "live preflight remains safe"]
+    },
+    {
+      "id": "CAP-DECISION-ENGINE",
+      "domain": "intelligence",
+      "name": "Evidence-based recommendation engine",
+      "status": "PARTIAL",
+      "done_criteria": ["recommendations include evidence, confidence, expected impact, risk and permission class", "recommendations are validated against real outcomes"]
+    },
+    {
+      "id": "CAP-PERSISTENT-ORCHESTRATION",
+      "domain": "automation",
+      "name": "Persistent autonomous operating loop",
+      "status": "PARTIAL",
+      "done_criteria": ["scheduled collect-validate-analyze-detect-prioritize-measure cycle survives restart", "state is durable", "human intervention is required only by policy"]
+    },
+    {
+      "id": "CAP-DNA-BOOTSTRAP",
+      "domain": "control_tower",
+      "name": "Disposable-agent bootstrap from DNA/state",
+      "status": "IN_PROGRESS",
+      "done_criteria": ["fresh agent passes Bootstrap Test", "second fresh agent passes Recovery Test"]
+    }
+  ]
+}
