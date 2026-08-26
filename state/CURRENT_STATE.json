@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.2.0",
+  "genome_version": "1.2.0",
+  "global": {
+    "project_status": "DNA_ACTIVE",
+    "current_p0": "Resolve G-017 so authenticated Parma Agent requests reach Google Ads, then verify campaign metrics end-to-end",
+    "last_meaningful_capability_gain": "DNA v1.2 ACTIVE and disposable-agent Bootstrap/Recovery capability verified",
+    "infrastructure_progress": 65,
+    "autonomy_progress": 42
+  },
+  "agents": {
+    "control_tower": {"status": "ACTIVE", "focus": "Coordinate parallel workstreams from authoritative DNA/state"},
+    "google": {"status": "BLOCKED", "blocker": "Parma Agent API authentication prevents /tools/google/test from reaching Google Ads"},
+    "meta": {"status": "PARTIAL", "focus": "Meta read-only and controlled draft path"},
+    "engineering": {"status": "ACTIVE", "focus": "G-017 authenticated backend path to Google Ads"},
+    "intelligence": {"status": "PARTIAL", "focus": "Decision engine design and validation"},
+    "automation": {"status": "PARTIAL", "focus": "Shadow cycle, scheduler, event/state orchestration"}
+  },
+  "tasks": [
+    {
+      "id": "DNA-001",
+      "owner": "control_tower",
+      "priority": "P0",
+      "status": "DONE",
+      "evidence": "Materialization/schema PASS; Bootstrap PASS 12/12; Recovery #1 state-loss detected and repaired; Final Recovery PASS; architecture-P0 gate PASS; manifest promoted to 1.2.0 ACTIVE; CAP-DNA-BOOTSTRAP VERIFIED",
+      "expected_result": "DNA v1.2 is authoritative ACTIVE genome and fresh agents can bootstrap/recover from durable repository state",
+      "dependencies": [],
+      "lease_owner": null,
+      "lease_until": null,
+      "idempotency_key": "dna-v1.2-materialization"
+    },
+    {
+      "id": "G-017",
+      "owner": "engineering",
+      "priority": "P0",
+      "status": "BLOCKED",
+      "evidence": "/tools/google/test returned Unauthorized before Google Ads was reached",
+      "expected_result": "Authenticated Parma Agent request reaches Google Ads test safely without exposing secrets",
+      "dependencies": [],
+      "lease_owner": null,
+      "lease_until": null,
+      "idempotency_key": "google-agent-auth-g017"
+    }
+  ],
+  "validation_checkpoints": {
+    "materialization_schema": {"status": "PASS", "evidence": "Materialized JSON schema syntax and CURRENT_STATE validation passed before Bootstrap execution"},
+    "bootstrap": {"status": "PASS", "score": "12/12", "evidence": "Fresh conversation reconstructed project and operating rules exclusively from repository sources"},
+    "recovery_1": {"status": "PASS_WITH_STATE_LOSS_DETECTED", "evidence": "Recovery succeeded but detected missing Bootstrap durable checkpoint", "state_loss": "Bootstrap PASS absent from persistent state at recovery time", "repair": "Persist validation checkpoints before starting any dependent validation stage"},
+    "recovery_final": {"status": "PASS", "evidence": "Fresh instance reconstructed complete validation chain and current task from repository alone", "state_loss": null},
+    "no_open_architecture_p0": {"status": "PASS", "evidence": "All M0 architecture defects repaired; G-017 belongs to Engineering/M1 and does not block M0"},
+    "dna_promotion": {"status": "PASS", "evidence": "Authoritative manifest promoted from 1.2.0-candidate/FROZEN_FOR_MATERIALIZATION to 1.2.0/ACTIVE after all promotion gates passed"}
+  },
+  "approvals": [],
+  "experiments": [],
+  "history_ref": "state/CURRENT_STATE.json#validation_checkpoints",
+  "mutation_graveyard_ref": null
+}
