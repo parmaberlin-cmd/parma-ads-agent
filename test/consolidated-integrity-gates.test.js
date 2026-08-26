@@ -27,6 +27,22 @@ test("missing freshness blocks optimization despite matching conversion totals",
   assert.ok(result.issues.includes("ga4_freshness_unknown"));
 });
 
+test("fresh collection is not marked stale when the latest business event is old", () => {
+  const result = assessConversionIntegrity({
+    googleAdsConversions: 8,
+    ga4Bookings: 8,
+    googleLastSeenAt: "2026-08-20T12:00:00Z",
+    ga4LastSeenAt: "2026-08-20T12:00:00Z",
+    googleCollectedAt: "2026-08-26T08:55:00Z",
+    ga4CollectedAt: "2026-08-26T08:55:00Z",
+    now: new Date("2026-08-26T09:00:00Z"),
+  });
+  assert.equal(result.optimization_allowed, true);
+  assert.equal(result.freshness.ga4.stale, false);
+  assert.equal(result.business_event_recency.ga4_last_seen_at, "2026-08-20T12:00:00Z");
+  assert.equal(result.issues.includes("ga4_booking_signal_stale"), false);
+});
+
 test("known keywords suppress duplicate expansion proposals", () => {
   const recommendations = analyzeSearchTerms([
     { search_term: "bio pizza berlin", keyword: "pizza berlin", clicks: 8, cost_eur: 6, conversions: 3 },

@@ -15,6 +15,8 @@ function assessConversionIntegrity({
   ga4Bookings = null,
   googleLastSeenAt = null,
   ga4LastSeenAt = null,
+  googleCollectedAt = null,
+  ga4CollectedAt = null,
   now = new Date(),
   staleAfterHours = 48,
   toleranceRatio = 0.35,
@@ -43,8 +45,14 @@ function assessConversionIntegrity({
     return { present: true, stale };
   }
 
-  const googleFreshness = freshness(googleLastSeenAt, googleAvailable, "google_ads_freshness_unknown", "google_ads_conversion_signal_stale");
-  const ga4Freshness = freshness(ga4LastSeenAt, ga4Available, "ga4_freshness_unknown", "ga4_booking_signal_stale");
+  // Source freshness must describe when the collector successfully ran. The
+  // latest business event can legitimately be old (for example, no paid
+  // booking yesterday) without meaning that Google Ads or GA4 telemetry is
+  // stale. Keep the legacy fallback for callers that have not been migrated.
+  const googleFreshnessAt = googleCollectedAt || googleLastSeenAt;
+  const ga4FreshnessAt = ga4CollectedAt || ga4LastSeenAt;
+  const googleFreshness = freshness(googleFreshnessAt, googleAvailable, "google_ads_freshness_unknown", "google_ads_conversion_signal_stale");
+  const ga4Freshness = freshness(ga4FreshnessAt, ga4Available, "ga4_freshness_unknown", "ga4_booking_signal_stale");
 
   let discrepancyRatio = null;
   let comparableVolume = false;
@@ -78,6 +86,10 @@ function assessConversionIntegrity({
     minimum_comparable_conversions: minimumComparableConversions,
     comparable_volume: comparableVolume,
     freshness: { google_ads: googleFreshness, ga4: ga4Freshness },
+    business_event_recency: {
+      google_ads_last_seen_at: googleLastSeenAt || null,
+      ga4_last_seen_at: ga4LastSeenAt || null,
+    },
     issues,
   };
 }

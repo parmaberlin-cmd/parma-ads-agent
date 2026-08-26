@@ -57,6 +57,8 @@ async function collectFullLiveShadowInput({ env = process.env, days = 30, now = 
       booking_completed: ga4.access_ok ? Number(ga4.google_cpc_booking_completed || 0) : null,
       ga4_total_booking_completed: ga4.access_ok ? Number(ga4.total_booking_completed || 0) : null,
       ga4_last_seen_at: ga4.access_ok ? ga4.last_seen_at : null,
+      google_collected_at: base?.live_sources?.google?.collected_at || base?.now || null,
+      ga4_collected_at: ga4.access_ok ? ga4.collected_at : null,
     },
     access: {
       ...base.access,

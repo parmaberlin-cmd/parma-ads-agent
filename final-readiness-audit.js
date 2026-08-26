@@ -45,6 +45,7 @@ function buildFinalReadinessAudit({ summary = {}, metaPreflight = {}, now = new 
     const text = String(blocker || '');
     if (/google|ga4|meta|history:storage|history:integrity/i.test(text)) continue;
     if (/regression_suite_not_verified/i.test(text)) add(external, 'runtime_build_validation_flag', text);
+    else if (/conversion_integrity_untrusted/i.test(text)) add(timeBased, 'conversion_integrity_evidence', text);
     else if (/insufficient|history:/i.test(text)) add(timeBased, 'promotion_history_gate', text);
     else add(software, 'promotion_gate', text);
   }

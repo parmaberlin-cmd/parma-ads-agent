@@ -16,6 +16,8 @@ function buildShadowAgentReport(input = {}) {
     ga4Bookings: conversions.booking_completed ?? null,
     googleLastSeenAt: conversions.google_last_seen_at || null,
     ga4LastSeenAt: conversions.ga4_last_seen_at || null,
+    googleCollectedAt: conversions.google_collected_at || null,
+    ga4CollectedAt: conversions.ga4_collected_at || null,
     now: input.now ? new Date(input.now) : new Date(),
   });
 
@@ -27,6 +29,8 @@ function buildShadowAgentReport(input = {}) {
     ga4Bookings: conversions.booking_completed,
     googleLastSeenAt: conversions.google_last_seen_at,
     ga4LastSeenAt: conversions.ga4_last_seen_at,
+    googleCollectedAt: conversions.google_collected_at,
+    ga4CollectedAt: conversions.ga4_collected_at,
     now: input.now ? new Date(input.now) : new Date(),
   });
   const anomalies = [
