@@ -23,3 +23,11 @@ test("RSA set prioritizes high severity issues",()=>{
   ]);
   assert.equal(rows[0].ad_id,"high");
 });
+
+test("RSA analyzer translates numeric Google ad strength enums",()=>{
+  const poor=analyzeRsa({ad_strength:4,headlines:Array(8).fill("Long headline"),descriptions:Array(3).fill("Description"),metrics:{}});
+  const good=analyzeRsa({ad_strength:6,headlines:Array(8).fill("Long headline"),descriptions:Array(3).fill("Description"),metrics:{}});
+  assert.equal(poor.ad_strength,"POOR");
+  assert.ok(poor.issues.some(issue=>issue.code==="RSA_AD_STRENGTH_WEAK"));
+  assert.equal(good.ad_strength,"GOOD");
+});

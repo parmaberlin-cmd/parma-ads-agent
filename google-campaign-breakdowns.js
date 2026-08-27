@@ -6,6 +6,21 @@ function numberOrNull(value) {
   return value == null ? null : Number(value);
 }
 
+function enumName(value, names) {
+  if (value == null) return null;
+  if (typeof value === "string" && !/^\d+$/.test(value)) return value;
+  return names[Number(value)] || String(value);
+}
+
+const STATUS = {0:"UNSPECIFIED",1:"UNKNOWN",2:"ENABLED",3:"PAUSED",4:"REMOVED"};
+const PRIMARY_STATUS = {0:"UNSPECIFIED",1:"UNKNOWN",2:"ELIGIBLE",3:"PAUSED",4:"REMOVED",5:"ENDED",6:"PENDING",7:"MISCONFIGURED",8:"LIMITED",9:"LEARNING",10:"NOT_ELIGIBLE"};
+const CHANNEL = {0:"UNSPECIFIED",1:"UNKNOWN",2:"SEARCH",3:"DISPLAY",4:"SHOPPING",5:"HOTEL",6:"VIDEO",7:"MULTI_CHANNEL",8:"LOCAL",9:"SMART",10:"PERFORMANCE_MAX",11:"LOCAL_SERVICES",13:"TRAVEL",14:"DEMAND_GEN"};
+const AD_GROUP_TYPE = {0:"UNSPECIFIED",1:"UNKNOWN",2:"SEARCH_STANDARD",3:"DISPLAY_STANDARD",4:"SHOPPING_PRODUCT_ADS",6:"HOTEL_ADS",13:"SEARCH_DYNAMIC_ADS",16:"VIDEO_RESPONSIVE"};
+const KEYWORD_MATCH = {0:"UNSPECIFIED",1:"UNKNOWN",2:"EXACT",3:"PHRASE",4:"BROAD"};
+const DEVICE = {0:"UNSPECIFIED",1:"UNKNOWN",2:"MOBILE",3:"TABLET",4:"DESKTOP",5:"CONNECTED_TV",6:"OTHER"};
+const DAY = {0:"UNSPECIFIED",1:"UNKNOWN",2:"MONDAY",3:"TUESDAY",4:"WEDNESDAY",5:"THURSDAY",6:"FRIDAY",7:"SATURDAY",8:"SUNDAY"};
+const GEO_TYPE = {0:"UNSPECIFIED",1:"UNKNOWN",2:"AREA_OF_INTEREST",3:"LOCATION_OF_PRESENCE"};
+
 function validateInput({ customer, campaignId, start, end }) {
   if (!customer || typeof customer.query !== "function") throw new TypeError("customer.query is required");
   if (!/^\d{1,20}$/.test(String(campaignId || ""))) throw new TypeError("campaignId is invalid");
@@ -27,7 +42,7 @@ function metricFields(row) {
 async function collectCampaignSearchTerms({ customer, campaignId, start, end }) {
   validateInput({ customer, campaignId, start, end });
   const rows = await customer.query(`
-    SELECT campaign.id, ad_group.id, search_term_view.search_term,
+    SELECT campaign.id, ad_group.id, ad_group.name, search_term_view.search_term,
       segments.keyword.info.text, segments.keyword.info.match_type,
       metrics.impressions, metrics.clicks, metrics.cost_micros,
       metrics.conversions, metrics.conversions_value
@@ -40,7 +55,7 @@ async function collectCampaignSearchTerms({ customer, campaignId, start, end }) 
     ad_group: row.ad_group?.name || null,
     search_term: row.search_term_view?.search_term || null,
     matched_keyword: row.segments?.keyword?.info?.text || null,
-    match_type: row.segments?.keyword?.info?.match_type || null,
+    match_type: enumName(row.segments?.keyword?.info?.match_type, KEYWORD_MATCH),
     ...metricFields(row),
   }));
 }
@@ -61,8 +76,8 @@ async function collectCampaignKeywords({ customer, campaignId, start, end }) {
     ad_group_id: String(row.ad_group?.id || ""),
     ad_group: row.ad_group?.name || null,
     keyword: row.ad_group_criterion?.keyword?.text || null,
-    match_type: row.ad_group_criterion?.keyword?.match_type || null,
-    status: row.ad_group_criterion?.status || null,
+    match_type: enumName(row.ad_group_criterion?.keyword?.match_type, KEYWORD_MATCH),
+    status: enumName(row.ad_group_criterion?.status, STATUS),
     ...metricFields(row),
   }));
 }
@@ -76,7 +91,7 @@ async function collectCampaignDevices({ customer, campaignId, start, end }) {
     WHERE campaign.id = ${campaignId}
       AND segments.date BETWEEN '${start}' AND '${end}'
   `);
-  return (rows || []).map((row) => ({ device: row.segments?.device || "UNKNOWN", ...metricFields(row) }));
+  return (rows || []).map((row) => ({ device: enumName(row.segments?.device, DEVICE) || "UNKNOWN", ...metricFields(row) }));
 }
 
 async function collectCampaignHours({ customer, campaignId, start, end }) {
@@ -89,7 +104,7 @@ async function collectCampaignHours({ customer, campaignId, start, end }) {
       AND segments.date BETWEEN '${start}' AND '${end}'
   `);
   return (rows || []).map((row) => ({
-    day_of_week: row.segments?.day_of_week || null,
+    day_of_week: enumName(row.segments?.day_of_week, DAY),
     hour: Number(row.segments?.hour || 0),
     ...metricFields(row),
   }));
@@ -107,7 +122,7 @@ async function collectCampaignGeography({ customer, campaignId, start, end }) {
   `);
   return (rows || []).map((row) => ({
     country_criterion_id: String(row.geographic_view?.country_criterion_id || ""),
-    location_type: row.geographic_view?.location_type || null,
+    location_type: enumName(row.geographic_view?.location_type, GEO_TYPE),
     ...metricFields(row),
   }));
 }
@@ -132,10 +147,10 @@ async function collectCampaignOverview({ customer, campaignId, start, end }) {
   return (rows || []).map((row) => ({
     campaign_id: String(row.campaign?.id || ""),
     campaign: row.campaign?.name || null,
-    status: row.campaign?.status || null,
-    primary_status: row.campaign?.primary_status || null,
+    status: enumName(row.campaign?.status, STATUS),
+    primary_status: enumName(row.campaign?.primary_status, PRIMARY_STATUS),
     primary_status_reasons: row.campaign?.primary_status_reasons || [],
-    channel_type: row.campaign?.advertising_channel_type || null,
+    channel_type: enumName(row.campaign?.advertising_channel_type, CHANNEL),
     daily_budget_eur: microsToEur(row.campaign_budget?.amount_micros),
     ...metricFields(row),
     search_impression_share: numberOrNull(row.metrics?.search_impression_share),
@@ -161,10 +176,10 @@ async function collectCampaignAdGroups({ customer, campaignId, start, end }) {
   return (rows || []).map((row) => ({
     ad_group_id: String(row.ad_group?.id || ""),
     ad_group: row.ad_group?.name || null,
-    status: row.ad_group?.status || null,
-    primary_status: row.ad_group?.primary_status || null,
+    status: enumName(row.ad_group?.status, STATUS),
+    primary_status: enumName(row.ad_group?.primary_status, PRIMARY_STATUS),
     primary_status_reasons: row.ad_group?.primary_status_reasons || [],
-    type: row.ad_group?.type || null,
+    type: enumName(row.ad_group?.type, AD_GROUP_TYPE),
     ...metricFields(row),
   }));
 }
