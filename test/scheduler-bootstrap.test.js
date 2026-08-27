@@ -6,8 +6,10 @@ const path = require('node:path');
 const scheduler = fs.readFileSync(path.join(__dirname, '..', 'scheduler-bootstrap.js'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
 
-test('production startup uses the read-only Shadow scheduler', () => {
-  assert.equal(pkg.scripts.start, 'node -r ./meta-legacy-write-preload.js scheduler-bootstrap.js');
+test('production startup uses the read-only Shadow scheduler and Google intelligence preload', () => {
+  assert.equal(pkg.scripts.start, 'node -r ./google-campaign-intelligence-preload.js -r ./meta-legacy-write-preload.js scheduler-bootstrap.js');
+  assert.match(pkg.scripts.check, /google-campaign-intelligence-preload\.js/);
+  assert.match(pkg.scripts.check, /google-campaign-breakdowns\.js/);
   assert.match(pkg.scripts.check, /scheduler-bootstrap\.js/);
 });
 
