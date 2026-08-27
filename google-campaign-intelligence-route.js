@@ -40,7 +40,7 @@ function installGoogleCampaignIntelligenceRoute({
         collectCampaignGeography({ customer, campaignId, start, end }),
         collectResponsiveSearchAds({ customer, campaignId, start, end }),
       ]);
-      res.json({ success:true, source:"google_ads", mode:"read_only_intelligence", campaign_id:campaignId, period_days:days, date_range:{start,end}, overview, ad_groups, search_terms, keywords, devices, hours, geography, rsa_ads, rsa_analysis:analyzeRsaSet(rsa_ads), writes_allowed:false, execution_allowed:false, spend_allowed:false });
+      res.json({ success:true, source:"google_ads", mode:"read_only_intelligence", reader_version:2, campaign_id:campaignId, period_days:days, date_range:{start,end}, overview, ad_groups, search_terms, keywords, devices, hours, geography, rsa_ads, rsa_analysis:analyzeRsaSet(rsa_ads), writes_allowed:false, execution_allowed:false, spend_allowed:false });
     } catch (error) {
       res.status(500).json({ success:false, source:"google_ads", campaign_id:campaignId, error:cleanGoogleError(error), writes_allowed:false, execution_allowed:false, spend_allowed:false });
     }
