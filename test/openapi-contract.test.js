@@ -37,6 +37,13 @@ test("Google campaign metric routes are declared in OpenAPI and implemented by t
   assert.ok(server.includes("handleGoogleCampaignMetrics"), "shared Google campaign metric handler is missing");
 });
 
+test("complete Google campaign intelligence is declared as a protected read-only endpoint", () => {
+  assert.ok(openapi.includes("/tools/google/campaign/{id}/intelligence:"));
+  assert.ok(openapi.includes("operationId: getGoogleCampaignIntelligence"));
+  assert.ok(openapi.includes("complete read-only Google Ads campaign diagnostics"));
+  assert.ok(server.includes("installGoogleCampaignIntelligenceRoute"));
+});
+
 test("Meta campaign metrics remain on a distinct namespace", () => {
   assert.ok(openapi.includes("/tools/meta/campaign/{id}/metrics:"));
   assert.ok(openapi.includes("operationId: getMetaCampaignMetrics"));
