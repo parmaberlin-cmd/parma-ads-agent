@@ -70,6 +70,7 @@ function startReadonlyShadowScheduler({ env = process.env, client = axios } = {}
 }
 
 require('./operational-live-pulse-preload');
+require('./google-campaign-intelligence-preload');
 require('./bootstrap');
 startReadonlyShadowScheduler();
 
