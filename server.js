@@ -4,6 +4,9 @@ const axios = require("axios");
 const { randomUUID } = require("crypto");
 const { apiKeysMatch } = require("./api-key-auth");
 const { GoogleAdsApi } = require("google-ads-api");
+const {
+  installGoogleCampaignIntelligenceRoute,
+} = require("./google-campaign-intelligence-route");
 const { buildGoogleReadiness, buildMetaOverview } = require("./reporting");
 const { buildMetaDinnerProposal } = require("./proposals");
 const {
@@ -1870,6 +1873,17 @@ app.get(
   requireApiKey,
   handleGoogleCampaignMetrics
 );
+
+installGoogleCampaignIntelligenceRoute({
+  app,
+  requireApiKey,
+  checkGoogleConfig,
+  parseGoogleCampaignId,
+  parseGoogleDays,
+  getGoogleDateRange,
+  getGoogleCustomer,
+  cleanGoogleError,
+});
 
 /*
  * Backward-compatible route.
