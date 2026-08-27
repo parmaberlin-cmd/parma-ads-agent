@@ -69,15 +69,16 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://supportive-stillness-production-ec37.up.railway.app"; CAMPAIGN_ID="23276824770"; DAYS="30"
-          code="000"; success="false"
+          code="000"; success="false"; complete="false"
           for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
             code=$(curl -sS -o intelligence.json -w "%{http_code}" -H "x-api-key: $PARMA_AGENT_API_KEY" "$BASE/tools/google/campaign/$CAMPAIGN_ID/intelligence?days=$DAYS" || true)
             success=$(jq -r '.success // false' intelligence.json 2>/dev/null || echo false)
-            if [ "$code" = "200" ] && [ "$success" = "true" ]; then break; fi
+            complete=$(jq -r '(.success == true) and ((.overview|type) == "array") and ((.ad_groups|type) == "array") and ((.rsa_ads|type) == "array") and ((.rsa_analysis|type) == "array")' intelligence.json 2>/dev/null || echo false)
+            if [ "$code" = "200" ] && [ "$complete" = "true" ]; then break; fi
             sleep 15
           done
-          echo "intelligence=${success}; http=${code}"
-          if [ "$code" = "200" ] && [ "$success" = "true" ]; then
+          echo "intelligence=${success}; complete_reader=${complete}; http=${code}"
+          if [ "$code" = "200" ] && [ "$complete" = "true" ]; then
             jq '{success,mode,campaign_id,period_days,date_range,counts:{overview:(.overview|length),ad_groups:(.ad_groups|length),search_terms:(.search_terms|length),keywords:(.keywords|length),devices:(.devices|length),hours:(.hours|length),geography:(.geography|length),rsa_ads:(.rsa_ads|length),rsa_analysis:(.rsa_analysis|length)},campaign_overview:(.overview|map(del(.campaign_id))),top_ad_groups:(.ad_groups|sort_by(-.clicks)|.[0:20]|map(del(.ad_group_id))),top_search_terms:(.search_terms|sort_by(-.clicks)|.[0:12]|map(del(.ad_group_id))),top_keywords:(.keywords|sort_by(-.clicks)|.[0:12]|map(del(.ad_group_id))),devices,top_hours:(.hours|sort_by(-.clicks)|.[0:20]),top_geography:(.geography|sort_by(-.clicks)|.[0:20]),rsa_diagnostics:(.rsa_analysis|map(del(.ad_id,.campaign))),writes_allowed,execution_allowed,spend_allowed}' intelligence.json
           else
             jq '{success,error,writes_allowed,execution_allowed,spend_allowed}' intelligence.json 2>/dev/null || true
