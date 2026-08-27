@@ -62,3 +62,37 @@ jobs:
           curl --fail-with-body -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/$REPO/statuses/$SHA" -d "$payload"
           echo "google=${google}; category=${safe_category}; reason=${safe_reason}; enum=${safe_enum}; family=${safe_family}; token_len_ok=${token_len_ok}; token_trim_ok=${token_trim_ok}; token_charset_ok=${token_charset_ok}; login_cfg=${login_cfg}; http=${code}"
           if [ "$state" != "success" ]; then exit 1; fi
+
+      - name: Verify sanitized Parma Google campaign metrics
+        env:
+          PARMA_AGENT_API_KEY: ${{ secrets.PARMA_AGENT_API_KEY }}
+        run: |
+          set -euo pipefail
+          BASE="https://supportive-stillness-production-ec37.up.railway.app"
+          CAMPAIGN_ID="23276824770"
+          DAYS="30"
+
+          if [ -z "${PARMA_AGENT_API_KEY:-}" ]; then
+            echo "campaign_metrics=blocked; reason=github_secret_missing"
+            exit 1
+          fi
+
+          code=$(curl -sS -o metrics.json -w "%{http_code}" \
+            -H "x-api-key: $PARMA_AGENT_API_KEY" \
+            "$BASE/tools/google/campaign/$CAMPAIGN_ID/metrics?days=$DAYS" || true)
+          success=$(jq -r '.success // false' metrics.json 2>/dev/null || echo false)
+          status=$(jq -r '.status // "unknown"' metrics.json 2>/dev/null || echo unknown)
+          rows=$(jq -r '.metrics | length // 0' metrics.json 2>/dev/null || echo 0)
+          impressions=$(jq -r '[.metrics[]?.impressions // 0] | add // 0' metrics.json 2>/dev/null || echo 0)
+          clicks=$(jq -r '[.metrics[]?.clicks // 0] | add // 0' metrics.json 2>/dev/null || echo 0)
+          cost=$(jq -r '[.metrics[]?.cost_eur // 0] | add // 0' metrics.json 2>/dev/null || echo 0)
+          conversions=$(jq -r '[.metrics[]?.conversions // 0] | add // 0' metrics.json 2>/dev/null || echo 0)
+
+          safe_status=$(printf '%s' "$status" | tr -cs 'A-Za-z0-9_-' '_' | cut -c1-20)
+          echo "campaign_metrics=${success}; http=${code}; campaign=${CAMPAIGN_ID}; days=${DAYS}; status=${safe_status}; rows=${rows}; impressions=${impressions}; clicks=${clicks}; cost_eur=${cost}; conversions=${conversions}"
+
+          if [ "$code" != "200" ] || [ "$success" != "true" ]; then
+            reason=$(jq -r '.error.code // .error.type // .error.message // .error // "unknown"' metrics.json 2>/dev/null | tr -cs 'A-Za-z0-9_-' '_' | cut -c1-40)
+            echo "campaign_metrics_failure=${reason}"
+            exit 1
+          fi
