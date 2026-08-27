@@ -1,6 +1,8 @@
-async function collectResponsiveSearchAds({customer,start,end}){
+async function collectResponsiveSearchAds({customer,campaignId,start,end}){
   if(!customer||typeof customer.query!=="function")throw new TypeError("customer.query is required");
+  if(campaignId!=null&&!/^\d{1,20}$/.test(String(campaignId)))throw new TypeError("campaignId is invalid");
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(start||""))||!/^\d{4}-\d{2}-\d{2}$/.test(String(end||"")))throw new TypeError("start and end must be YYYY-MM-DD");
+  const campaignFilter=campaignId==null?"":`\n      AND campaign.id = ${campaignId}`;
   const rows=await customer.query(`
     SELECT campaign.id, campaign.name, ad_group.id, ad_group.name,
       ad_group_ad.ad.id, ad_group_ad.status, ad_group_ad.ad_strength,
@@ -11,6 +13,7 @@ async function collectResponsiveSearchAds({customer,start,end}){
     FROM ad_group_ad
     WHERE ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'
       AND ad_group_ad.status != 'REMOVED'
+      ${campaignFilter}
       AND segments.date BETWEEN '${start}' AND '${end}'
   `);
   return (rows||[]).map(row=>({
