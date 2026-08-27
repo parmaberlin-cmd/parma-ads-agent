@@ -45,6 +45,18 @@ test('overview maps budget and search impression share diagnostics', async () =>
   assert.equal(row.cost_eur,5);
 });
 
+test('numeric Google enums become readable diagnostic labels', async () => {
+  const capture=[];
+  const [overview]=await collectCampaignOverview({customer:customerWith({campaign:{id:'23276824770',status:2,primary_status:2,advertising_channel_type:2},metrics:{}},capture),...args});
+  const [device]=await collectCampaignDevices({customer:customerWith({segments:{device:2},metrics:{}},capture),...args});
+  const [hour]=await collectCampaignHours({customer:customerWith({segments:{day_of_week:6,hour:18},metrics:{}},capture),...args});
+  const [geo]=await collectCampaignGeography({customer:customerWith({geographic_view:{location_type:3},metrics:{}},capture),...args});
+  assert.deepEqual([overview.status,overview.primary_status,overview.channel_type],['ENABLED','ELIGIBLE','SEARCH']);
+  assert.equal(device.device,'MOBILE');
+  assert.equal(hour.day_of_week,'FRIDAY');
+  assert.equal(geo.location_type,'LOCATION_OF_PRESENCE');
+});
+
 test('ad groups, search terms and keywords retain their ad-group context', async () => {
   const source={ad_group:{id:'12',name:'Core',status:'ENABLED',primary_status:'ELIGIBLE',primary_status_reasons:[],type:'SEARCH_STANDARD'},search_term_view:{search_term:'pizza near me'},segments:{keyword:{info:{text:'pizza',match_type:'PHRASE'}}},ad_group_criterion:{keyword:{text:'pizza',match_type:'PHRASE'},status:'ENABLED'},metrics:{impressions:10,clicks:2,cost_micros:1000000,conversions:1,conversions_value:20}};
   const capture=[];
