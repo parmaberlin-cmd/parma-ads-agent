@@ -42,7 +42,7 @@ async function collectCampaignSearchTerms({ customer, campaignId, start, end }) 
 async function collectCampaignKeywords({ customer, campaignId, start, end }) {
   validateInput({ customer, campaignId, start, end });
   const rows = await customer.query(`
-    SELECT ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type,
+    SELECT campaign.id, ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type,
       ad_group_criterion.status, metrics.impressions, metrics.clicks,
       metrics.cost_micros, metrics.conversions, metrics.conversions_value
     FROM keyword_view
@@ -61,7 +61,7 @@ async function collectCampaignKeywords({ customer, campaignId, start, end }) {
 async function collectCampaignDevices({ customer, campaignId, start, end }) {
   validateInput({ customer, campaignId, start, end });
   const rows = await customer.query(`
-    SELECT segments.device, metrics.impressions, metrics.clicks,
+    SELECT campaign.id, segments.device, metrics.impressions, metrics.clicks,
       metrics.cost_micros, metrics.conversions, metrics.conversions_value
     FROM campaign
     WHERE campaign.id = ${campaignId}
@@ -73,7 +73,7 @@ async function collectCampaignDevices({ customer, campaignId, start, end }) {
 async function collectCampaignHours({ customer, campaignId, start, end }) {
   validateInput({ customer, campaignId, start, end });
   const rows = await customer.query(`
-    SELECT segments.day_of_week, segments.hour, metrics.impressions, metrics.clicks,
+    SELECT campaign.id, segments.day_of_week, segments.hour, metrics.impressions, metrics.clicks,
       metrics.cost_micros, metrics.conversions, metrics.conversions_value
     FROM campaign
     WHERE campaign.id = ${campaignId}
@@ -89,7 +89,7 @@ async function collectCampaignHours({ customer, campaignId, start, end }) {
 async function collectCampaignGeography({ customer, campaignId, start, end }) {
   validateInput({ customer, campaignId, start, end });
   const rows = await customer.query(`
-    SELECT geographic_view.country_criterion_id, geographic_view.location_type,
+    SELECT campaign.id, geographic_view.country_criterion_id, geographic_view.location_type,
       metrics.impressions, metrics.clicks, metrics.cost_micros,
       metrics.conversions, metrics.conversions_value
     FROM geographic_view
