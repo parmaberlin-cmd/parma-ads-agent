@@ -23,6 +23,7 @@ test('all collectors are query-only and campaign scoped', async () => {
   await collectCampaignGeography({customer,...args});
   assert.equal(capture.length,5);
   for (const q of capture) {
+    assert.match(q,/SELECT[\s\S]*campaign\.id[\s\S]*FROM/i);
     assert.match(q,/campaign\.id = 23276824770/);
     assert.match(q,/2026-07-28/);
     assert.match(q,/2026-08-26/);
