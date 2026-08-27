@@ -78,7 +78,7 @@ jobs:
           done
           echo "intelligence=${success}; http=${code}"
           if [ "$code" = "200" ] && [ "$success" = "true" ]; then
-            jq '{success,mode,campaign_id,period_days,date_range,counts:{search_terms:(.search_terms|length),keywords:(.keywords|length),devices:(.devices|length),hours:(.hours|length),geography:(.geography|length)},top_search_terms:(.search_terms|sort_by(-.clicks)|.[0:12]),top_keywords:(.keywords|sort_by(-.clicks)|.[0:12]),devices,top_hours:(.hours|sort_by(-.clicks)|.[0:20]),top_geography:(.geography|sort_by(-.clicks)|.[0:20]),writes_allowed,execution_allowed,spend_allowed}' intelligence.json
+            jq '{success,mode,campaign_id,period_days,date_range,counts:{overview:(.overview|length),ad_groups:(.ad_groups|length),search_terms:(.search_terms|length),keywords:(.keywords|length),devices:(.devices|length),hours:(.hours|length),geography:(.geography|length),rsa_ads:(.rsa_ads|length),rsa_analysis:(.rsa_analysis|length)},campaign_overview:(.overview|map(del(.campaign_id))),top_ad_groups:(.ad_groups|sort_by(-.clicks)|.[0:20]|map(del(.ad_group_id))),top_search_terms:(.search_terms|sort_by(-.clicks)|.[0:12]|map(del(.ad_group_id))),top_keywords:(.keywords|sort_by(-.clicks)|.[0:12]|map(del(.ad_group_id))),devices,top_hours:(.hours|sort_by(-.clicks)|.[0:20]),top_geography:(.geography|sort_by(-.clicks)|.[0:20]),rsa_diagnostics:(.rsa_analysis|map(del(.ad_id,.campaign))),writes_allowed,execution_allowed,spend_allowed}' intelligence.json
           else
             jq '{success,error,writes_allowed,execution_allowed,spend_allowed}' intelligence.json 2>/dev/null || true
             exit 1

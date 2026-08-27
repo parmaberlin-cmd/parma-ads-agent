@@ -5,7 +5,11 @@ const {
   collectCampaignDevices,
   collectCampaignHours,
   collectCampaignGeography,
+  collectCampaignOverview,
+  collectCampaignAdGroups,
 } = require("../google-campaign-breakdowns");
+const { collectResponsiveSearchAds } = require("../google-rsa-collector");
+const { analyzeRsaSet } = require("../google-rsa-analysis");
 
 function normalize(value) { return String(value || "").replace(/\D/g, ""); }
 function date(value) { return value.toISOString().slice(0, 10); }
@@ -32,17 +36,20 @@ function top(rows, key, limit=12) {
   const cfg={customer_id:normalize(process.env.GOOGLE_CUSTOMER_ID),refresh_token:process.env.GOOGLE_REFRESH_TOKEN};
   const login=normalize(process.env.GOOGLE_LOGIN_CUSTOMER_ID); if(login) cfg.login_customer_id=login;
   const customer=api.Customer(cfg); const {start,end}=range(days);
-  const [searchTerms,keywords,devices,hours,geography]=await Promise.all([
+  const [overview,adGroups,searchTerms,keywords,devices,hours,geography,rsaAds]=await Promise.all([
+    collectCampaignOverview({customer,campaignId,start,end}), collectCampaignAdGroups({customer,campaignId,start,end}),
     collectCampaignSearchTerms({customer,campaignId,start,end}), collectCampaignKeywords({customer,campaignId,start,end}),
     collectCampaignDevices({customer,campaignId,start,end}), collectCampaignHours({customer,campaignId,start,end}),
-    collectCampaignGeography({customer,campaignId,start,end})
+    collectCampaignGeography({customer,campaignId,start,end}), collectResponsiveSearchAds({customer,campaignId,start,end})
   ]);
   const result={success:true,mode:"read_only",campaign_id:campaignId,days,date_range:{start,end},
-    counts:{search_terms:searchTerms.length,keywords:keywords.length,devices:devices.length,hours:hours.length,geography:geography.length},
+    counts:{overview:overview.length,ad_groups:adGroups.length,search_terms:searchTerms.length,keywords:keywords.length,devices:devices.length,hours:hours.length,geography:geography.length,rsa_ads:rsaAds.length},
     totals:{impressions:sum(devices,"impressions"),clicks:sum(devices,"clicks"),cost_eur:Number(sum(devices,"cost_eur").toFixed(2)),conversions:sum(devices,"conversions")},
+    overview:overview.map(({campaign_id,...row})=>row),top_ad_groups:top(adGroups,"ad_group",20),
     top_search_terms:top(searchTerms,"search_term"),top_keywords:top(keywords,"keyword"),devices:top(devices,"device",20),
     top_hours:[...hours].sort((a,b)=>Number(b.clicks||0)-Number(a.clicks||0)).slice(0,20),
     top_geography:[...geography].sort((a,b)=>Number(b.clicks||0)-Number(a.clicks||0)).slice(0,20),
+    rsa_diagnostics:analyzeRsaSet(rsaAds).map(({ad_id,campaign,...row})=>row),
     writes_allowed:false,execution_allowed:false,spend_allowed:false};
   console.log(JSON.stringify(result));
 })().catch(error=>{ console.error(JSON.stringify({success:false,mode:"read_only",error:String(error.message||error).slice(0,300),writes_allowed:false})); process.exit(1); });

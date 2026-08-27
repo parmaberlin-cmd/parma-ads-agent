@@ -148,6 +148,36 @@ paths:
       responses:
         "200":
           description: OK
+  /tools/google/campaign/{id}/intelligence:
+    get:
+      operationId: getGoogleCampaignIntelligence
+      summary: Get complete read-only Google Ads campaign diagnostics
+      description: Returns campaign status, daily budget, impression share, ad groups, search terms, keywords, devices, hours, geography and RSA analysis. It never changes campaigns, ads, budgets, configuration or spend.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 90
+            default: 30
+      responses:
+        "200":
+          description: Complete read-only campaign intelligence
+        "400":
+          description: Invalid campaign id or date range
+        "401":
+          description: Unauthorized
+        "500":
+          description: Google Ads query failed safely
   /tools/campaign/{id}/metrics:
     get:
       operationId: getCampaignMetrics

@@ -4,7 +4,11 @@ const {
   collectCampaignDevices,
   collectCampaignHours,
   collectCampaignGeography,
+  collectCampaignOverview,
+  collectCampaignAdGroups,
 } = require("./google-campaign-breakdowns");
+const { collectResponsiveSearchAds } = require("./google-rsa-collector");
+const { analyzeRsaSet } = require("./google-rsa-analysis");
 
 function installGoogleCampaignIntelligenceRoute({
   app,
@@ -26,14 +30,17 @@ function installGoogleCampaignIntelligenceRoute({
     try {
       const customer = getGoogleCustomer();
       const { start, end } = getGoogleDateRange(days);
-      const [search_terms, keywords, devices, hours, geography] = await Promise.all([
+      const [overview, ad_groups, search_terms, keywords, devices, hours, geography, rsa_ads] = await Promise.all([
+        collectCampaignOverview({ customer, campaignId, start, end }),
+        collectCampaignAdGroups({ customer, campaignId, start, end }),
         collectCampaignSearchTerms({ customer, campaignId, start, end }),
         collectCampaignKeywords({ customer, campaignId, start, end }),
         collectCampaignDevices({ customer, campaignId, start, end }),
         collectCampaignHours({ customer, campaignId, start, end }),
         collectCampaignGeography({ customer, campaignId, start, end }),
+        collectResponsiveSearchAds({ customer, campaignId, start, end }),
       ]);
-      res.json({ success:true, source:"google_ads", mode:"read_only_intelligence", campaign_id:campaignId, period_days:days, date_range:{start,end}, search_terms, keywords, devices, hours, geography, writes_allowed:false, execution_allowed:false, spend_allowed:false });
+      res.json({ success:true, source:"google_ads", mode:"read_only_intelligence", campaign_id:campaignId, period_days:days, date_range:{start,end}, overview, ad_groups, search_terms, keywords, devices, hours, geography, rsa_ads, rsa_analysis:analyzeRsaSet(rsa_ads), writes_allowed:false, execution_allowed:false, spend_allowed:false });
     } catch (error) {
       res.status(500).json({ success:false, source:"google_ads", campaign_id:campaignId, error:cleanGoogleError(error), writes_allowed:false, execution_allowed:false, spend_allowed:false });
     }
