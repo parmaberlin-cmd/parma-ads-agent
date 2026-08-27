@@ -2,7 +2,7 @@ name: google-live-access
 
 on:
   push:
-    branches: [main]
+    branches: [main, google/intelligence-breakdowns-v1]
   workflow_dispatch:
 
 permissions:
@@ -12,8 +12,10 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 8
     steps:
+      - uses: actions/checkout@v4
+
       - name: Verify sanitized Google runtime access
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -22,16 +24,8 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://supportive-stillness-production-ec37.up.railway.app"
-          code="000"
-          google="false"
-          category="unknown"
-          reason="unreadable"
-          enum="none"
-          family="none"
-          token_len_ok="false"
-          token_trim_ok="false"
-          token_charset_ok="false"
-          login_cfg="false"
+          code="000"; google="false"; category="unknown"; reason="unreadable"; enum="none"; family="none"
+          token_len_ok="false"; token_trim_ok="false"; token_charset_ok="false"; login_cfg="false"
           for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
             code=$(curl -sS -o shadow.json -w "%{http_code}" "$BASE/health/agent-shadow-summary" || true)
             google=$(jq -r '.source_health.google // false' shadow.json 2>/dev/null || echo false)
@@ -50,13 +44,7 @@ jobs:
           safe_reason=$(printf '%s' "$reason" | tr -cs 'A-Za-z0-9_-' '_' | cut -c1-24)
           safe_enum=$(printf '%s' "$enum" | tr -cs 'A-Za-z0-9_-' '_' | cut -c1-28)
           safe_family=$(printf '%s' "$family" | tr -cs 'A-Za-z0-9_-' '_' | cut -c1-20)
-          if [ "$code" = "200" ] && [ "$google" = "true" ]; then
-            state="success"
-            description="Google live read verified"
-          else
-            state="failure"
-            description="Google blocked: ${safe_enum}; fmt=${token_len_ok}/${token_trim_ok}/${token_charset_ok}; login=${login_cfg}"
-          fi
+          if [ "$code" = "200" ] && [ "$google" = "true" ]; then state="success"; description="Google live read verified"; else state="failure"; description="Google blocked: ${safe_enum}; fmt=${token_len_ok}/${token_trim_ok}/${token_charset_ok}; login=${login_cfg}"; fi
           context="google:${safe_category}:${safe_reason}:${safe_enum}:${safe_family}"
           payload=$(jq -n --arg state "$state" --arg description "$description" --arg context "$context" '{state:$state,context:$context,description:$description}')
           curl --fail-with-body -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/$REPO/statuses/$SHA" -d "$payload"
@@ -68,31 +56,28 @@ jobs:
           PARMA_AGENT_API_KEY: ${{ secrets.PARMA_AGENT_API_KEY }}
         run: |
           set -euo pipefail
-          BASE="https://supportive-stillness-production-ec37.up.railway.app"
-          CAMPAIGN_ID="23276824770"
-          DAYS="30"
-
-          if [ -z "${PARMA_AGENT_API_KEY:-}" ]; then
-            echo "campaign_metrics=blocked; reason=github_secret_missing"
-            exit 1
-          fi
-
-          code=$(curl -sS -o metrics.json -w "%{http_code}" \
-            -H "x-api-key: $PARMA_AGENT_API_KEY" \
-            "$BASE/tools/google/campaign/$CAMPAIGN_ID/metrics?days=$DAYS" || true)
-          success=$(jq -r '.success // false' metrics.json 2>/dev/null || echo false)
-          status=$(jq -r '.status // "unknown"' metrics.json 2>/dev/null || echo unknown)
-          rows=$(jq -r '.metrics | length // 0' metrics.json 2>/dev/null || echo 0)
-          impressions=$(jq -r '[.metrics[]?.impressions // 0] | add // 0' metrics.json 2>/dev/null || echo 0)
-          clicks=$(jq -r '[.metrics[]?.clicks // 0] | add // 0' metrics.json 2>/dev/null || echo 0)
-          cost=$(jq -r '[.metrics[]?.cost_eur // 0] | add // 0' metrics.json 2>/dev/null || echo 0)
-          conversions=$(jq -r '[.metrics[]?.conversions // 0] | add // 0' metrics.json 2>/dev/null || echo 0)
-
+          BASE="https://supportive-stillness-production-ec37.up.railway.app"; CAMPAIGN_ID="23276824770"; DAYS="30"
+          if [ -z "${PARMA_AGENT_API_KEY:-}" ]; then echo "campaign_metrics=blocked; reason=github_secret_missing"; exit 1; fi
+          code=$(curl -sS -o metrics.json -w "%{http_code}" -H "x-api-key: $PARMA_AGENT_API_KEY" "$BASE/tools/google/campaign/$CAMPAIGN_ID/metrics?days=$DAYS" || true)
+          success=$(jq -r '.success // false' metrics.json 2>/dev/null || echo false); status=$(jq -r '.status // "unknown"' metrics.json 2>/dev/null || echo unknown)
+          rows=$(jq -r '.metrics | length // 0' metrics.json 2>/dev/null || echo 0); impressions=$(jq -r '[.metrics[]?.impressions // 0] | add // 0' metrics.json 2>/dev/null || echo 0)
+          clicks=$(jq -r '[.metrics[]?.clicks // 0] | add // 0' metrics.json 2>/dev/null || echo 0); cost=$(jq -r '[.metrics[]?.cost_eur // 0] | add // 0' metrics.json 2>/dev/null || echo 0); conversions=$(jq -r '[.metrics[]?.conversions // 0] | add // 0' metrics.json 2>/dev/null || echo 0)
           safe_status=$(printf '%s' "$status" | tr -cs 'A-Za-z0-9_-' '_' | cut -c1-20)
           echo "campaign_metrics=${success}; http=${code}; campaign=${CAMPAIGN_ID}; days=${DAYS}; status=${safe_status}; rows=${rows}; impressions=${impressions}; clicks=${clicks}; cost_eur=${cost}; conversions=${conversions}"
+          if [ "$code" != "200" ] || [ "$success" != "true" ]; then reason=$(jq -r '.error.code // .error.type // .error.message // .error // "unknown"' metrics.json 2>/dev/null | tr -cs 'A-Za-z0-9_-' '_' | cut -c1-40); echo "campaign_metrics_failure=${reason}"; exit 1; fi
 
-          if [ "$code" != "200" ] || [ "$success" != "true" ]; then
-            reason=$(jq -r '.error.code // .error.type // .error.message // .error // "unknown"' metrics.json 2>/dev/null | tr -cs 'A-Za-z0-9_-' '_' | cut -c1-40)
-            echo "campaign_metrics_failure=${reason}"
-            exit 1
-          fi
+      - name: Validate live Google campaign intelligence
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_DEVELOPER_TOKEN: ${{ secrets.GOOGLE_DEVELOPER_TOKEN }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          GOOGLE_CUSTOMER_ID: ${{ secrets.GOOGLE_CUSTOMER_ID }}
+          GOOGLE_LOGIN_CUSTOMER_ID: ${{ secrets.GOOGLE_LOGIN_CUSTOMER_ID }}
+          GOOGLE_CAMPAIGN_ID: "23276824770"
+          GOOGLE_INTELLIGENCE_DAYS: "30"
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts >/dev/null
+          node scripts/google-campaign-intelligence-live.js > intelligence.json
+          jq '{success,mode,campaign_id,days,date_range,counts,totals,top_search_terms,top_keywords,devices,top_hours,top_geography,writes_allowed,execution_allowed,spend_allowed}' intelligence.json
