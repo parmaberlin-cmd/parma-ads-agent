@@ -7,6 +7,7 @@ const { auditKeywordPortfolio } = require('../keyword-portfolio-audit');
 const { auditSearchTermCorpus } = require('../search-term-corpus-audit');
 const { prioritizeSemanticRefinement } = require('../semantic-refinement-priority');
 const { reviewDormantKeywords } = require('../dormant-keyword-review');
+const { planExperimentSequence } = require('../experiment-sequencing');
 
 function readJson(path) {
   const parsed = JSON.parse(fs.readFileSync(path, 'utf8'));
@@ -33,6 +34,7 @@ function main() {
   const dormantKeywordReview = reviewDormantKeywords(data.keywords || []);
   const keywordOverlap = analyzeKeywordOverlap(data.keywords || []);
   const rsa = analyzeRsaSet(data.rsa_ads || [], { conversionTrusted: false });
+  const experimentSequence = planExperimentSequence({rsa_diagnostics:rsa,keyword_overlap:keywordOverlap,conversion_integrity:'unverified'});
   const rankBudget = analyzeRankBudget({
     searchImpressionShare: pct(overview.search_impression_share),
     lostIsRank: pct(overview.search_rank_lost_impression_share),
@@ -75,6 +77,7 @@ function main() {
     dormant_keyword_review: dormantKeywordReview,
     search_term_corpus_audit: searchCorpusAudit,
     semantic_refinement_priorities: semanticRefinement,
+    experiment_sequence: experimentSequence,
     rank_budget: rankBudget,
     search_intent_clusters: searchClusters,
     keyword_overlap: keywordOverlap,
