@@ -1,0 +1,26 @@
+{
+  "source": "rendered_browser",
+  "observed_at": "2026-09-01T17:26:13.172Z",
+  "url": "https://www.parmaberlin.de/online-ordering",
+  "page": {
+    "render_complete": true,
+    "accepting_orders": true,
+    "product_count": 29,
+    "pickup_available": true,
+    "delivery_available": null,
+    "product_dialog_opened": true,
+    "add_to_cart_enabled": true,
+    "checkout_reached": null,
+    "empty_sections_visible": true,
+    "duplicate_sections_visible": true
+  },
+  "home": {
+    "source": "rendered_browser",
+    "observed_at": "2026-09-01T17:26:13.172Z",
+    "url": "https://www.parmaberlin.de/",
+    "render_complete": true,
+    "primary_order_cta_direct": false,
+    "menu_link_self": true
+  },
+  "measurement": {}
+}
