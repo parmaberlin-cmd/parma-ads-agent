@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { analyzeKeywordOverlap, analyzeRankBudget, analyzeDeviceDistribution, analyzeHourDistribution } = require("../google-optimization-diagnostics");
+const { analyzeKeywordOverlap, analyzeRankBudget, analyzeDeviceDistribution, analyzeHourDistribution, analyzeGeoDistribution } = require("../google-optimization-diagnostics");
 
 test("keyword overlap finds cross-ad-group duplication without trusting conversions", () => {
   const out = analyzeKeywordOverlap([
@@ -33,4 +33,16 @@ test("hour distribution never recommends schedule changes from unverified conver
   const out = analyzeHourDistribution([{ day: "FRIDAY", hour: 18, clicks: 20, impressions: 100, cost_eur: 4 }]);
   assert.equal(out[0].schedule_change_supported, false);
   assert.equal(out[0].requires_write, false);
+});
+
+test("geo distribution is descriptive only and cannot authorize targeting changes", () => {
+  const out = analyzeGeoDistribution([
+    { location_type:"LOCATION_OF_PRESENCE", impressions:830, clicks:26, cost_eur:5 },
+    { location_type:"AREA_OF_INTEREST", impressions:13706, clicks:468, cost_eur:97 },
+  ]);
+  assert.equal(out.interest_vs_presence_observed, true);
+  assert.equal(out.interest_click_ratio_to_presence, 18);
+  assert.equal(out.targeting_change_supported, false);
+  assert.equal(out.conclusion, "descriptive_only");
+  assert.ok(out.rows.every(row=>row.registered_conversions_status==="unverified_measurement"));
 });
