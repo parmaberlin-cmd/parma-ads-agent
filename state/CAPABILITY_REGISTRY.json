@@ -1,5 +1,5 @@
 {
-  "registry_version": "1.2.1",
+  "registry_version": "1.2.2",
   "measurement_rule": "Progress increases only when an end-to-end capability is verified against its DONE criteria.",
   "capabilities": [
     {
@@ -24,7 +24,7 @@
       "status": "VERIFIED",
       "depends_on": ["CAP-GOOGLE-AUTH"],
       "done_criteria": ["campaign metrics are read end-to-end", "reader returns scoped campaign/ad-group/search-term/keyword/device/hour/geography/RSA diagnostics", "read path exposes no secret and cannot write"],
-      "evidence": ["Campaign 23276824770 live intelligence PASS for 2026-07-28..2026-08-26", "14,536 impressions / 494 clicks / EUR102.03 spend / 5 reported conversions returned", "writes_allowed=false, execution_allowed=false, spend_allowed=false"]
+      "evidence": ["Campaign live intelligence PASS", "Access-independent diagnostic branch successfully analyzed a sanitized production payload", "writes_allowed=false, execution_allowed=false, spend_allowed=false"]
     },
     {
       "id": "CAP-GA4-READ",
@@ -40,29 +40,32 @@
       "name": "Trusted Google Ads to GA4 conversion reconciliation",
       "status": "BLOCKED",
       "depends_on": ["CAP-GOOGLE-CAMPAIGN-METRICS", "CAP-GA4-READ"],
-      "done_criteria": ["Google Ads conversion actions are enumerated", "GA4 google/cpc booking_completed is compared on the same window", "attribution/time semantics are explained", "upstream funnel events are observed or deliberately remapped", "conversion integrity confidence is high"],
-      "evidence": ["Current runtime: conversion_integrity=degraded", "issue=conversion_sources_disagree", "reservation_page_view and reservation_start configured but not observed"]
+      "done_criteria": ["Google Ads conversion actions are enumerated", "GA4 candidate events are compared on the same window", "attribution/time semantics are explained", "counting and maturity are understood", "business ground truth is checked", "conversion integrity confidence is high"],
+      "evidence": ["Conversion reconciliation matrix implemented", "measurement contract implemented", "semantic cause remains unproven", "optimization_allowed=false until blockers clear"]
     },
     {
       "id": "CAP-META-READ",
       "domain": "meta",
       "name": "Meta read-only diagnostics",
       "status": "PARTIAL",
-      "done_criteria": ["connected assets and campaign metrics can be collected reliably", "live preflight remains safe"]
+      "done_criteria": ["connected assets and campaign metrics can be collected reliably", "live preflight remains safe"],
+      "evidence": ["Known issue 2490455 safely classified as account_security_or_payment_restriction", "cross-level repetition can be flagged only as account-level pattern candidate with cause_proven=false"]
     },
     {
       "id": "CAP-DECISION-ENGINE",
       "domain": "intelligence",
       "name": "Evidence-based recommendation engine",
       "status": "PARTIAL",
-      "done_criteria": ["recommendations include evidence, confidence, expected impact, risk and permission class", "recommendations are validated against real outcomes"]
+      "done_criteria": ["recommendations include evidence, confidence, expected impact, risk and permission class", "recommendations are validated against real outcomes"],
+      "evidence": ["Conversion confidence model blocks unsupported optimization", "near-me/local intent protected from premature negatives", "rank/budget analyzer blocks spend escalation while measurement is unverified", "RSA structural diagnosis separated from untrusted conversion performance", "geo/hour/device diagnostics remain descriptive-only"]
     },
     {
       "id": "CAP-PERSISTENT-ORCHESTRATION",
       "domain": "automation",
       "name": "Persistent autonomous operating loop",
       "status": "PARTIAL",
-      "done_criteria": ["scheduled collect-validate-analyze-detect-prioritize-measure cycle survives restart", "state is durable", "human intervention is required only by policy"]
+      "done_criteria": ["scheduled collect-validate-analyze-detect-prioritize-measure cycle survives restart", "state is durable", "human intervention is required only by policy"],
+      "evidence": ["Access-independent diagnostic tasks and blocked-external Wix checkpoint persisted in CURRENT_STATE", "diagnostic branch can consume sanitized production payload without deploying new readers"]
     },
     {
       "id": "CAP-DNA-BOOTSTRAP",
