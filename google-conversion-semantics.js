@@ -25,10 +25,12 @@ async function collectConversionActionMetadata({ customer, resourceName }) {
       conversion_action.origin,
       conversion_action.category,
       conversion_action.primary_for_goal,
+      conversion_action.include_in_conversions_metric,
       conversion_action.counting_type,
       conversion_action.click_through_lookback_window_days,
       conversion_action.view_through_lookback_window_days,
       conversion_action.attribution_model_settings.attribution_model,
+      conversion_action.attribution_model_settings.data_driven_model_status,
       conversion_action.google_analytics_4_settings.event_name,
       conversion_action.google_analytics_4_settings.property_id
     FROM conversion_action
@@ -44,10 +46,12 @@ async function collectConversionActionMetadata({ customer, resourceName }) {
     origin: action.origin || null,
     category: action.category || null,
     primary_for_goal: typeof action.primary_for_goal === "boolean" ? action.primary_for_goal : null,
+    include_in_conversions_metric: typeof action.include_in_conversions_metric === "boolean" ? action.include_in_conversions_metric : null,
     counting_type: action.counting_type || null,
     click_through_lookback_window_days: action.click_through_lookback_window_days ?? null,
     view_through_lookback_window_days: action.view_through_lookback_window_days ?? null,
     attribution_model: action.attribution_model_settings?.attribution_model || null,
+    data_driven_model_status: action.attribution_model_settings?.data_driven_model_status || null,
     ga4_event_name: action.google_analytics_4_settings?.event_name || null,
     ga4_property_id: action.google_analytics_4_settings?.property_id ? String(action.google_analytics_4_settings.property_id) : null,
   };
