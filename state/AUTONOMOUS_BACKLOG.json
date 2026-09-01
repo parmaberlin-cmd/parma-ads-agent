@@ -1,5 +1,5 @@
 {
-  "version": "1.1.1",
+  "version": "1.1.2",
   "purpose": "Tasks the Agent can advance without Wix/Meta UI access or external campaign writes.",
   "rules": {"no_user_as_middleware":true,"no_merge_deploy_without_gate":true,"no_campaign_tracking_spend_writes":true,"fail_closed_on_measurement_uncertainty":true,"external_blockers_do_not_stop_unrelated_green_work":true},
   "items": [
@@ -21,7 +21,7 @@
     {"id":"AUTO-016","priority":"P1","owner":"automation","status":"DONE","task":"Select next GREEN work automatically when external gates are blocked","evidence":"next-action-engine.js + tests"},
     {"id":"AUTO-017","priority":"P1","owner":"control_tower","status":"DONE","task":"Define daily decision brief","evidence":"docs/DAILY_DECISION_BRIEF.md"},
     {"id":"AUTO-018","priority":"P1","owner":"local_growth","status":"DONE_TO_WRITE_BOUNDARY","task":"Identify public entity consistency defects","evidence":"official site all-days hours vs Falstaff Monday-closed; public Impressum address typo documented","blocked_by":"external directory/site write approval"},
-    {"id":"AUTO-019","priority":"P1","owner":"intelligence","status":"IN_PROGRESS","task":"Build anomaly triage separating measurement, demand, budget, rank and maturity causes","blocked_by":null},
+    {"id":"AUTO-019","priority":"P1","owner":"intelligence","status":"DONE","task":"Build anomaly triage separating measurement, demand, budget, rank and maturity causes","evidence":"anomaly-triage.js + tests; root_cause_proven always false without causal evidence"},
     {"id":"EXT-001","priority":"P0","owner":"control_tower","status":"BLOCKED_EXTERNAL","task":"Read Wix reservation/order ground truth from correct Parma account","blocker_type":"external_access","blocked_by":"correct Wix account access"},
     {"id":"EXT-002","priority":"P1","owner":"meta","status":"BLOCKED_EXTERNAL","task":"Verify Meta Account Quality/payment/security restriction","blocker_type":"external_access","blocked_by":"Meta UI/account access if repo evidence cannot prove cause"},
     {"id":"GATE-001","priority":"P0","owner":"control_tower","status":"BLOCKED_PERMISSION","task":"Merge/deploy diagnostic readers","blocker_type":"permission_gate","blocked_by":"explicit publication authorization"},
