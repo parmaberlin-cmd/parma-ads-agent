@@ -1,79 +1,16 @@
 {
-  "registry_version": "1.2.2",
-  "measurement_rule": "Progress increases only when an end-to-end capability is verified against its DONE criteria.",
-  "capabilities": [
-    {
-      "id": "CAP-BACKEND-HEALTH",
-      "domain": "engineering",
-      "name": "Backend health reachable",
-      "status": "VERIFIED",
-      "done_criteria": ["public health endpoint responds successfully"]
-    },
-    {
-      "id": "CAP-GOOGLE-AUTH",
-      "domain": "google",
-      "name": "Authenticated Google Ads reader",
-      "status": "VERIFIED",
-      "done_criteria": ["agent-authenticated /tools/google/test succeeds", "request reaches Google Ads API", "result is independently validated"],
-      "evidence": ["Production Google source healthy", "Campaign 23276824770 intelligence returned HTTP 200 via authenticated read path", "writes/execution/spend disabled"]
-    },
-    {
-      "id": "CAP-GOOGLE-CAMPAIGN-METRICS",
-      "domain": "google",
-      "name": "Live campaign intelligence reader",
-      "status": "VERIFIED",
-      "depends_on": ["CAP-GOOGLE-AUTH"],
-      "done_criteria": ["campaign metrics are read end-to-end", "reader returns scoped campaign/ad-group/search-term/keyword/device/hour/geography/RSA diagnostics", "read path exposes no secret and cannot write"],
-      "evidence": ["Campaign live intelligence PASS", "Access-independent diagnostic branch successfully analyzed a sanitized production payload", "writes_allowed=false, execution_allowed=false, spend_allowed=false"]
-    },
-    {
-      "id": "CAP-GA4-READ",
-      "domain": "intelligence",
-      "name": "GA4 production read-only data access",
-      "status": "VERIFIED",
-      "done_criteria": ["GA4 configuration complete", "Analytics Data API reachable", "production source health true", "errors sanitized and writes disabled"],
-      "evidence": ["Production source_health.ga4=true", "source_errors.ga4=null", "booking_completed observed", "writes_allowed=false"]
-    },
-    {
-      "id": "CAP-CONVERSION-INTEGRITY",
-      "domain": "intelligence",
-      "name": "Trusted Google Ads to GA4 conversion reconciliation",
-      "status": "BLOCKED",
-      "depends_on": ["CAP-GOOGLE-CAMPAIGN-METRICS", "CAP-GA4-READ"],
-      "done_criteria": ["Google Ads conversion actions are enumerated", "GA4 candidate events are compared on the same window", "attribution/time semantics are explained", "counting and maturity are understood", "business ground truth is checked", "conversion integrity confidence is high"],
-      "evidence": ["Conversion reconciliation matrix implemented", "measurement contract implemented", "semantic cause remains unproven", "optimization_allowed=false until blockers clear"]
-    },
-    {
-      "id": "CAP-META-READ",
-      "domain": "meta",
-      "name": "Meta read-only diagnostics",
-      "status": "PARTIAL",
-      "done_criteria": ["connected assets and campaign metrics can be collected reliably", "live preflight remains safe"],
-      "evidence": ["Known issue 2490455 safely classified as account_security_or_payment_restriction", "cross-level repetition can be flagged only as account-level pattern candidate with cause_proven=false"]
-    },
-    {
-      "id": "CAP-DECISION-ENGINE",
-      "domain": "intelligence",
-      "name": "Evidence-based recommendation engine",
-      "status": "PARTIAL",
-      "done_criteria": ["recommendations include evidence, confidence, expected impact, risk and permission class", "recommendations are validated against real outcomes"],
-      "evidence": ["Conversion confidence model blocks unsupported optimization", "near-me/local intent protected from premature negatives", "rank/budget analyzer blocks spend escalation while measurement is unverified", "RSA structural diagnosis separated from untrusted conversion performance", "geo/hour/device diagnostics remain descriptive-only"]
-    },
-    {
-      "id": "CAP-PERSISTENT-ORCHESTRATION",
-      "domain": "automation",
-      "name": "Persistent autonomous operating loop",
-      "status": "PARTIAL",
-      "done_criteria": ["scheduled collect-validate-analyze-detect-prioritize-measure cycle survives restart", "state is durable", "human intervention is required only by policy"],
-      "evidence": ["Access-independent diagnostic tasks and blocked-external Wix checkpoint persisted in CURRENT_STATE", "diagnostic branch can consume sanitized production payload without deploying new readers"]
-    },
-    {
-      "id": "CAP-DNA-BOOTSTRAP",
-      "domain": "control_tower",
-      "name": "Disposable-agent bootstrap from DNA/state",
-      "status": "VERIFIED",
-      "done_criteria": ["fresh agent passes Bootstrap Test", "second fresh agent passes Recovery Test"],
-      "evidence": ["Bootstrap PASS 12/12", "Recovery #1 operational PASS with state-loss detected and repaired", "Final Recovery PASS from durable repository state with no remaining state loss"]
-    }
+  "registry_version":"1.3.0",
+  "measurement_rule":"Progress increases only when an end-to-end capability is verified against its DONE criteria.",
+  "capabilities":[
+    {"id":"CAP-BACKEND-HEALTH","domain":"engineering","name":"Backend health reachable","status":"VERIFIED","done_criteria":["public health endpoint responds successfully"]},
+    {"id":"CAP-GOOGLE-AUTH","domain":"google","name":"Authenticated Google Ads reader","status":"VERIFIED","done_criteria":["agent-authenticated Google test succeeds","request reaches Google Ads API","result is independently validated"],"evidence":["Production Google source healthy","Campaign intelligence returned HTTP 200 via authenticated read path","writes/execution/spend disabled"]},
+    {"id":"CAP-GOOGLE-CAMPAIGN-METRICS","domain":"google","name":"Live campaign intelligence reader","status":"VERIFIED","depends_on":["CAP-GOOGLE-AUTH"],"done_criteria":["campaign metrics are read end-to-end","reader returns scoped campaign/ad-group/search-term/keyword/device/hour/geography/RSA diagnostics","read path exposes no secret and cannot write"],"evidence":["Campaign live intelligence PASS","29/29 keyword rows and 2153/2153 search-term rows accounted for in privacy-safe live audit","writes_allowed=false"]},
+    {"id":"CAP-GA4-READ","domain":"intelligence","name":"GA4 production read-only data access","status":"VERIFIED","done_criteria":["GA4 configuration complete","Analytics Data API reachable","production source health true","errors sanitized and writes disabled"],"evidence":["Production GA4 source healthy","candidate reservation events observed","GA4 health regression guard implemented","writes_allowed=false"]},
+    {"id":"CAP-CONVERSION-INTEGRITY","domain":"intelligence","name":"Trusted Google Ads to GA4 conversion reconciliation","status":"BLOCKED","depends_on":["CAP-GOOGLE-CAMPAIGN-METRICS","CAP-GA4-READ"],"done_criteria":["conversion actions enumerated","candidate events compared on same mature exact window","timezone/date basis/attribution/counting reconciled","business ground truth checked","semantic identity verified","confidence high"],"evidence":["Machine-readable measurement contract implemented","temporal reconciliation guard implemented","conversion-date reader prepared but undeployed","correct Wix business ground truth unavailable","optimization_allowed=false"]},
+    {"id":"CAP-CUSTOMER-ACQUISITION-READINESS","domain":"intelligence","name":"Cross-outcome customer acquisition readiness","status":"PARTIAL","depends_on":["CAP-CONVERSION-INTEGRITY"],"done_criteria":["reservation/direct-order/walk-in outcomes have verified measurement","commercial value inputs are explicit","channels can be ranked by verified incremental customer value","recommendation remains independent from execution permission"],"evidence":["reservation/direct-order funnel integrity model implemented","direct-order evidence readiness score implemented","local action/walk-in guard implemented","integrated acquisition readiness gate implemented","business ground truth and economics remain incomplete"]},
+    {"id":"CAP-META-READ","domain":"meta","name":"Meta read-only diagnostics","status":"PARTIAL","done_criteria":["connected assets and campaign metrics can be collected reliably","live preflight remains safe"],"evidence":["Known issue safely classified as account_security_or_payment_restriction","cross-level repetition remains pattern candidate with cause_proven=false"]},
+    {"id":"CAP-DECISION-ENGINE","domain":"intelligence","name":"Evidence-based recommendation engine","status":"PARTIAL","done_criteria":["recommendations include evidence, confidence, expected impact, risk and permission class","recommendations are validated against real outcomes"],"evidence":["near-me/local intent protected from premature negatives","RSA structural experiment prepared independently of untrusted conversions","experiment lifecycle expires stale conclusions","customer acquisition ranking fails closed until verified value exists"]},
+    {"id":"CAP-PERSISTENT-ORCHESTRATION","domain":"automation","name":"Persistent autonomous operating loop","status":"PARTIAL","done_criteria":["scheduled collect-validate-analyze-detect-prioritize-measure cycle survives restart","state is durable","human intervention is required only by policy"],"evidence":["autonomous backlog persists GREEN work beyond external blockers","evidence-gap planner defers human gate while autonomous evidence work remains","diagnostic branch consumes sanitized production payload without new reader deployment"]},
+    {"id":"CAP-DNA-BOOTSTRAP","domain":"control_tower","name":"Disposable-agent bootstrap from DNA/state","status":"VERIFIED","done_criteria":["fresh agent passes Bootstrap Test","second fresh agent passes Recovery Test"],"evidence":["Bootstrap PASS 12/12","Recovery state-loss repaired","Final Recovery PASS"]}
   ]
 }
