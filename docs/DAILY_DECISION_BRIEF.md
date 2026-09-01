@@ -49,3 +49,52 @@ Legacy callers of `summarizeChannel` now receive null unknown metrics and
 `observed_conversion_signals`; `bookings` and cost per booking require explicit
 `booking_semantics_verified`. Legacy daily-manager fields remain for compatibility,
 but runtime primary priorities and history prefer the evidence-based brief.
+
+## Operational memory extension (isolated candidate, 2026-09-01)
+
+The runtime now writes an additive `operational_checkpoint` into each bounded
+history record and supplies previous history to the next report. Legacy records
+remain readable; they are not invented as numeric baselines. Checkpoints include
+only fixed metrics, source states, known action codes, period and an internal
+reporting-scope fingerprint. Raw customer IDs, query text and error payloads are
+not copied into the checkpoint. Scope fingerprints are not public report fields.
+
+`decision_brief.changes` distinguishes new, persistent, no-longer-observed and
+unverifiable priorities. Disappearance during a source/sub-collection failure
+does not mean resolution. All priorities, including deferred ones, are compared
+so movement in/out of the top five is not a new finding. Numerical differences
+require the same reporting scope and exact dates and are labelled **same-window
+revisions**. Overlapping 30-day windows are not presented as daily growth.
+
+`notification_recommended` is a diagnostic suggestion only. No notification is
+sent and no new scheduler is started. First baselines, corrupt history and gaps
+over 48 hours remain explicitly unverified.
+
+The sanitized health summary also exposes `daily_brief_text`, a fixed-vocabulary
+Italian rendering. `decisionBriefView` rechecks freshness at request time: a
+failed refresh, unknown/future timestamp or snapshot older than 36 hours replaces
+old recommendations with a source-refresh diagnostic, downgrades public quality
+and cycle validation, and withholds ordering-path claims. Stored history is not
+mutated. Authenticated refresh errors now use a fixed error code, not raw errors.
+
+`order_signals` uses known candidates from the existing GA4 event inventory;
+no new API request is added. Purchase/checkout events are not automatically
+verified sales and multiple completion candidates are never summed as orders.
+Inventory coverage is explicitly limited. Wix/provider reconciliation remains
+required for actual order and revenue claims.
+
+`engineering_queue` summarizes the local workstream queue only. The selector
+requires explicit GREEN read-only operations, ready status and met dependencies.
+It skips owned/completed/boundary-blocked work and unchanged failed attempts.
+Bounded retries require an explicitly retryable read, a due retry time and
+remaining attempts (maximum three); authentication/permission failures are not
+retried through this mechanism. Selection is never execution or authorization.
+
+For a saved collector snapshot, a local offline renderer is available:
+
+```sh
+node scripts/render-offline-brief.js < snapshot.json
+```
+
+Input is capped at 1 MiB and invalid input errors do not echo its contents.
+The tool does not collect live data, write files, send messages or execute actions.

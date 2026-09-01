@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "scope": "Isolated operational-memory workstream based on PR152. Not a global queue and not an execution policy.",
+  "production_deployed": false,
+  "items": [
+    {"id":"MEM-001","status":"DONE","priority":"P0","operation":"test","permission_class":"GREEN","autonomous":true,"task":"Persist and compare allowlisted report checkpoints","evidence":"report-memory.js; test/report-memory.test.js"},
+    {"id":"MEM-002","status":"DONE","priority":"P0","operation":"test","permission_class":"GREEN","autonomous":true,"task":"Exclude complete, owned, blocked and unchanged-failed work from selection","evidence":"next-action-engine.js; test/next-action-boundaries.test.js"},
+    {"id":"MEM-003","status":"DONE","priority":"P1","operation":"analyze","permission_class":"GREEN","autonomous":true,"task":"Derive order candidates from existing GA4 inventory without extra calls","evidence":"order-signal-diagnostics.js; test/order-signal-diagnostics.test.js"},
+    {"id":"MEM-004","status":"DONE","priority":"P1","operation":"test","permission_class":"GREEN","autonomous":true,"task":"Render an allowlisted Italian report in runtime and offline CLI","evidence":"daily-brief-italian.js; test/daily-brief-italian.test.js"},
+    {"id":"MEM-005","status":"DONE","priority":"P0","operation":"test","permission_class":"GREEN","autonomous":true,"task":"Exercise consecutive runs, restart and corrupted-history preservation","evidence":"test/operational-memory-runtime.test.js"},
+    {"id":"MEM-LIVE","status":"BLOCKED_PERMISSION","priority":"P1","operation":"read","permission_class":"GREEN","autonomous":true,"task":"Validate this exact build using live runtime output after a separately authorized release","blocked_by":"candidate_not_deployed","blocker_type":"permission_gate"}
+  ]
+}

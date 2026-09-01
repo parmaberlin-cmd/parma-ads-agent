@@ -16,7 +16,7 @@ paths:
     get:
       operationId: getSanitizedShadowHealth
       summary: Get sanitized read-only Shadow health
-      description: Returns source health, data confidence, tracking availability and promotion blockers without credentials or advertising object IDs. Writes are always disabled.
+      description: Returns source health, data confidence, tracking availability, decision_brief, Italian daily_brief_text and promotion blockers without credentials or advertising object IDs. The decision brief distinguishes persistent findings and same-window revisions from daily growth. Stale or failed-refresh views withhold current recommendations. Writes are always disabled.
       responses:
         "200":
           description: Latest completed sanitized Shadow snapshot
