@@ -64,6 +64,8 @@ async function collectCampaignConversionsByConversionDate({ customer, campaignId
   const rows = await customer.query(`
     SELECT campaign.id,
       segments.date,
+      segments.conversion_action,
+      segments.conversion_action_name,
       metrics.conversions_by_conversion_date,
       metrics.all_conversions_by_conversion_date
     FROM campaign
@@ -73,6 +75,9 @@ async function collectCampaignConversionsByConversionDate({ customer, campaignId
   `);
   return (rows || []).map((row) => ({
     date: row.segments?.date || null,
+    date_basis: "conversion_date",
+    conversion_action_resource: row.segments?.conversion_action || null,
+    conversion_action_name: row.segments?.conversion_action_name || null,
     conversions_by_conversion_date: numberOrZero(row.metrics?.conversions_by_conversion_date),
     all_conversions_by_conversion_date: numberOrZero(row.metrics?.all_conversions_by_conversion_date),
   }));
