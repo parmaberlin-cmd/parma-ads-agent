@@ -5,6 +5,7 @@ const { analyzeKeywordOverlap, analyzeRankBudget, analyzeDeviceDistribution, ana
 const { buildConversionReconciliation } = require('../conversion-reconciliation');
 const { auditKeywordPortfolio } = require('../keyword-portfolio-audit');
 const { auditSearchTermCorpus } = require('../search-term-corpus-audit');
+const { prioritizeSemanticRefinement } = require('../semantic-refinement-priority');
 
 function readJson(path) {
   const parsed = JSON.parse(fs.readFileSync(path, 'utf8'));
@@ -26,6 +27,7 @@ function main() {
   const conversionAction = data.conversion_actions?.[0] || {};
   const searchClusters = analyzeSearchTerms(data.search_terms || []);
   const searchCorpusAudit = auditSearchTermCorpus(data.search_terms || []);
+  const semanticRefinement = prioritizeSemanticRefinement(searchCorpusAudit.cells);
   const keywordPortfolioAudit = auditKeywordPortfolio(data.keywords || []);
   const keywordOverlap = analyzeKeywordOverlap(data.keywords || []);
   const rsa = analyzeRsaSet(data.rsa_ads || [], { conversionTrusted: false });
@@ -69,6 +71,7 @@ function main() {
     },
     keyword_portfolio_audit: keywordPortfolioAudit,
     search_term_corpus_audit: searchCorpusAudit,
+    semantic_refinement_priorities: semanticRefinement,
     rank_budget: rankBudget,
     search_intent_clusters: searchClusters,
     keyword_overlap: keywordOverlap,
