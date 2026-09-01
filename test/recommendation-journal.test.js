@@ -1,0 +1,3 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {createRecommendationRecord,attachOutcome}=require('../recommendation-journal');
+test('proposal is never recorded as executed',()=>{const x=createRecommendationRecord({id:'r1',created_at:'2026-09-01T20:00:00Z',evidence_snapshot:{clicks:10}});assert.equal(x.valid,true);assert.equal(x.record.executed,false);assert.equal(x.record.status,'proposed')});
+test('outcome requires verified external execution',()=>{const r=createRecommendationRecord({id:'r1',created_at:'2026-09-01T20:00:00Z',evidence_snapshot:{clicks:10}}).record;const a=attachOutcome(r,{execution_verified:false,outcome:{customers:2}});assert.equal(a.executed,false);assert.equal(a.outcome,null)});
