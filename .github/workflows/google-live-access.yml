@@ -67,8 +67,21 @@ jobs:
           node --check ga4-event-semantics.js
           node --check google-optimization-diagnostics.js
           node --check meta-issue-classification.js
+          node --check scripts/analyze-google-live-readonly.js
           node --test test/google-conversion-semantics.test.js test/google-search-term-analysis.test.js test/google-rsa-analysis.test.js test/conversion-confidence.test.js test/conversion-reconciliation.test.js test/ga4-event-semantics.test.js test/google-optimization-diagnostics.test.js test/meta-issue-classification.test.js
           echo "diagnostic_live=deferred_until_explicit_deploy_authorization"
+
+      - name: Analyze existing production Google intelligence read-only with branch diagnostics
+        if: github.ref == 'refs/heads/diagnostics/conversion-semantics-v1'
+        env:
+          PARMA_AGENT_API_KEY: ${{ secrets.PARMA_AGENT_API_KEY }}
+        run: |
+          set -euo pipefail
+          BASE="https://supportive-stillness-production-ec37.up.railway.app"; CAMPAIGN_ID="23276824770"; DAYS="30"
+          code=$(curl -sS -o branch-intelligence.json -w "%{http_code}" -H "x-api-key: $PARMA_AGENT_API_KEY" "$BASE/tools/google/campaign/$CAMPAIGN_ID/intelligence?days=$DAYS" || true)
+          success=$(jq -r '.success // false' branch-intelligence.json 2>/dev/null || echo false)
+          if [ "$code" != "200" ] || [ "$success" != "true" ]; then echo "branch_live_analysis=blocked; http=${code}"; exit 1; fi
+          node scripts/analyze-google-live-readonly.js branch-intelligence.json
 
       - name: Validate live Google campaign intelligence through Railway
         if: github.ref == 'refs/heads/main'
