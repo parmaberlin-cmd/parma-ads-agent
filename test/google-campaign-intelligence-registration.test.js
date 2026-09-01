@@ -23,11 +23,11 @@ test("Google campaign intelligence route reuses the protected read-only dependen
 
 test("Google campaign intelligence response includes the complete reader diagnostics", () => {
   const route = fs.readFileSync(path.join(__dirname, "..", "google-campaign-intelligence-route.js"), "utf8");
-  for (const field of ["overview", "ad_groups", "search_terms", "keywords", "devices", "hours", "geography", "rsa_ads", "rsa_analysis"]) {
+  for (const field of ["overview", "ad_groups", "search_terms", "keywords", "devices", "hours", "geography", "rsa_ads", "rsa_analysis", "conversion_actions"]) {
     assert.ok(route.includes(field), `${field} missing from intelligence route`);
   }
   assert.ok(route.includes("writes_allowed:false"));
   assert.ok(route.includes("execution_allowed:false"));
   assert.ok(route.includes("spend_allowed:false"));
-  assert.ok(route.includes("reader_version:2"));
+  assert.ok(route.includes("reader_version:3"));
 });
