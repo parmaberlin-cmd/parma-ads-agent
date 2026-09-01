@@ -1,5 +1,5 @@
 {
-  "registry_version": "1.2.0",
+  "registry_version": "1.2.1",
   "measurement_rule": "Progress increases only when an end-to-end capability is verified against its DONE criteria.",
   "capabilities": [
     {
@@ -13,16 +13,35 @@
       "id": "CAP-GOOGLE-AUTH",
       "domain": "google",
       "name": "Authenticated Google Ads reader",
-      "status": "BLOCKED",
-      "done_criteria": ["agent-authenticated /tools/google/test succeeds", "request reaches Google Ads API", "result is independently validated"]
+      "status": "VERIFIED",
+      "done_criteria": ["agent-authenticated /tools/google/test succeeds", "request reaches Google Ads API", "result is independently validated"],
+      "evidence": ["Production Google source healthy", "Campaign 23276824770 intelligence returned HTTP 200 via authenticated read path", "writes/execution/spend disabled"]
     },
     {
       "id": "CAP-GOOGLE-CAMPAIGN-METRICS",
       "domain": "google",
-      "name": "Live campaign metrics reader",
-      "status": "PENDING",
+      "name": "Live campaign intelligence reader",
+      "status": "VERIFIED",
       "depends_on": ["CAP-GOOGLE-AUTH"],
-      "done_criteria": ["campaign metrics are read end-to-end", "values match Google Ads UI for same date window"]
+      "done_criteria": ["campaign metrics are read end-to-end", "reader returns scoped campaign/ad-group/search-term/keyword/device/hour/geography/RSA diagnostics", "read path exposes no secret and cannot write"],
+      "evidence": ["Campaign 23276824770 live intelligence PASS for 2026-07-28..2026-08-26", "14,536 impressions / 494 clicks / EUR102.03 spend / 5 reported conversions returned", "writes_allowed=false, execution_allowed=false, spend_allowed=false"]
+    },
+    {
+      "id": "CAP-GA4-READ",
+      "domain": "intelligence",
+      "name": "GA4 production read-only data access",
+      "status": "VERIFIED",
+      "done_criteria": ["GA4 configuration complete", "Analytics Data API reachable", "production source health true", "errors sanitized and writes disabled"],
+      "evidence": ["Production source_health.ga4=true", "source_errors.ga4=null", "booking_completed observed", "writes_allowed=false"]
+    },
+    {
+      "id": "CAP-CONVERSION-INTEGRITY",
+      "domain": "intelligence",
+      "name": "Trusted Google Ads to GA4 conversion reconciliation",
+      "status": "BLOCKED",
+      "depends_on": ["CAP-GOOGLE-CAMPAIGN-METRICS", "CAP-GA4-READ"],
+      "done_criteria": ["Google Ads conversion actions are enumerated", "GA4 google/cpc booking_completed is compared on the same window", "attribution/time semantics are explained", "upstream funnel events are observed or deliberately remapped", "conversion integrity confidence is high"],
+      "evidence": ["Current runtime: conversion_integrity=degraded", "issue=conversion_sources_disagree", "reservation_page_view and reservation_start configured but not observed"]
     },
     {
       "id": "CAP-META-READ",
