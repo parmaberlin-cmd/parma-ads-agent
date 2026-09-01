@@ -45,12 +45,37 @@ function publicTrackingView(ga4 = {}) {
   }]));
 }
 
+function safeAggregateCount(value) {
+  const count = Number(value || 0);
+  return Number.isFinite(count) && count >= 0 ? count : 0;
+}
+
+function publicEventCandidates(ga4 = {}) {
+  const rows = Array.isArray(ga4.event_inventory?.reservation_candidates) ? ga4.event_inventory.reservation_candidates : [];
+  return rows.slice(0, 20).map((row) => ({
+    event_name: safeCode(row.event_name, "unknown_event"),
+    event_count: safeAggregateCount(row.event_count),
+  }));
+}
+
 function publicGa4Diagnostic(ga4 = {}) {
   if (ga4.access_ok === true) {
     return {
       configuration_complete: ga4.configuration_complete === true,
       funnel_configuration_complete: ga4.funnel?.completeness?.configuration_complete === true,
       funnel_observation_complete: ga4.funnel?.completeness?.observation_complete === true,
+      booking_counts: {
+        total: safeAggregateCount(ga4.total_booking_completed),
+        google_cpc: safeAggregateCount(ga4.google_cpc_booking_completed),
+      },
+      booking_quality: {
+        event_count: safeAggregateCount(ga4.booking_quality?.event_count),
+        users: safeAggregateCount(ga4.booking_quality?.users),
+        sessions: safeAggregateCount(ga4.booking_quality?.sessions),
+        duplication_risk: ga4.booking_quality?.duplication_risk === true,
+      },
+      event_inventory_count: safeAggregateCount(ga4.event_inventory?.event_count),
+      reservation_event_candidates: publicEventCandidates(ga4),
     };
   }
   return {
@@ -103,6 +128,8 @@ module.exports = {
   observedEvent,
   configuredEvent,
   publicTrackingView,
+  safeAggregateCount,
+  publicEventCandidates,
   publicGa4Diagnostic,
   publicMetaDiagnostic,
   buildPublicSourceView,
