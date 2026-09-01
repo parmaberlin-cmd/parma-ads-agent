@@ -19,19 +19,24 @@ function auditSearchTermCorpus(rows = []) {
   let rowsWithCost = 0;
   const matchedKeywords = new Set();
   const matchTypes = new Set();
+  const adGroups = new Set();
 
   for (const row of rows || []) {
     const intent = classifyIntent(row.search_term);
     const secondaryIntent = classifySecondaryIntent(row.search_term, intent);
     const keyword = norm(row.matched_keyword) || '(unknown)';
     const matchType = String(row.match_type || 'UNKNOWN');
-    const key = `${intent}\u0000${secondaryIntent || ''}\u0000${keyword}\u0000${matchType}`;
+    const adGroup = row.ad_group || '(unknown)';
+    const adGroupId = row.ad_group_id || null;
+    const key = `${intent}\u0000${secondaryIntent || ''}\u0000${keyword}\u0000${matchType}\u0000${adGroupId || adGroup}`;
     const current = buckets.get(key) || {
       intent,
       secondary_intent: secondaryIntent,
       commercial_role: commercialRole(intent),
       matched_keyword: keyword,
       match_type: matchType,
+      ad_group: adGroup,
+      ad_group_id: adGroupId,
       search_term_rows: 0,
       impressions: 0,
       clicks: 0,
@@ -52,6 +57,7 @@ function auditSearchTermCorpus(rows = []) {
     if (rowCost > 0) rowsWithCost += 1;
     matchedKeywords.add(keyword);
     matchTypes.add(matchType);
+    adGroups.add(adGroupId || adGroup);
   }
 
   const cells = [...buckets.values()].map((cell) => {
@@ -95,6 +101,7 @@ function auditSearchTermCorpus(rows = []) {
       rows_with_clicks: rowsWithClicks,
       rows_with_cost: rowsWithCost,
       matched_keyword_count: matchedKeywords.size,
+      ad_group_count: adGroups.size,
       match_types: [...matchTypes].sort(),
       complete_for_received_corpus: cells.reduce((sum, cell) => sum + cell.search_term_rows, 0) === (rows || []).length,
     },
@@ -103,7 +110,7 @@ function auditSearchTermCorpus(rows = []) {
     cells,
     privacy: {
       raw_search_terms_logged: false,
-      aggregation_dimensions: ['intent','secondary_intent','matched_keyword','match_type'],
+      aggregation_dimensions: ['intent','secondary_intent','matched_keyword','match_type','ad_group'],
     },
     negative_keyword_execution_allowed: false,
     writes_allowed: false,
