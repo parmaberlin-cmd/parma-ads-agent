@@ -1,4 +1,4 @@
-const { classifyIntent, intentSafety } = require('./google-search-term-analysis');
+const { classifyIntent, commercialRole, intentSafety } = require('./google-search-term-analysis');
 
 function num(value) {
   const n = Number(value || 0);
@@ -26,6 +26,7 @@ function auditSearchTermCorpus(rows = []) {
     const key = `${intent}\u0000${keyword}\u0000${matchType}`;
     const current = buckets.get(key) || {
       intent,
+      commercial_role: commercialRole(intent),
       matched_keyword: keyword,
       match_type: matchType,
       search_term_rows: 0,
@@ -52,6 +53,7 @@ function auditSearchTermCorpus(rows = []) {
 
   const cells = [...buckets.values()].map((cell) => {
     const safety = intentSafety(cell.intent);
+    const reviewCandidate = Boolean(safety.semantic_negative_candidate || safety.competitor_strategy_review || cell.intent === 'other');
     return {
       ...cell,
       ctr: cell.impressions > 0 ? cell.clicks / cell.impressions : 0,
@@ -59,7 +61,10 @@ function auditSearchTermCorpus(rows = []) {
       click_share: clicks > 0 ? cell.clicks / clicks : 0,
       cost_share: cost > 0 ? cell.cost_eur / cost : 0,
       protected_local_intent: safety.local_intent,
-      manual_semantic_review_candidate: !safety.local_intent && cell.cost_eur > 0,
+      semantic_negative_candidate: safety.semantic_negative_candidate,
+      competitor_strategy_review: safety.competitor_strategy_review,
+      manual_semantic_review_candidate: reviewCandidate,
+      review_reason: safety.semantic_negative_candidate ? 'informational_semantics' : safety.competitor_strategy_review ? 'competitor_strategy' : cell.intent === 'other' ? 'unclassified_semantics' : null,
       automatic_negative_supported: false,
       raw_search_terms_exposed: false,
       conversion_evidence_used: false,
