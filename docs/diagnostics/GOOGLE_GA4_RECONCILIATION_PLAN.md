@@ -4,6 +4,10 @@
 
 Read-only diagnostic work only. No tracking, conversion action, campaign, ad, keyword, bidding, budget, credential, activation, or spend mutation is authorized or required for this phase.
 
+## Exact historical window
+
+The production Shadow collector defines a 30-day window as **completed UTC calendar days only**: it sets `end` to yesterday at UTC midnight and counts backward inclusively. For the 2026-09-01 run, the exact historical window is therefore **2026-08-02 through 2026-08-31 inclusive**. This is the window to use for the first Wix/GA4/Ads ground-truth comparison. Timezone differences must still be documented rather than silently treated as equivalent.
+
 ## Verified Google Ads observations
 
 Campaign: `23276824770`.
@@ -44,7 +48,7 @@ No merge or deploy has been performed.
 
 The connected Wix account currently returns zero sites, and resolving a site named `Parma` also returns no site context. Therefore the agent cannot currently read real table-reservation records from Wix. No ground-truth reservation count has been obtained through the connector.
 
-Minimum external evidence needed to continue without changing tracking: the count of real Wix table reservations for the exact reconciliation window, preferably split only by final status if Wix shows cancelled/no-show separately. No guest names, email addresses, phone numbers, reservation IDs, or other personal data are needed.
+Minimum external evidence needed to continue without changing tracking: the number of successful online table-reservation submissions **created between 2026-08-02 and 2026-08-31 inclusive**. If Wix makes it immediately visible, a separate count of those later cancelled is useful, but no reservation IDs or guest personal data are required.
 
 ## Current hypotheses (not causes)
 
