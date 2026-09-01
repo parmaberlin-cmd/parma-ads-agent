@@ -55,10 +55,26 @@ function main() {
     semantic_identity_verified: false,
   });
 
+  const decisionSummary = {
+    corpus_coverage: {
+      keyword_rows: `${keywordPortfolioAudit.coverage.rows_audited}/${keywordPortfolioAudit.coverage.rows_received}`,
+      search_term_rows: `${searchCorpusAudit.coverage.search_term_rows_accounted_for}/${searchCorpusAudit.coverage.search_term_rows_received}`,
+      ad_groups_in_search_terms: searchCorpusAudit.coverage.ad_group_count,
+      matched_keywords_in_search_terms: searchCorpusAudit.coverage.matched_keyword_count,
+      raw_search_terms_logged: false,
+    },
+    duplicate_keywords: keywordOverlap.map((x)=>({keyword:x.keyword,occurrences:x.occurrences,clicks:x.clicks,cost_eur:x.cost_eur})),
+    dormant_keyword_counts: dormantKeywordReview.classification_counts,
+    ambiguous_secondary_summary: searchCorpusAudit.ambiguous_secondary_summary,
+    top_semantic_refinement_priorities: semanticRefinement.slice(0,10),
+    experiment_sequence: experimentSequence,
+  };
+
   const safe = {
     mode: 'read_only_local_analysis_of_sanitized_live_payload',
     reader_version_observed: data.reader_version ?? null,
     date_range: data.date_range || null,
+    decision_summary: decisionSummary,
     campaign: {
       impressions: Number(overview.impressions || 0),
       clicks: Number(overview.clicks || 0),
