@@ -71,7 +71,7 @@ function observedGa4Event(snapshot = {}, eventName) {
 }
 
 function buildSanitizedHistoryRecord({ snapshot = {}, report = {}, generatedAt = new Date().toISOString() } = {}) {
-  const priorities = (report.daily_manager?.primary_priorities || []).slice(0,3);
+  const priorities = (report.decision_brief?.priorities || report.daily_manager?.primary_priorities || []).slice(0,5);
   const anomalies = (report.anomalies || []).slice(0,10);
   return {
     id: generatedAt,

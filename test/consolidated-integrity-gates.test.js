@@ -29,6 +29,7 @@ test("missing freshness blocks optimization despite matching conversion totals",
 
 test("fresh collection is not marked stale when the latest business event is old", () => {
   const result = assessConversionIntegrity({
+    reconciliationEvidence: require('./fixtures/verified-conversion-evidence.json'),
     googleAdsConversions: 8,
     ga4Bookings: 8,
     googleLastSeenAt: "2026-08-20T12:00:00Z",

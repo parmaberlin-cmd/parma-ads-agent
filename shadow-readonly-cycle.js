@@ -15,7 +15,7 @@ function buildReadonlyCycleState({ snapshot = {}, report = {}, history = [], his
   const quality = snapshot.data_quality || {};
   const sources = sourceStatus(snapshot);
   const validationPassed = quality.integrity_ok === true && quality.confidence !== 'blocked';
-  const priorities = report.daily_manager?.primary_priorities || report.top_priorities || [];
+  const priorities = report.decision_brief?.priorities || report.daily_manager?.primary_priorities || report.top_priorities || [];
   const anomalies = report.anomalies || [];
   const operational = buildDailyOperationalSummary({
     snapshot,
@@ -30,7 +30,7 @@ function buildReadonlyCycleState({ snapshot = {}, report = {}, history = [], his
     detect: { complete: true, anomaly_count: anomalies.length },
     prioritize: { complete: true, priority_count: priorities.length },
     report: { complete: true, status: operational.status },
-    history: { complete: true, total_runs: historySummary.total_runs },
+    history: { complete: historyStorage.healthy !== false, total_runs: historySummary.total_runs },
   };
   const blockedStages = STAGES.filter((stage) => stages[stage]?.complete !== true || (stage === 'validate' && stages.validate.passed !== true));
   return {

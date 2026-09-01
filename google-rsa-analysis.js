@@ -7,7 +7,7 @@ function normalizeAdStrength(value){
   return names[Number(value)]||String(value).toUpperCase();
 }
 
-function analyzeRsa(row={}, {minHeadlines=8,minDescriptions=3}={}){
+function analyzeRsa(row={}, {minHeadlines=8,minDescriptions=3,conversionTrusted=false}={}){
   const headlines=normalizeAssets(row.headlines);
   const descriptions=normalizeAssets(row.descriptions);
   const issues=[];
@@ -20,21 +20,25 @@ function analyzeRsa(row={}, {minHeadlines=8,minDescriptions=3}={}){
   const adStrength=normalizeAdStrength(row.ad_strength??row.adStrength);
   if(["POOR","AVERAGE"].includes(adStrength))issues.push({code:"RSA_AD_STRENGTH_WEAK",severity:"medium",reason:`Google Ads reports RSA strength ${adStrength}.`});
   const clicks=Number(row.clicks||0),conversions=Number(row.conversions||0),impressions=Number(row.impressions||0);
-  if(clicks>=20&&conversions===0)issues.push({code:"RSA_TRAFFIC_WITHOUT_CONVERSIONS",severity:"high",reason:"RSA has meaningful click volume without conversions; inspect intent and landing continuity before rewriting blindly."});
+  if(clicks>=20&&conversions===0){
+    if(conversionTrusted) issues.push({code:"RSA_TRAFFIC_WITHOUT_CONVERSIONS",severity:"high",reason:"RSA has meaningful click volume without trusted conversions; inspect intent and landing continuity before rewriting blindly."});
+    else issues.push({code:"RSA_CONVERSION_EVIDENCE_UNVERIFIED",severity:"low",reason:"RSA has click volume but current conversion evidence is unverified; do not judge or rewrite the ad from conversion counts alone."});
+  }
   return {
     ad_id:row.ad_id?String(row.ad_id):null,
     campaign:row.campaign||null,
     ad_group:row.ad_group||null,
     asset_counts:{headlines:headlines.length,descriptions:descriptions.length},
     metrics:{impressions,clicks,conversions},
+    conversion_evidence:conversionTrusted?"trusted":"unverified",
     ad_strength:adStrength||null,
     issues,
     requires_write:false,
   };
 }
 
-function analyzeRsaSet(rows=[]){
-  return rows.map(analyzeRsa).sort((a,b)=>{
+function analyzeRsaSet(rows=[], options={}){
+  return rows.map(row=>analyzeRsa(row,options)).sort((a,b)=>{
     const rank={high:3,medium:2,low:1};
     const ar=Math.max(0,...a.issues.map(i=>rank[i.severity]||0));
     const br=Math.max(0,...b.issues.map(i=>rank[i.severity]||0));

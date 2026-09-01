@@ -26,14 +26,16 @@ test("shadow agent connects modules without allowing writes", () => {
   assert.equal(report.writes_allowed, false);
   assert.equal(report.conversion_integrity.optimization_allowed, false);
   assert.equal(report.budget_recommendations[0].recommendation, "keep");
-  assert.ok(report.search_term_recommendations.some((x) => x.type === "negative_keyword_candidate"));
-  assert.ok(report.creative_test_proposals.length > 0);
+  assert.equal(report.search_term_recommendations.some((x) => x.type === "negative_keyword_candidate"), false);
+  assert.equal(report.creative_test_proposals.length, 0);
+  assert.equal(report.withheld_analysis.conversion_dependent, true);
   assert.ok(report.daily_manager.primary_priorities.length > 0);
   assert.equal(report.journal.proposed_action, "review_shadow_report");
 });
 
 test("healthy conversion integrity allows bounded budget recommendation but never a write", () => {
   const report = buildShadowAgentReport({
+    conversion_evidence: require('./fixtures/verified-conversion-evidence.json'),
     now: "2026-08-23T10:00:00Z",
     conversions: {
       google_ads_conversions: 4,

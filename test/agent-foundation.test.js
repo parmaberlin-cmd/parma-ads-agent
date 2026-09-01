@@ -11,6 +11,7 @@ const {
 test("conversion integrity is healthy when Google Ads and GA4 agree", () => {
   const result = assessConversionIntegrity({
     googleAdsConversions: 10,
+    reconciliationEvidence: require('./fixtures/verified-conversion-evidence.json'),
     ga4Bookings: 9,
     googleLastSeenAt: "2026-08-21T10:00:00Z",
     ga4LastSeenAt: "2026-08-21T10:10:00Z",
@@ -31,7 +32,7 @@ test("conversion optimization is blocked when one source is missing", () => {
 });
 
 test("conversion source disagreement downgrades confidence", () => {
-  const result = assessConversionIntegrity({ googleAdsConversions: 12, ga4Bookings: 3 });
+  const result = assessConversionIntegrity({ googleAdsConversions: 12, ga4Bookings: 3, reconciliationEvidence: require('./fixtures/verified-conversion-evidence.json') });
   assert.equal(result.status, "degraded");
   assert.equal(result.confidence, "medium");
   assert.equal(result.optimization_allowed, false);

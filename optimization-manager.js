@@ -1,3 +1,4 @@
+const { observedNumber } = require('./observed-number');
 function n(v){const x=Number(v);return Number.isFinite(x)?x:0;}
 
 function recommendBudget(rows=[], {maxDeltaPercent=20, minConversions=2}={}) {
@@ -9,19 +10,21 @@ function recommendBudget(rows=[], {maxDeltaPercent=20, minConversions=2}={}) {
   });
 }
 
-function assessFunnel({landingAvailable=null,adClicks=null,landingViews=null,reservationStarts=null,bookings=null,conversionIntegrity="unknown",bookingStartedTracked=true}={}){
+function assessFunnel({landingAvailable=null,adClicks=null,landingViews=null,reservationStarts=null,bookings=null,conversionIntegrity="unknown",bookingStartedTracked=null,measurementVerified=false,populationComparable=false}={}){
   const issues=[];
   if(landingAvailable===false) issues.push({code:"LANDING_UNAVAILABLE",severity:"critical"});
   if(conversionIntegrity!=="healthy") issues.push({code:"CONVERSION_INTEGRITY_UNVERIFIED",severity:"high"});
-  const clicks=n(adClicks),views=n(landingViews),starts=n(reservationStarts),done=n(bookings);
-  if(clicks>=10&&views/clicks<0.7) issues.push({code:"CLICK_TO_LANDING_LEAKAGE",severity:"high"});
+  const clicks=observedNumber(adClicks),views=observedNumber(landingViews),starts=observedNumber(reservationStarts),done=observedNumber(bookings);
+  const comparable=measurementVerified===true&&populationComparable===true;
+  if(!comparable) issues.push({code:"FUNNEL_MEASUREMENT_UNVERIFIED",severity:"medium"});
+  if(comparable&&clicks>=10&&views!==null&&views/clicks<0.7) issues.push({code:"CLICK_TO_LANDING_LEAKAGE",severity:"high"});
   if(bookingStartedTracked===false){
     if(views>=10) issues.push({code:"BOOKING_STARTED_TRACKING_MISSING",severity:"medium"});
-  } else {
-    if(views>=10&&starts/views<0.1) issues.push({code:"LANDING_TO_RESERVATION_LEAKAGE",severity:"medium"});
-    if(starts>=5&&done/starts<0.3) issues.push({code:"RESERVATION_COMPLETION_LEAKAGE",severity:"high"});
+  } else if(comparable&&bookingStartedTracked===true) {
+    if(views>=10&&starts!==null&&starts/views<0.1) issues.push({code:"LANDING_TO_RESERVATION_LEAKAGE",severity:"medium"});
+    if(conversionIntegrity==="healthy"&&starts>=5&&done!==null&&done/starts<0.3) issues.push({code:"RESERVATION_COMPLETION_LEAKAGE",severity:"high"});
   }
-  return {status:issues.some(i=>i.severity==="critical")?"blocked":issues.length?"attention_required":"healthy",issues,metrics:{ad_clicks:clicks,landing_views:views,reservation_starts:starts,bookings:done},tracking:{booking_started:bookingStartedTracked!==false}};
+  return {status:issues.some(i=>i.severity==="critical")?"blocked":issues.length?"attention_required":"healthy",issues,metrics:{ad_clicks:clicks,landing_views:views,reservation_starts:starts,bookings:done},comparison_verified:comparable,tracking:{booking_started:typeof bookingStartedTracked==='boolean'?bookingStartedTracked:null}};
 }
 
 function buildDailyManager({recommendations=[], anomalies=[], funnel=null, budget=[]}={}){

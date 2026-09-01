@@ -52,6 +52,7 @@ test("pre-access intelligence remains proposal-only and zero-write", () => {
 
 test("integrated shadow report exposes intelligence but never enables writes", () => {
   const report = buildShadowAgentReport({
+    conversion_evidence: require('./fixtures/verified-conversion-evidence.json'),
     now: "2026-08-23T10:00:00.000Z",
     access: { google_ok: true, ga4_ok: true, meta_ok: true },
     conversions: { google_ads_conversions: 4, booking_completed: 4, google_last_seen_at: "2026-08-23T09:00:00.000Z", ga4_last_seen_at: "2026-08-23T09:00:00.000Z" },

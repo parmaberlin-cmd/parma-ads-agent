@@ -1,0 +1,30 @@
+{
+  "version": "1.1.2",
+  "purpose": "Tasks the Agent can advance without Wix/Meta UI access or external campaign writes.",
+  "rules": {"no_user_as_middleware":true,"no_merge_deploy_without_gate":true,"no_campaign_tracking_spend_writes":true,"fail_closed_on_measurement_uncertainty":true,"external_blockers_do_not_stop_unrelated_green_work":true},
+  "items": [
+    {"id":"AUTO-001","priority":"P0","owner":"engineering","status":"DONE","task":"Synchronize diagnostic branch with exact-date stacked base history","evidence":"base 95376d8 incorporated; branch no longer behind stacked base"},
+    {"id":"AUTO-002","priority":"P0","owner":"intelligence","status":"DONE","task":"Create reservation measurement contract","evidence":"docs/MEASUREMENT_CONTRACT.md"},
+    {"id":"AUTO-003","priority":"P0","owner":"google","status":"DONE","task":"Analyze sanitized production Google payload with no-write branch diagnostics","evidence":"intent, overlap, rank/budget, device, hour, geo and RSA diagnostics completed"},
+    {"id":"AUTO-004","priority":"P0","owner":"engineering","status":"DONE","task":"Keep conversion reconciliation tests and exact-date parser production-linked","evidence":"shared google-exact-date-range.js imported by route/test; regression suite green"},
+    {"id":"AUTO-005","priority":"P1","owner":"intelligence","status":"DONE","task":"Prepare no-write Google optimization simulation package","evidence":"docs/proposals/GOOGLE_OPTIMIZATION_SIMULATION_2026-09-01.md"},
+    {"id":"AUTO-006","priority":"P1","owner":"meta","status":"DONE_TO_ACCESS_BOUNDARY","task":"Conservatively classify repeated Meta account/security/payment patterns without claiming cause","evidence":"cross-level same-reason detector implemented/tested with cause_proven=false","blocked_by":"new Meta live evidence unavailable"},
+    {"id":"AUTO-007","priority":"P1","owner":"engineering","status":"DONE_TO_DEPLOY_BOUNDARY","task":"Prepare GA4 exact-date event-semantics reader and keep attribution scope explicit","evidence":"ga4-event-semantics.js implemented/tested; session attribution scope explicit","blocked_by":"new reader not deployed"},
+    {"id":"AUTO-008","priority":"P1","owner":"control_tower","status":"DONE","task":"Persist blockers by type","evidence":"blocker-classification.js + tests"},
+    {"id":"AUTO-009","priority":"P2","owner":"intelligence","status":"DONE","task":"Create reversible future mutation-package schema","evidence":"mutation-package.js + tests"},
+    {"id":"AUTO-010","priority":"P2","owner":"automation","status":"DONE","task":"Regression checks for blocker classification","evidence":"test/blocker-classification.test.js"},
+    {"id":"AUTO-011","priority":"P0","owner":"intelligence","status":"DONE","task":"Audit public site, reputation and local presence without Wix login","evidence":"docs/diagnostics/PUBLIC_GROWTH_AUDIT_2026-09-01.md"},
+    {"id":"AUTO-012","priority":"P0","owner":"intelligence","status":"DONE","task":"Separate direct-order measurement from reservations and marketplaces","evidence":"docs/ORDER_MEASUREMENT_CONTRACT.md"},
+    {"id":"AUTO-013","priority":"P0","owner":"intelligence","status":"DONE","task":"Model commercial objective as incremental verified customer value","evidence":"commercial-objective.js + tests"},
+    {"id":"AUTO-014","priority":"P1","owner":"google","status":"DONE","task":"Prepare non-executable budget scenarios with evidence gates","evidence":"budget-scenario-simulator.js + tests"},
+    {"id":"AUTO-015","priority":"P1","owner":"intelligence","status":"DONE","task":"Prepare experiment library","evidence":"docs/EXPERIMENT_LIBRARY.md"},
+    {"id":"AUTO-016","priority":"P1","owner":"automation","status":"DONE","task":"Select next GREEN work automatically when external gates are blocked","evidence":"next-action-engine.js + tests"},
+    {"id":"AUTO-017","priority":"P1","owner":"control_tower","status":"DONE","task":"Define daily decision brief","evidence":"docs/DAILY_DECISION_BRIEF.md"},
+    {"id":"AUTO-018","priority":"P1","owner":"local_growth","status":"DONE_TO_WRITE_BOUNDARY","task":"Identify public entity consistency defects","evidence":"official site all-days hours vs Falstaff Monday-closed; public Impressum address typo documented","blocked_by":"external directory/site write approval"},
+    {"id":"AUTO-019","priority":"P1","owner":"intelligence","status":"DONE","task":"Build anomaly triage separating measurement, demand, budget, rank and maturity causes","evidence":"anomaly-triage.js + tests; root_cause_proven always false without causal evidence"},
+    {"id":"EXT-001","priority":"P0","owner":"control_tower","status":"BLOCKED_EXTERNAL","task":"Read Wix reservation/order ground truth from correct Parma account","blocker_type":"external_access","blocked_by":"correct Wix account access"},
+    {"id":"EXT-002","priority":"P1","owner":"meta","status":"BLOCKED_EXTERNAL","task":"Verify Meta Account Quality/payment/security restriction","blocker_type":"external_access","blocked_by":"Meta UI/account access if repo evidence cannot prove cause"},
+    {"id":"GATE-001","priority":"P0","owner":"control_tower","status":"BLOCKED_PERMISSION","task":"Merge/deploy diagnostic readers","blocker_type":"permission_gate","blocked_by":"explicit publication authorization"},
+    {"id":"GATE-002","priority":"P0","owner":"control_tower","status":"BLOCKED_PERMISSION","task":"Apply Google Ads/GA4/Meta/tracking/spend changes","blocker_type":"permission_gate","blocked_by":"separate write/spend approval"}
+  ]
+}

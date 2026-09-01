@@ -2,7 +2,7 @@ name: google-live-access
 
 on:
   push:
-    branches: [main, google/intelligence-breakdowns-v1]
+    branches: [main, google/intelligence-breakdowns-v1, diagnostics/conversion-semantics-v1]
   workflow_dispatch:
 
 permissions:
@@ -53,15 +53,35 @@ jobs:
           echo "campaign_metrics=${success}; http=${code}; impressions=${impressions}; clicks=${clicks}; cost_eur=${cost}; conversions=${conversions}"
           if [ "$code" != "200" ] || [ "$success" != "true" ]; then exit 1; fi
 
-      - name: Validate intelligence module syntax on branch
+      - name: Validate diagnostic modules and tests on branch
         if: github.ref != 'refs/heads/main'
         run: |
           set -euo pipefail
           node --check google-campaign-breakdowns.js
           node --check google-conversion-action-breakdown.js
-          node --check google-campaign-intelligence-preload.js
-          node --check scripts/google-campaign-intelligence-live.js
-          echo "intelligence_live=deferred_until_main_deploy"
+          node --check google-conversion-semantics.js
+          node --check google-search-term-analysis.js
+          node --check google-rsa-analysis.js
+          node --check conversion-confidence.js
+          node --check conversion-reconciliation.js
+          node --check ga4-event-semantics.js
+          node --check google-optimization-diagnostics.js
+          node --check meta-issue-classification.js
+          node --check scripts/analyze-google-live-readonly.js
+          node --test test/google-conversion-semantics.test.js test/google-search-term-analysis.test.js test/google-rsa-analysis.test.js test/conversion-confidence.test.js test/conversion-reconciliation.test.js test/ga4-event-semantics.test.js test/google-optimization-diagnostics.test.js test/meta-issue-classification.test.js
+          echo "diagnostic_live=deferred_until_explicit_deploy_authorization"
+
+      - name: Analyze existing production Google intelligence read-only with branch diagnostics
+        if: github.ref == 'refs/heads/diagnostics/conversion-semantics-v1'
+        env:
+          PARMA_AGENT_API_KEY: ${{ secrets.PARMA_AGENT_API_KEY }}
+        run: |
+          set -euo pipefail
+          BASE="https://supportive-stillness-production-ec37.up.railway.app"; CAMPAIGN_ID="23276824770"; DAYS="30"
+          code=$(curl -sS -o branch-intelligence.json -w "%{http_code}" -H "x-api-key: $PARMA_AGENT_API_KEY" "$BASE/tools/google/campaign/$CAMPAIGN_ID/intelligence?days=$DAYS" || true)
+          success=$(jq -r '.success // false' branch-intelligence.json 2>/dev/null || echo false)
+          if [ "$code" != "200" ] || [ "$success" != "true" ]; then echo "branch_live_analysis=blocked; http=${code}"; exit 1; fi
+          node scripts/analyze-google-live-readonly.js branch-intelligence.json
 
       - name: Validate live Google campaign intelligence through Railway
         if: github.ref == 'refs/heads/main'
@@ -74,13 +94,13 @@ jobs:
           for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
             code=$(curl -sS -o intelligence.json -w "%{http_code}" -H "x-api-key: $PARMA_AGENT_API_KEY" "$BASE/tools/google/campaign/$CAMPAIGN_ID/intelligence?days=$DAYS" || true)
             success=$(jq -r '.success // false' intelligence.json 2>/dev/null || echo false)
-            complete=$(jq -r '(.success == true) and (.reader_version == 3) and ((.overview|type) == "array") and ((.ad_groups|type) == "array") and ((.rsa_ads|type) == "array") and ((.rsa_analysis|type) == "array") and ((.conversion_actions|type) == "array")' intelligence.json 2>/dev/null || echo false)
+            complete=$(jq -r '(.success == true) and (.reader_version == 4) and ((.overview|type) == "array") and ((.ad_groups|type) == "array") and ((.rsa_ads|type) == "array") and ((.rsa_analysis|type) == "array") and ((.conversion_actions|type) == "array") and ((.exact_date_range == null) or ((.exact_date_range|type) == "object"))' intelligence.json 2>/dev/null || echo false)
             if [ "$code" = "200" ] && [ "$complete" = "true" ]; then break; fi
             sleep 15
           done
           echo "intelligence=${success}; complete_reader=${complete}; http=${code}"
           if [ "$code" = "200" ] && [ "$complete" = "true" ]; then
-            jq '{success,mode,reader_version,campaign_id,period_days,date_range,counts:{overview:(.overview|length),ad_groups:(.ad_groups|length),search_terms:(.search_terms|length),keywords:(.keywords|length),devices:(.devices|length),hours:(.hours|length),geography:(.geography|length),rsa_ads:(.rsa_ads|length),rsa_analysis:(.rsa_analysis|length),conversion_actions:(.conversion_actions|length)},campaign_overview:(.overview|map(del(.campaign_id))),conversion_actions:(.conversion_actions|map(del(.conversion_action_resource))),top_ad_groups:(.ad_groups|sort_by(-.clicks)|.[0:20]|map(del(.ad_group_id))),top_search_terms:(.search_terms|sort_by(-.clicks)|.[0:12]|map(del(.ad_group_id))),top_keywords:(.keywords|sort_by(-.clicks)|.[0:12]|map(del(.ad_group_id))),devices,top_hours:(.hours|sort_by(-.clicks)|.[0:20]),top_geography:(.geography|sort_by(-.clicks)|.[0:20]),rsa_diagnostics:(.rsa_analysis|map(del(.ad_id,.campaign))),writes_allowed,execution_allowed,spend_allowed}' intelligence.json
+            jq '{success,mode,reader_version,campaign_id,period_days,date_range,exact_date_range,counts:{overview:(.overview|length),ad_groups:(.ad_groups|length),search_terms:(.search_terms|length),keywords:(.keywords|length),devices:(.devices|length),hours:(.hours|length),geography:(.geography|length),rsa_ads:(.rsa_ads|length),rsa_analysis:(.rsa_analysis|length),conversion_actions:(.conversion_actions|length)},campaign_overview:(.overview|map(del(.campaign_id))),conversion_actions:(.conversion_actions|map(del(.conversion_action_resource))),top_ad_groups:(.ad_groups|sort_by(-.clicks)|.[0:20]|map(del(.ad_group_id))),top_search_terms:(.search_terms|sort_by(-.clicks)|.[0:12]|map(del(.ad_group_id))),top_keywords:(.keywords|sort_by(-.clicks)|.[0:12]|map(del(.ad_group_id))),devices,top_hours:(.hours|sort_by(-.clicks)|.[0:20]),top_geography:(.geography|sort_by(-.clicks)|.[0:20]),rsa_diagnostics:(.rsa_analysis|map(del(.ad_id,.campaign))),writes_allowed,execution_allowed,spend_allowed}' intelligence.json
           else
             jq '{success,error,writes_allowed,execution_allowed,spend_allowed}' intelligence.json 2>/dev/null || true
             exit 1

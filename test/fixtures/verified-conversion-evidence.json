@@ -1,0 +1,9 @@
+{
+  "semantic_match": true,
+  "timezone_aligned": true,
+  "date_basis_aligned": true,
+  "attribution_compatible": true,
+  "counting_understood": true,
+  "data_mature": true,
+  "ground_truth_checked": true
+}
