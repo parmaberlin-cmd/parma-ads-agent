@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { buildShadowAgentReport } = require("../agent-shadow");
+const { assessGa4Health } = require("../ga4-health-guard");
 
 test("shadow agent connects modules without allowing writes", () => {
   const report = buildShadowAgentReport({
@@ -47,4 +48,13 @@ test("healthy conversion integrity allows bounded budget recommendation but neve
   assert.equal(report.budget_recommendations[0].recommendation, "increase");
   assert.equal(report.budget_recommendations[0].requires_authorization, true);
   assert.equal(report.writes_allowed, false);
+});
+
+test("GA4 regression remains fail-closed when Google is healthy", () => {
+  const health = assessGa4Health({ ga4_ok:false, google_ok:true, ga4_error:'refresh_token=secret', funnel_complete:true });
+  assert.equal(health.google_healthy, true);
+  assert.equal(health.healthy, false);
+  assert.equal(health.optimization_allowed, false);
+  assert.equal(health.writes_allowed, false);
+  assert.equal(health.sanitized_error.includes('secret'), false);
 });
