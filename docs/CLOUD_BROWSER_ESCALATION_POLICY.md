@@ -1,5 +1,7 @@
 # External UI / Cloud Browser Escalation Policy
 
+Status: durable operating policy for issue #143.
+
 ## Default
 Repository analysis, code changes, tests, public research and authenticated read-only API/connector diagnostics should use their direct interfaces. A browser-authenticated UI is not the default operating surface.
 
@@ -18,3 +20,10 @@ When one task reaches a browser/human gate, persist the blocker and continue unr
 
 ## Safety
 Secrets must not be copied into project state, logs, issues, prompts or screenshots. Browser access does not weaken campaign, tracking, budget, spend, publication or irreversible-action gates.
+
+## Acceptance criteria
+- ordinary repository/read-only work does not escalate to browser UI;
+- browser escalation requires an authenticated external-UI need plus unavailable direct interface;
+- user involvement is limited to genuine human gates;
+- a blocked UI task does not stop unrelated GREEN work;
+- no secret-handling or spend/write safety gate is weakened.
