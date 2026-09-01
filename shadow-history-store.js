@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { buildOperationalCheckpoint } = require('./report-memory');
 
 const DEFAULT_MAX_RECORDS = 90;
 const DEFAULT_TMP_HISTORY = "/tmp/parma-shadow-history.json";
@@ -94,6 +95,7 @@ function buildSanitizedHistoryRecord({ snapshot = {}, report = {}, generatedAt =
     safety_violation:false,
     outcome:null,
     expected_direction:null,
+    operational_checkpoint: buildOperationalCheckpoint({ snapshot, report, generatedAt }),
   };
 }
 

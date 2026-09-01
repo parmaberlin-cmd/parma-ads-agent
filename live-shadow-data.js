@@ -4,6 +4,7 @@ const { buildMetaOverview, buildGoogleReadiness } = require("./reporting");
 const { collectGoogleSearchTerms, collectGoogleKeywords, analyzeSearchTerms, analyzeKeywords } = require("./google-search-intelligence");
 const { META_API_VERSION } = require("./meta-paused-draft-next");
 const { buildMetaIssueReport } = require("./meta-issue-classification");
+const { reportingScope } = require('./reporting-scope');
 
 function normalizeGoogleCustomerId(value) { return String(value || "").replace(/\D/g, ""); }
 function googleConfigured(env = process.env) { return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_DEVELOPER_TOKEN && env.GOOGLE_REFRESH_TOKEN && env.GOOGLE_CUSTOMER_ID); }
@@ -81,7 +82,7 @@ async function collectGoogleShadowData({env=process.env,days=30,now=new Date(),s
     if(includeSearchIntelligence){
       try { const [terms,keywordRows]=await Promise.all([collectGoogleSearchTerms({customer,start,end}),collectGoogleKeywords({customer,start,end})]);searchTerms=analyzeSearchTerms(terms);keywords=analyzeKeywords(keywordRows);searchIntelligenceOk=true; } catch(error) { searchIntelligenceDiagnostic=cleanGoogleDiagnostic(error); }
     }
-    return {access_ok:true,configuration_complete:true,collected_at:collectedAt,period:{start,end},campaigns,totals,search_terms:searchTerms,keywords,search_intelligence_ok:searchIntelligenceOk,search_intelligence_diagnostic:searchIntelligenceDiagnostic};
+    return {access_ok:true,configuration_complete:true,collected_at:collectedAt,period:{start,end},reporting_scope:reportingScope('google',normalizeGoogleCustomerId(env.GOOGLE_CUSTOMER_ID),'campaigns_nonremoved_interaction_date_v1'),campaigns,totals,search_terms:searchTerms,keywords,search_intelligence_ok:searchIntelligenceOk,search_intelligence_diagnostic:searchIntelligenceDiagnostic};
   } catch(error) {
     return {access_ok:false,configuration_complete:true,collected_at:collectedAt,diagnostic:cleanGoogleDiagnostic(error),error:"google_read_failed",campaigns:[],totals:null,search_terms:[],keywords:[],search_intelligence_ok:false};
   }

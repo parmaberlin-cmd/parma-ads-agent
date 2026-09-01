@@ -14,6 +14,9 @@ const { buildReadonlyCycleState, assertReadonlyCycleSafe } = require("./shadow-r
 const { buildOperationalDashboard } = require("./operational-dashboard");
 const { buildPublicSourceView } = require("./runtime-public-view");
 const { safePublicJson } = require("./public-output-safety");
+const { renderDailyBriefItalian } = require('./daily-brief-italian');
+const { decisionBriefView } = require('./decision-brief-view');
+const operationalWorkQueue = require('./state/OPERATIONAL_MEMORY_BACKLOG.json');
 const { apiKeysMatch } = require("./api-key-auth");
 const {
   loadHistoryState,
@@ -52,9 +55,13 @@ function authorized(req) {
 function buildRuntimeViews() {
   if (!state.result) return { summary: null, cycle: null, dashboard: null };
   const r = state.result;
+  const briefView = decisionBriefView(r.decision_brief, { liveSources: r.live_sources, refreshFailed: Boolean(state.last_refresh_error), now: new Date() });
+  const viewQuality = briefView?.current_recommendations_available === false
+    ? { ...r.data_quality, confidence: 'blocked', integrity_ok: false, ready_for_recommendations: false, channel_ready: { google: false, meta: false }, blockers: [...(r.data_quality?.blockers || []), 'snapshot_not_current'] }
+    : r.data_quality;
   const publicStorage = { ...historyStorage, ...historyIntegrity };
   const promotion = buildSanitizedPromotionStatus({
-    shadowResult: { ...r, refresh_error: state.last_refresh_error },
+    shadowResult: { ...r, data_quality: viewQuality, refresh_error: state.last_refresh_error },
     metaPreflightState: metaPreflightStatus.state,
     buildValidated: process.env.AGENT_BUILD_VALIDATED === "true",
     shadowRecords: shadowHistory,
@@ -67,10 +74,10 @@ function buildRuntimeViews() {
     mode: "shadow",
     writes_allowed: false,
     data_quality: {
-      confidence: r.data_quality?.confidence || "unknown",
-      channel_ready: r.data_quality?.channel_ready || {},
-      blockers: r.data_quality?.blockers || [],
-      integrity_ok: r.data_quality?.integrity_ok === true,
+      confidence: viewQuality?.confidence || "unknown",
+      channel_ready: viewQuality?.channel_ready || {},
+      blockers: viewQuality?.blockers || [],
+      integrity_ok: viewQuality?.integrity_ok === true,
     },
     ...publicSources,
     funnel: {
@@ -85,22 +92,19 @@ function buildRuntimeViews() {
     conversion_integrity: {
       status: r.conversion_integrity?.status || "unknown",
       confidence: r.conversion_integrity?.confidence || "unknown",
-      optimization_allowed: Boolean(r.conversion_integrity?.optimization_allowed),
+      optimization_allowed: Boolean(r.conversion_integrity?.optimization_allowed) && briefView?.current_recommendations_available !== false,
       issues: r.conversion_integrity?.issues || [],
     },
     history: publicHistorySummary(shadowHistory, publicStorage),
     promotion,
-    decision_brief: r.decision_brief ? {
-      ...r.decision_brief,
-      snapshot_status: state.last_refresh_error ? 'last_refresh_failed' : 'last_completed_snapshot',
-    } : undefined,
+    decision_brief: briefView,
     anomalies: (r.anomalies || []).map((a) => ({
       code: a.code,
       severity: a.severity,
       reason: a.reason,
       channel: a.channel,
     })),
-    primary_priorities: (r.decision_brief?.priorities || r.daily_manager?.primary_priorities || []).map((p) => ({
+    primary_priorities: (briefView?.priorities || r.daily_manager?.primary_priorities || []).map((p) => ({
       code: p.code,
       severity: p.severity || (p.priority >= 95 ? 'high' : 'medium'),
       source: p.source || 'decision_brief',
@@ -108,9 +112,10 @@ function buildRuntimeViews() {
       requires_authorization: Boolean(p.requires_authorization),
     })),
   };
+  summary.daily_brief_text = renderDailyBriefItalian(summary.decision_brief);
   const cycle = buildReadonlyCycleState({
-    snapshot: { now: r.generated_at, data_quality: r.data_quality, live_sources: r.live_sources },
-    report: { conversion_integrity: r.conversion_integrity, anomalies: r.anomalies, daily_manager: r.daily_manager, decision_brief: r.decision_brief, mode: "shadow" },
+    snapshot: { now: r.generated_at, data_quality: viewQuality, live_sources: r.live_sources },
+    report: { conversion_integrity: r.conversion_integrity, anomalies: r.anomalies, daily_manager: r.daily_manager, decision_brief: briefView, mode: "shadow" },
     history: shadowHistory,
     historyStorage: publicStorage,
   });
@@ -133,7 +138,7 @@ function triggerShadowReport() {
 
   refreshPromise = collectFullLiveShadowInput({ days: Number(process.env.SHADOW_REPORT_DAYS || 30) })
     .then((input) => {
-      const report = buildShadowAgentReport(input);
+      const report = buildShadowAgentReport({ ...input, previous_history: shadowHistory, history_healthy: historyIntegrity.healthy === true, work_queue: operationalWorkQueue.items });
       state.status = "completed";
       state.finished_at = new Date().toISOString();
       state.error = null;
@@ -156,6 +161,8 @@ function triggerShadowReport() {
 
       const record = buildSanitizedHistoryRecord({ snapshot: input, report, generatedAt: state.finished_at });
       try {
+        // Never overwrite a corrupt history file with an apparently healthy empty baseline.
+        if (!loadHistoryState(historyPath(process.env)).healthy) throw new Error('history_unhealthy');
         shadowHistory = appendAndPersist({ records: shadowHistory, record, filePath: historyPath(process.env) });
         historyIntegrity = { healthy: true, reason: null };
       } catch (error) {
@@ -186,7 +193,7 @@ function triggerShadowReport() {
     })
     .catch((error) => {
       const failedAt = new Date().toISOString();
-      const errorMessage = String(error?.message || error);
+      const errorMessage = "shadow_report_failed";
       state.finished_at = failedAt;
       state.last_refresh_error = errorMessage;
       state.last_refresh_failed_at = failedAt;

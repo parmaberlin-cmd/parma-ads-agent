@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { summarizeOrderInventory } = require('./order-signal-diagnostics');
 
 async function runFunnelReport({ accessToken, propertyId, start, end, eventNames }) {
   const response = await axios.post(
@@ -46,6 +47,7 @@ function summarizeEventInventory(rows = [], expectedEvents = []) {
     event_count: events.length,
     top_events: events.slice(0, 50),
     reservation_candidates: reservationCandidates,
+    order_candidates: summarizeOrderInventory(rows),
   };
 }
 

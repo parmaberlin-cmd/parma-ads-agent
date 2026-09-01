@@ -1,5 +1,8 @@
 const { observedNumber } = require('./observed-number');
 const { assessDirectOrders } = require('./direct-order-readiness');
+const { buildOperationalCheckpoint, compareOperationalHistory } = require('./report-memory');
+const { diagnoseOrderSignals } = require('./order-signal-diagnostics');
+const { selectNextAutonomousAction } = require('./next-action-engine');
 
 // Read-only, allowlisted output. Never echo raw errors, names, URLs or credentials.
 function buildDailyDecisionBrief({ input = {}, report = {}, now = new Date() } = {}) {
@@ -43,6 +46,10 @@ function buildDailyDecisionBrief({ input = {}, report = {}, now = new Date() } =
     'Billing or security remediation, if required, is a separate human gate.');
 
   const terms = Array.isArray(input.search_terms) ? input.search_terms.length : 0;
+  if (sources.google === 'fresh' && input.live_sources?.google?.search_intelligence_ok === false) add('CHECK_SEARCH_COLLECTION', 90,
+    'Inspect the failed search-term sub-collection; successful campaign metrics do not prove the term inventory is complete.',
+    { campaign_metrics_available: true, search_collection_complete: false },
+    'Avoid interpreting a failed search-term query as absence of customer demand.');
   if (sources.google === 'fresh' && terms > 0) add('REVIEW_LOCAL_SEARCH_INTENT', 75,
     'Group search terms into nearby dining, pickup, delivery and irrelevant intent; prepare proposals only.',
     { observed_terms: terms }, 'Find opportunities to attract nearby customers to direct orders without auto-excluding terms.');
@@ -53,22 +60,42 @@ function buildDailyDecisionBrief({ input = {}, report = {}, now = new Date() } =
     { observed_clicks: clicks }, 'Identify where and when local demand may be captured with existing delivery.');
 
   const directOrders = input.direct_orders === undefined ? null : assessDirectOrders(input.direct_orders, { now: generatedAt });
+  const orderSignals = diagnoseOrderSignals(input.live_sources?.ga4 || {}, { fresh: sources.ga4 === 'fresh' });
+  if (sources.ga4 === 'fresh') add('VERIFY_ORDER_SIGNALS', 84,
+    'Inspect order-related event candidates already returned by GA4; reconcile completion signals with real provider orders.',
+    { candidate_count: orderSignals.candidates.length, completion_candidates_overlap: orderSignals.parallel_completion_candidates },
+    'Separate direct-order intent from reservation and checkout events before measuring customer acquisition.',
+    'Real order count and revenue require provider reconciliation; event-inventory analysis is available now.');
   if (directOrders) add('REVIEW_DIRECT_ORDER_EVIDENCE', 70,
     'Review dated ordering-path observations and provider measurement; a reachable checkout is not a completed order.',
     { ready_for_optimization_review: directOrders.ready_for_order_optimization_review === true },
     'Prepare a measurable direct-order objective without confusing navigation with revenue.');
 
   actions.sort((a, b) => b.priority - a.priority || a.code.localeCompare(b.code));
-  return {
+  const brief = {
     version: 1, generated_at: generatedAt, mode: 'shadow',
     objective: 'verified_nearby_customers_and_direct_orders',
     source_evidence: sources,
     priorities: actions.slice(0, 5), deferred_actions: actions.slice(5),
     next_autonomous_action: actions[0]?.code || null,
     direct_orders: directOrders,
+    order_signals: orderSignals,
     writes_allowed: false, spend_authorized: false,
     tracking_mutation_authorized: false, deploy_authorized: false,
   };
+  brief.changes = compareOperationalHistory({
+    current: buildOperationalCheckpoint({ snapshot: input, report: { decision_brief: brief }, generatedAt }),
+    history: input.previous_history || [], historyHealthy: input.history_healthy !== false,
+  });
+  if (Array.isArray(input.work_queue)) {
+    const queue = selectNextAutonomousAction(input.work_queue, { now });
+    brief.engineering_queue = {
+      status: queue.status, eligible_count: queue.eligible_count,
+      selected_id: queue.selected?.id || null, selected_operation: queue.selected?.operation || null,
+      excluded_count: queue.excluded.length, execution_authorized: false,
+    };
+  }
+  return brief;
 }
 
 module.exports = { buildDailyDecisionBrief };
