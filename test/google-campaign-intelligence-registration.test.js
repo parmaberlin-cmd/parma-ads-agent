@@ -29,5 +29,6 @@ test("Google campaign intelligence response includes the complete reader diagnos
   assert.ok(route.includes("writes_allowed:false"));
   assert.ok(route.includes("execution_allowed:false"));
   assert.ok(route.includes("spend_allowed:false"));
-  assert.ok(route.includes("reader_version:3"));
+  assert.ok(route.includes("reader_version:4"));
+  assert.ok(route.includes("exact_date_range"));
 });
