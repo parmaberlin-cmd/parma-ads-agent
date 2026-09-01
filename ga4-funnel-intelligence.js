@@ -15,6 +15,40 @@ async function runFunnelReport({ accessToken, propertyId, start, end, eventNames
   return response.data.rows || [];
 }
 
+async function runEventInventory({ accessToken, propertyId, start, end }) {
+  const response = await axios.post(
+    `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
+    {
+      dateRanges: [{ startDate: start, endDate: end }],
+      dimensions: [{ name: "eventName" }],
+      metrics: [{ name: "eventCount" }],
+      orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+      limit: "200",
+    },
+    { headers: { authorization: `Bearer ${accessToken}` }, timeout: 20000 }
+  );
+  return response.data.rows || [];
+}
+
+function summarizeEventInventory(rows = [], expectedEvents = []) {
+  const expected = new Set(expectedEvents.map((value) => String(value).toLowerCase()));
+  const events = rows.map((row) => ({
+    event_name: String(row.dimensionValues?.[0]?.value || "").trim(),
+    event_count: Math.max(0, Number(row.metricValues?.[0]?.value || 0)),
+  })).filter((row) => row.event_name && Number.isFinite(row.event_count));
+
+  const reservationCandidates = events.filter((row) => {
+    const name = row.event_name.toLowerCase();
+    return !expected.has(name) && /(reserv|book|table|appoint|calendar|schedule)/i.test(name);
+  }).slice(0, 20);
+
+  return {
+    event_count: events.length,
+    top_events: events.slice(0, 50),
+    reservation_candidates: reservationCandidates,
+  };
+}
+
 function summarizeFunnel(rows = [], eventNames = []) {
   const totals = Object.fromEntries(eventNames.map((name) => [name, 0]));
   const googleCpc = Object.fromEntries(eventNames.map((name) => [name, 0]));
@@ -89,6 +123,8 @@ function reconcileConversions({ googleAdsConversions, ga4GoogleCpcBookings }) {
 
 module.exports = {
   runFunnelReport,
+  runEventInventory,
+  summarizeEventInventory,
   summarizeFunnel,
   funnelTrackingStatus,
   funnelCompleteness,
