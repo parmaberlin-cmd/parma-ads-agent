@@ -2,7 +2,7 @@ name: google-live-access
 
 on:
   push:
-    branches: [main, google/intelligence-breakdowns-v1]
+    branches: [main, google/intelligence-breakdowns-v1, diagnostics/conversion-semantics-v1]
   workflow_dispatch:
 
 permissions:
@@ -53,15 +53,17 @@ jobs:
           echo "campaign_metrics=${success}; http=${code}; impressions=${impressions}; clicks=${clicks}; cost_eur=${cost}; conversions=${conversions}"
           if [ "$code" != "200" ] || [ "$success" != "true" ]; then exit 1; fi
 
-      - name: Validate intelligence module syntax on branch
+      - name: Validate diagnostic modules and tests on branch
         if: github.ref != 'refs/heads/main'
         run: |
           set -euo pipefail
           node --check google-campaign-breakdowns.js
           node --check google-conversion-action-breakdown.js
-          node --check google-campaign-intelligence-preload.js
-          node --check scripts/google-campaign-intelligence-live.js
-          echo "intelligence_live=deferred_until_main_deploy"
+          node --check google-conversion-semantics.js
+          node --check google-search-term-analysis.js
+          node --check conversion-confidence.js
+          node --test test/google-conversion-semantics.test.js test/google-search-term-analysis.test.js test/conversion-confidence.test.js
+          echo "diagnostic_live=deferred_until_explicit_deploy_authorization"
 
       - name: Validate live Google campaign intelligence through Railway
         if: github.ref == 'refs/heads/main'
