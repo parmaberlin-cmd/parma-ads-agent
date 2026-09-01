@@ -73,4 +73,34 @@ function analyzeHourDistribution(rows = []) {
   })).sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions);
 }
 
-module.exports = { analyzeKeywordOverlap, analyzeRankBudget, analyzeDeviceDistribution, analyzeHourDistribution };
+function analyzeGeoDistribution(rows = []) {
+  const totalImpressions = rows.reduce((sum, row) => sum + n(row.impressions), 0);
+  const totalClicks = rows.reduce((sum, row) => sum + n(row.clicks), 0);
+  const mapped = (rows || []).map((row) => {
+    const kind = String(row.location_type || row.geo_type || row.type || "unknown").toLowerCase();
+    return {
+      location_type: kind,
+      impressions: n(row.impressions),
+      clicks: n(row.clicks),
+      cost_eur: n(row.cost_eur ?? row.cost),
+      impression_share_of_observed: totalImpressions > 0 ? n(row.impressions) / totalImpressions : null,
+      click_share_of_observed: totalClicks > 0 ? n(row.clicks) / totalClicks : null,
+      registered_conversions_status: "unverified_measurement",
+      targeting_change_supported: false,
+      requires_write: false,
+    };
+  }).sort((a, b) => b.clicks - a.clicks);
+  const interest = mapped.find((row) => /interest/.test(row.location_type));
+  const presence = mapped.find((row) => /presence|physical/.test(row.location_type));
+  return {
+    rows: mapped,
+    interest_vs_presence_observed: Boolean(interest && presence),
+    interest_click_ratio_to_presence: interest && presence && presence.clicks > 0 ? interest.clicks / presence.clicks : null,
+    conclusion: "descriptive_only",
+    targeting_change_supported: false,
+    rationale: "Geographic observation categories do not by themselves prove wasted traffic; conversion integrity and targeting semantics must be reconciled first.",
+    requires_write: false,
+  };
+}
+
+module.exports = { analyzeKeywordOverlap, analyzeRankBudget, analyzeDeviceDistribution, analyzeHourDistribution, analyzeGeoDistribution };
