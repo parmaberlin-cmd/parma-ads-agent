@@ -3,7 +3,7 @@
   "genome_version": "1.2.0",
   "global": {
     "project_status": "DNA_ACTIVE",
-    "current_p0": "Restore conversion integrity by reconciling Google Ads conversions with GA4 booking_completed and resolving missing upstream reservation funnel observations",
+    "current_p0": "Restore conversion integrity while advancing access-independent Google/GA4/Meta diagnostics and no-write optimization simulation",
     "last_meaningful_capability_gain": "Google Ads intelligence is production-verified and GA4 OAuth/Data API access is healthy in production shadow mode",
     "infrastructure_progress": 82,
     "autonomy_progress": 58
@@ -12,9 +12,9 @@
     "control_tower": {"status": "ACTIVE", "focus": "Coordinate parallel workstreams from authoritative DNA/state"},
     "google": {"status": "ACTIVE_READ_ONLY", "focus": "Campaign intelligence, conversion-action reconciliation, rank diagnosis and proposal preparation"},
     "meta": {"status": "PARTIAL", "focus": "Read-only diagnosis of account/security/payment restrictions; no activation or spend"},
-    "engineering": {"status": "ACTIVE", "focus": "Conversion-action diagnostics, GA4 funnel instrumentation diagnostics and regression guards"},
-    "intelligence": {"status": "PARTIAL", "focus": "Evidence-based recommendations with conversion integrity fail-closed"},
-    "automation": {"status": "PARTIAL", "focus": "Shadow cycle, durable history and source-health monitoring"}
+    "engineering": {"status": "ACTIVE", "focus": "Conversion semantics, exact-date diagnostics, regression guards and deployment safety"},
+    "intelligence": {"status": "PARTIAL", "focus": "Evidence-based recommendations with measurement-contract fail-closed gates"},
+    "automation": {"status": "PARTIAL", "focus": "Shadow cycle, durable history, source-health monitoring and autonomous backlog"}
   },
   "tasks": [
     {
@@ -58,12 +58,72 @@
       "owner": "intelligence",
       "priority": "P0",
       "status": "IN_PROGRESS",
-      "evidence": "booking_completed observed; reservation_page_view and reservation_start configured but not observed; conversion_integrity=degraded; conversion_sources_disagree",
+      "evidence": "Google Ads primary/all conversion counts and GA4 reservation-like events disagree in attribution/volume; semantic cause not proven; measurement contract and reconciliation matrix now exist on diagnostic branch",
       "expected_result": "Explain Google Ads ↔ GA4 conversion relationship and restore trusted funnel measurement without weakening safety gates",
       "dependencies": ["G-017", "GA4-001"],
       "lease_owner": null,
       "lease_until": null,
       "idempotency_key": "google-ga4-conversion-integrity"
+    },
+    {
+      "id": "G-DIAG-001",
+      "owner": "google",
+      "priority": "P0",
+      "status": "IN_PROGRESS",
+      "evidence": "Read-only branch analysis of production payload for 2026-08-02..2026-08-31 completed: 16,594 impressions, 511 clicks, EUR103.54, 98% mobile clicks; intent clusters, keyword overlap, rank/budget, hour, geo and RSA structural diagnostics generated without writes",
+      "expected_result": "Produce a complete no-write optimization map that remains useful before conversion ground truth is available",
+      "dependencies": ["G-017"],
+      "lease_owner": null,
+      "lease_until": null,
+      "idempotency_key": "google-access-independent-diagnostics"
+    },
+    {
+      "id": "MEAS-002",
+      "owner": "engineering",
+      "priority": "P0",
+      "status": "IN_PROGRESS",
+      "evidence": "Collectors/tests exist for Ads conversion-date reporting by action, conversion metadata, GA4 exact-date event semantics and reconciliation confidence; new readers remain undeployed",
+      "expected_result": "Make timezone/date/attribution/counting semantics directly testable and fail-closed before any publication gate",
+      "dependencies": ["MEAS-001"],
+      "lease_owner": null,
+      "lease_until": null,
+      "idempotency_key": "conversion-semantics-readers"
+    },
+    {
+      "id": "OPT-SIM-001",
+      "owner": "intelligence",
+      "priority": "P1",
+      "status": "IN_PROGRESS",
+      "evidence": "No-write Google optimization simulation package created with keyword overlap, RSA rebuild, mobile, schedule, geo and rank/budget guardrails",
+      "expected_result": "Have reversible evidence-scoped mutation packages ready for later approval without executing them",
+      "dependencies": ["G-DIAG-001"],
+      "lease_owner": null,
+      "lease_until": null,
+      "idempotency_key": "google-optimization-simulation"
+    },
+    {
+      "id": "META-DIAG-001",
+      "owner": "meta",
+      "priority": "P1",
+      "status": "IN_PROGRESS",
+      "evidence": "Known code 2490455 maps to account_security_or_payment_restriction; diagnostic classifier now detects repeated cross-level reason as account-level pattern candidate while preserving cause_proven=false",
+      "expected_result": "Minimize future human Meta diagnosis to the smallest account/security/payment checkpoint",
+      "dependencies": [],
+      "lease_owner": null,
+      "lease_until": null,
+      "idempotency_key": "meta-account-level-pattern-diagnostic"
+    },
+    {
+      "id": "EXT-WIX-001",
+      "owner": "control_tower",
+      "priority": "P0",
+      "status": "BLOCKED_EXTERNAL",
+      "evidence": "Previously connected Wix account is not the correct Parma site/account; do not use it for business ground truth",
+      "expected_result": "Read successful online table-reservation ground truth from the correct Parma Wix account when convenient access becomes available",
+      "dependencies": [],
+      "lease_owner": null,
+      "lease_until": null,
+      "idempotency_key": "correct-wix-ground-truth-access"
     }
   ],
   "validation_checkpoints": {
@@ -75,7 +135,8 @@
     "dna_promotion": {"status": "PASS", "evidence": "Authoritative manifest promoted from 1.2.0-candidate/FROZEN_FOR_MATERIALIZATION to 1.2.0/ACTIVE after all promotion gates passed"},
     "google_live_read": {"status": "PASS", "evidence": "Campaign 23276824770 intelligence returned live read-only data end-to-end with writes/execution/spend disabled"},
     "ga4_live_read": {"status": "PASS", "evidence": "Production shadow reports GA4 healthy with no source error"},
-    "conversion_integrity": {"status": "BLOCKED", "evidence": "Google Ads and GA4 conversion sources disagree; upstream reservation events not observed", "safety": "optimization_allowed=false"}
+    "diagnostic_branch_live_payload": {"status": "PASS", "evidence": "Diagnostic branch successfully analyzed sanitized live Google intelligence locally; focused suite 31/31 PASS; no new reader deployed"},
+    "conversion_integrity": {"status": "BLOCKED", "evidence": "Timezone/date-basis/attribution/counting/semantic identity and business ground truth are not yet fully reconciled", "safety": "optimization_allowed=false"}
   },
   "approvals": [],
   "experiments": [],
