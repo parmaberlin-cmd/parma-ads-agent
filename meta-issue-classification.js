@@ -3,9 +3,6 @@ function issueText(issue = {}) {
 }
 
 const KNOWN_ISSUE_CODES = Object.freeze({
-  // Meta describes this condition as an automatic pause related to a
-  // potentially compromised user or payment restriction. It is an account
-  // safety/billing condition, not a creative-performance diagnosis.
   '2490455': { category:'account_or_billing', reason:'account_security_or_payment_restriction' },
 });
 
@@ -35,6 +32,34 @@ function safeIssueCode(value) {
   if (value == null) return null;
   const code = String(value).trim();
   return /^[A-Za-z][A-Za-z0-9_.:-]{0,31}$/.test(code) || /^\d{1,9}$/.test(code) ? code : null;
+}
+
+function buildPropagationDiagnostic(rows = []) {
+  const reasonLevels = {};
+  const reasonObjects = {};
+  for (const row of rows) {
+    for (const issue of row.issues || []) {
+      const reason = issueReason(issue);
+      reasonLevels[reason] ||= new Set();
+      reasonObjects[reason] ||= new Set();
+      reasonLevels[reason].add(row.object_level);
+      reasonObjects[reason].add(`${row.object_level}:${row.name || row.campaign_ref || 'unknown'}`);
+    }
+  }
+  const patterns = Object.entries(reasonObjects).map(([reason, objects]) => ({
+    reason,
+    affected_objects: objects.size,
+    object_levels: [...reasonLevels[reason]].sort(),
+    multi_level_pattern: reasonLevels[reason].size >= 2,
+    account_level_pattern_candidate: reason === 'account_security_or_payment_restriction' && reasonLevels[reason].size >= 2 && objects.size >= 2,
+    cause_proven: false,
+  })).sort((a, b) => b.affected_objects - a.affected_objects);
+  return {
+    patterns,
+    account_level_pattern_candidate: patterns.some((p) => p.account_level_pattern_candidate),
+    cause_proven: false,
+    requires_human_account_ui: patterns.some((p) => p.account_level_pattern_candidate),
+  };
 }
 
 function buildMetaIssueReport(issueDiagnostics = {}) {
@@ -76,13 +101,13 @@ function buildMetaIssueReport(issueDiagnostics = {}) {
   return {
     affected_objects: rows.length,
     issue_count: issueCount,
-    // Legacy object-level counts retained for compatibility.
     categories,
     issue_categories: issueCategories,
     issue_reasons: issueReasons,
     unknown_codes: unknownCodes,
+    propagation: buildPropagationDiagnostic(rows),
     objects: rows,
   };
 }
 
-module.exports = { KNOWN_ISSUE_CODES, classifyIssue, issueReason, safeIssueCode, buildMetaIssueReport };
+module.exports = { KNOWN_ISSUE_CODES, classifyIssue, issueReason, safeIssueCode, buildPropagationDiagnostic, buildMetaIssueReport };
