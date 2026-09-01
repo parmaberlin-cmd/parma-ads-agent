@@ -1,0 +1,3 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {scoreExperiment,rankExperiments}=require('../experiment-priority');
+test('higher evidence and lower risk rank ahead',()=>{const r=rankExperiments([{id:'weak',expected_customer_impact:90,evidence_strength:30,confidence:40,risk:'high'},{id:'strong',expected_customer_impact:70,evidence_strength:90,confidence:90,risk:'low'}]);assert.equal(r[0].id,'strong')});
+test('priority never grants execution or spend',()=>{const x=scoreExperiment({expected_customer_impact:100,evidence_strength:100,confidence:100,risk:'low'});assert.equal(x.execution_allowed,false);assert.equal(x.spend_authorized,false)});
