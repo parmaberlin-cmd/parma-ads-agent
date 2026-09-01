@@ -43,7 +43,15 @@ Completed in the current diagnostic phase:
 - no-write Google optimization simulation;
 - conservative Meta restriction-pattern diagnosis;
 - reversible mutation-package schema;
-- blocker-type separation between software, data/maturity, external access and permission gates.
+- blocker-type separation between software, data/maturity, external access and permission gates;
+- public growth audit and direct-order measurement contract;
+- commercial objective, budget scenarios, experiment library, anomaly triage and next-GREEN-action selection.
+
+## Continuous GREEN execution
+
+The next autonomous cycle is defined in `docs/THIRD_AUTONOMOUS_GROWTH_CYCLE.md` and backlog items AUTO-020 through AUTO-035. The Control Tower must not request a generic `proceed` confirmation between these tasks. When a task reaches an external-access or permission boundary, mark it DONE_TO_BOUNDARY/BLOCKED as appropriate and continue the next independent GREEN task.
+
+The cycle covers keyword/search-term structure, RSA proposals, ad-group consolidation simulation, local/customer/query-value scoring, non-conversion day-hour demand analysis, local SEO, competitor/review intelligence, verified messaging, commercial value/CPA/LTV frameworks, evidence expiry/maturity, human-gate batching, weekly commercial review, dormant Wix reconciliation interfaces, acquisition dashboard design and the first evidence-ranked optimization plan.
 
 ## External checkpoints
 
