@@ -84,7 +84,7 @@ async function runBookingSourceReport({accessToken,propertyId,start,end}){
 
 async function collectGa4ShadowData({ env = process.env, days = 30, now = new Date(), startDate = null, endDate = null } = {}) {
   const collectedAt=now.toISOString();
-  if(!ga4Configured(env))return{access_ok:false,configuration_complete:false,collected_at:collectedAt,error:"ga4_configuration_incomplete",required_variable:"GA4_PROPERTY_ID",total_booking_completed:null,google_cpc_booking_completed:null,last_seen_at:null,booking_quality:null,booking_sources:null,funnel:null,event_inventory:null};
+  if(!ga4Configured(env))return{access_ok:false,configuration_complete:false,collected_at:collectedAt,error:"ga4_configuration_incomplete",required_variable:"GA4_PROPERTY_ID",total_booking_completed:null,google_cpc_booking_completed:null,last_seen_at:null,booking_quality:null,booking_sources:null,funnel:null,event_inventory:null,candidate_attribution:null};
   const fallback=getDateRange(days,now); const start=startDate||fallback.start; const end=endDate||fallback.end;
   try{
     const accessToken=await getGoogleAccessToken(env);
@@ -98,9 +98,16 @@ async function collectGa4ShadowData({ env = process.env, days = 30, now = new Da
       runEventInventory({accessToken,propertyId:env.GA4_PROPERTY_ID,start,end}),
     ]);
     const summarized=summarizeFunnel(funnelRows,eventNames); const funnel={event_names:eventNames,...summarized};
-    return {access_ok:true,configuration_complete:true,collected_at:collectedAt,period:{start,end},event_name:"booking_completed",total_booking_completed:allBookings.event_count,google_cpc_booking_completed:googleCpcBookings.event_count,last_seen_at:googleCpcBookings.last_seen_at||allBookings.last_seen_at,booking_quality:bookingQuality,booking_sources:bookingSources,funnel:{...funnel,completeness:funnelCompleteness(funnel,DEFAULT_FUNNEL_EVENTS),rates:funnelRates(funnel)},event_inventory:summarizeEventInventory(eventInventoryRows,eventNames)};
+    const eventInventory=summarizeEventInventory(eventInventoryRows,eventNames);
+    const candidateNames=eventInventory.reservation_candidates.map((row)=>row.event_name).filter(Boolean);
+    let candidateAttribution={event_names:[],totals:{},google_cpc:{}};
+    if(candidateNames.length){
+      const candidateRows=await runFunnelReport({accessToken,propertyId:env.GA4_PROPERTY_ID,start,end,eventNames:candidateNames});
+      candidateAttribution={event_names:candidateNames,...summarizeFunnel(candidateRows,candidateNames)};
+    }
+    return {access_ok:true,configuration_complete:true,collected_at:collectedAt,period:{start,end},event_name:"booking_completed",total_booking_completed:allBookings.event_count,google_cpc_booking_completed:googleCpcBookings.event_count,last_seen_at:googleCpcBookings.last_seen_at||allBookings.last_seen_at,booking_quality:bookingQuality,booking_sources:bookingSources,funnel:{...funnel,completeness:funnelCompleteness(funnel,DEFAULT_FUNNEL_EVENTS),rates:funnelRates(funnel)},event_inventory:eventInventory,candidate_attribution:candidateAttribution};
   }catch(error){
-    return {access_ok:false,configuration_complete:true,collected_at:collectedAt,error:sanitizeGoogleError(error,"ga4_read_failed"),total_booking_completed:null,google_cpc_booking_completed:null,last_seen_at:null,booking_quality:null,booking_sources:null,funnel:null,event_inventory:null};
+    return {access_ok:false,configuration_complete:true,collected_at:collectedAt,error:sanitizeGoogleError(error,"ga4_read_failed"),total_booking_completed:null,google_cpc_booking_completed:null,last_seen_at:null,booking_quality:null,booking_sources:null,funnel:null,event_inventory:null,candidate_attribution:null};
   }
 }
 
