@@ -58,6 +58,17 @@ function publicEventCandidates(ga4 = {}) {
   }));
 }
 
+function publicCandidateAttribution(ga4 = {}) {
+  const names = Array.isArray(ga4.candidate_attribution?.event_names) ? ga4.candidate_attribution.event_names : [];
+  const totals = ga4.candidate_attribution?.totals || {};
+  const googleCpc = ga4.candidate_attribution?.google_cpc || {};
+  return names.slice(0, 20).map((name) => ({
+    event_name: safeCode(name, "unknown_event"),
+    total: safeAggregateCount(totals[name]),
+    google_cpc: safeAggregateCount(googleCpc[name]),
+  }));
+}
+
 function publicGa4Diagnostic(ga4 = {}) {
   if (ga4.access_ok === true) {
     return {
@@ -76,6 +87,7 @@ function publicGa4Diagnostic(ga4 = {}) {
       },
       event_inventory_count: safeAggregateCount(ga4.event_inventory?.event_count),
       reservation_event_candidates: publicEventCandidates(ga4),
+      reservation_candidate_attribution: publicCandidateAttribution(ga4),
     };
   }
   return {
@@ -130,6 +142,7 @@ module.exports = {
   publicTrackingView,
   safeAggregateCount,
   publicEventCandidates,
+  publicCandidateAttribution,
   publicGa4Diagnostic,
   publicMetaDiagnostic,
   buildPublicSourceView,
