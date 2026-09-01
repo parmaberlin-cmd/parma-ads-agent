@@ -1,0 +1,26 @@
+{
+  "version": "1.0.0",
+  "purpose": "Tasks the Agent can advance without Wix/Meta UI access or external campaign writes.",
+  "rules": {
+    "no_user_as_middleware": true,
+    "no_merge_deploy_without_gate": true,
+    "no_campaign_tracking_spend_writes": true,
+    "fail_closed_on_measurement_uncertainty": true
+  },
+  "items": [
+    {"id":"AUTO-001","priority":"P0","owner":"engineering","status":"DONE","task":"Synchronize diagnostic branch with exact-date stacked base history","evidence":"base 95376d8 incorporated; branch no longer behind stacked base"},
+    {"id":"AUTO-002","priority":"P0","owner":"intelligence","status":"DONE","task":"Create measurement contract","evidence":"docs/MEASUREMENT_CONTRACT.md"},
+    {"id":"AUTO-003","priority":"P0","owner":"google","status":"DONE","task":"Analyze sanitized production Google payload with no-write branch diagnostics","evidence":"intent, overlap, rank/budget, device, hour, geo and RSA diagnostics completed"},
+    {"id":"AUTO-004","priority":"P0","owner":"engineering","status":"IN_PROGRESS","task":"Keep conversion reconciliation tests and exact-date parser production-linked","blocked_by":null},
+    {"id":"AUTO-005","priority":"P1","owner":"intelligence","status":"DONE","task":"Prepare no-write Google optimization simulation package","evidence":"docs/proposals/GOOGLE_OPTIMIZATION_SIMULATION_2026-09-01.md"},
+    {"id":"AUTO-006","priority":"P1","owner":"meta","status":"IN_PROGRESS","task":"Conservatively classify repeated Meta account/security/payment patterns without claiming cause","blocked_by":"new Meta live evidence unavailable"},
+    {"id":"AUTO-007","priority":"P1","owner":"engineering","status":"IN_PROGRESS","task":"Prepare GA4 exact-date event-semantics reader and keep attribution scope explicit","blocked_by":"new reader not deployed"},
+    {"id":"AUTO-008","priority":"P1","owner":"control_tower","status":"IN_PROGRESS","task":"Persist blockers by type: software, data maturity, external access, permission gate","blocked_by":null},
+    {"id":"AUTO-009","priority":"P2","owner":"intelligence","status":"READY","task":"Create reversible future mutation-package schema for keyword/RSA/geo/schedule/budget proposals","blocked_by":null},
+    {"id":"AUTO-010","priority":"P2","owner":"automation","status":"READY","task":"Add regression checks that external blockers never masquerade as software blockers","blocked_by":null},
+    {"id":"EXT-001","priority":"P0","owner":"control_tower","status":"BLOCKED_EXTERNAL","task":"Read Wix reservation ground truth from correct Parma account","blocked_by":"correct Wix account access"},
+    {"id":"EXT-002","priority":"P1","owner":"meta","status":"BLOCKED_EXTERNAL","task":"Verify Meta Account Quality/payment/security restriction in correct UI context","blocked_by":"Meta UI/account access if repo evidence cannot prove cause"},
+    {"id":"GATE-001","priority":"P0","owner":"control_tower","status":"BLOCKED_PERMISSION","task":"Merge/deploy diagnostic readers","blocked_by":"explicit publication authorization"},
+    {"id":"GATE-002","priority":"P0","owner":"control_tower","status":"BLOCKED_PERMISSION","task":"Apply Google Ads/GA4/Meta/tracking/spend changes","blocked_by":"separate write/spend approval"}
+  ]
+}
