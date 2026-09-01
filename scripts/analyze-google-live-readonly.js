@@ -6,6 +6,7 @@ const { buildConversionReconciliation } = require('../conversion-reconciliation'
 const { auditKeywordPortfolio } = require('../keyword-portfolio-audit');
 const { auditSearchTermCorpus } = require('../search-term-corpus-audit');
 const { prioritizeSemanticRefinement } = require('../semantic-refinement-priority');
+const { reviewDormantKeywords } = require('../dormant-keyword-review');
 
 function readJson(path) {
   const parsed = JSON.parse(fs.readFileSync(path, 'utf8'));
@@ -29,6 +30,7 @@ function main() {
   const searchCorpusAudit = auditSearchTermCorpus(data.search_terms || []);
   const semanticRefinement = prioritizeSemanticRefinement(searchCorpusAudit.cells);
   const keywordPortfolioAudit = auditKeywordPortfolio(data.keywords || []);
+  const dormantKeywordReview = reviewDormantKeywords(data.keywords || []);
   const keywordOverlap = analyzeKeywordOverlap(data.keywords || []);
   const rsa = analyzeRsaSet(data.rsa_ads || [], { conversionTrusted: false });
   const rankBudget = analyzeRankBudget({
@@ -70,6 +72,7 @@ function main() {
       raw_search_terms_logged: false,
     },
     keyword_portfolio_audit: keywordPortfolioAudit,
+    dormant_keyword_review: dormantKeywordReview,
     search_term_corpus_audit: searchCorpusAudit,
     semantic_refinement_priorities: semanticRefinement,
     rank_budget: rankBudget,
