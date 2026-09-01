@@ -63,10 +63,11 @@ jobs:
           node --check google-search-term-analysis.js
           node --check google-rsa-analysis.js
           node --check conversion-confidence.js
+          node --check conversion-reconciliation.js
           node --check ga4-event-semantics.js
           node --check google-optimization-diagnostics.js
           node --check meta-issue-classification.js
-          node --test test/google-conversion-semantics.test.js test/google-search-term-analysis.test.js test/google-rsa-analysis.test.js test/conversion-confidence.test.js test/ga4-event-semantics.test.js test/google-optimization-diagnostics.test.js test/meta-issue-classification.test.js
+          node --test test/google-conversion-semantics.test.js test/google-search-term-analysis.test.js test/google-rsa-analysis.test.js test/conversion-confidence.test.js test/conversion-reconciliation.test.js test/ga4-event-semantics.test.js test/google-optimization-diagnostics.test.js test/meta-issue-classification.test.js
           echo "diagnostic_live=deferred_until_explicit_deploy_authorization"
 
       - name: Validate live Google campaign intelligence through Railway
