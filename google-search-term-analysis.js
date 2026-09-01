@@ -22,6 +22,18 @@ function number(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function intentSafety(intent) {
+  const local = ["near_me","local_kreuzberg","open_now","brand"].includes(intent);
+  return {
+    negative_keyword_supported: false,
+    walk_in_measurement_risk: local,
+    local_intent: local,
+    rationale: local
+      ? "Local-intent searches may produce unmeasured walk-ins; zero registered bookings are not evidence of waste."
+      : "Conversion integrity is unverified; search-term exclusions require independent evidence before any write.",
+  };
+}
+
 function analyzeSearchTerms(rows = []) {
   const clusters = new Map();
   for (const row of rows || []) {
@@ -39,7 +51,9 @@ function analyzeSearchTerms(rows = []) {
     ctr: c.impressions > 0 ? c.clicks / c.impressions : 0,
     avg_cpc_eur: c.clicks > 0 ? c.cost_eur / c.clicks : 0,
     conversion_status: "unverified_measurement",
+    ...intentSafety(c.intent),
+    requires_write: false,
   })).sort((a,b) => b.clicks - a.clicks);
 }
 
-module.exports = { classifyIntent, analyzeSearchTerms };
+module.exports = { classifyIntent, intentSafety, analyzeSearchTerms };
