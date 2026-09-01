@@ -3,18 +3,18 @@
   "genome_version": "1.2.0",
   "global": {
     "project_status": "DNA_ACTIVE",
-    "current_p0": "Resolve G-017 so authenticated Parma Agent requests reach Google Ads, then verify campaign metrics end-to-end",
-    "last_meaningful_capability_gain": "DNA v1.2 ACTIVE and disposable-agent Bootstrap/Recovery capability verified",
-    "infrastructure_progress": 65,
-    "autonomy_progress": 42
+    "current_p0": "Restore conversion integrity by reconciling Google Ads conversions with GA4 booking_completed and resolving missing upstream reservation funnel observations",
+    "last_meaningful_capability_gain": "Google Ads intelligence is production-verified and GA4 OAuth/Data API access is healthy in production shadow mode",
+    "infrastructure_progress": 82,
+    "autonomy_progress": 58
   },
   "agents": {
     "control_tower": {"status": "ACTIVE", "focus": "Coordinate parallel workstreams from authoritative DNA/state"},
-    "google": {"status": "BLOCKED", "blocker": "Parma Agent API authentication prevents /tools/google/test from reaching Google Ads"},
-    "meta": {"status": "PARTIAL", "focus": "Meta read-only and controlled draft path"},
-    "engineering": {"status": "ACTIVE", "focus": "G-017 authenticated backend path to Google Ads"},
-    "intelligence": {"status": "PARTIAL", "focus": "Decision engine design and validation"},
-    "automation": {"status": "PARTIAL", "focus": "Shadow cycle, scheduler, event/state orchestration"}
+    "google": {"status": "ACTIVE_READ_ONLY", "focus": "Campaign intelligence, conversion-action reconciliation, rank diagnosis and proposal preparation"},
+    "meta": {"status": "PARTIAL", "focus": "Read-only diagnosis of account/security/payment restrictions; no activation or spend"},
+    "engineering": {"status": "ACTIVE", "focus": "Conversion-action diagnostics, GA4 funnel instrumentation diagnostics and regression guards"},
+    "intelligence": {"status": "PARTIAL", "focus": "Evidence-based recommendations with conversion integrity fail-closed"},
+    "automation": {"status": "PARTIAL", "focus": "Shadow cycle, durable history and source-health monitoring"}
   },
   "tasks": [
     {
@@ -33,13 +33,37 @@
       "id": "G-017",
       "owner": "engineering",
       "priority": "P0",
-      "status": "BLOCKED",
-      "evidence": "/tools/google/test returned Unauthorized before Google Ads was reached",
-      "expected_result": "Authenticated Parma Agent request reaches Google Ads test safely without exposing secrets",
+      "status": "DONE",
+      "evidence": "Authenticated production read path reaches Google Ads; campaign intelligence for 23276824770 returned HTTP 200 in read_only_intelligence mode with writes/execution/spend disabled",
+      "expected_result": "Authenticated Parma Agent request reaches Google Ads safely without exposing secrets",
       "dependencies": [],
       "lease_owner": null,
       "lease_until": null,
       "idempotency_key": "google-agent-auth-g017"
+    },
+    {
+      "id": "GA4-001",
+      "owner": "engineering",
+      "priority": "P0",
+      "status": "DONE",
+      "evidence": "Production shadow source_health.ga4=true, source_errors.ga4=null after OAuth reauthorization with Analytics read-only access; configuration_complete=true",
+      "expected_result": "GA4 Data API is reachable in production without exposing secrets",
+      "dependencies": [],
+      "lease_owner": null,
+      "lease_until": null,
+      "idempotency_key": "ga4-oauth-production-recovery"
+    },
+    {
+      "id": "MEAS-001",
+      "owner": "intelligence",
+      "priority": "P0",
+      "status": "IN_PROGRESS",
+      "evidence": "booking_completed observed; reservation_page_view and reservation_start configured but not observed; conversion_integrity=degraded; conversion_sources_disagree",
+      "expected_result": "Explain Google Ads ↔ GA4 conversion relationship and restore trusted funnel measurement without weakening safety gates",
+      "dependencies": ["G-017", "GA4-001"],
+      "lease_owner": null,
+      "lease_until": null,
+      "idempotency_key": "google-ga4-conversion-integrity"
     }
   ],
   "validation_checkpoints": {
@@ -47,8 +71,11 @@
     "bootstrap": {"status": "PASS", "score": "12/12", "evidence": "Fresh conversation reconstructed project and operating rules exclusively from repository sources"},
     "recovery_1": {"status": "PASS_WITH_STATE_LOSS_DETECTED", "evidence": "Recovery succeeded but detected missing Bootstrap durable checkpoint", "state_loss": "Bootstrap PASS absent from persistent state at recovery time", "repair": "Persist validation checkpoints before starting any dependent validation stage"},
     "recovery_final": {"status": "PASS", "evidence": "Fresh instance reconstructed complete validation chain and current task from repository alone", "state_loss": null},
-    "no_open_architecture_p0": {"status": "PASS", "evidence": "All M0 architecture defects repaired; G-017 belongs to Engineering/M1 and does not block M0"},
-    "dna_promotion": {"status": "PASS", "evidence": "Authoritative manifest promoted from 1.2.0-candidate/FROZEN_FOR_MATERIALIZATION to 1.2.0/ACTIVE after all promotion gates passed"}
+    "no_open_architecture_p0": {"status": "PASS", "evidence": "All M0 architecture defects repaired; G-017 belonged to Engineering/M1 and is now complete"},
+    "dna_promotion": {"status": "PASS", "evidence": "Authoritative manifest promoted from 1.2.0-candidate/FROZEN_FOR_MATERIALIZATION to 1.2.0/ACTIVE after all promotion gates passed"},
+    "google_live_read": {"status": "PASS", "evidence": "Campaign 23276824770 intelligence returned live read-only data end-to-end with writes/execution/spend disabled"},
+    "ga4_live_read": {"status": "PASS", "evidence": "Production shadow reports GA4 healthy with no source error"},
+    "conversion_integrity": {"status": "BLOCKED", "evidence": "Google Ads and GA4 conversion sources disagree; upstream reservation events not observed", "safety": "optimization_allowed=false"}
   },
   "approvals": [],
   "experiments": [],
