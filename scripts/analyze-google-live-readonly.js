@@ -3,6 +3,8 @@ const { analyzeSearchTerms } = require('../google-search-term-analysis');
 const { analyzeRsaSet } = require('../google-rsa-analysis');
 const { analyzeKeywordOverlap, analyzeRankBudget, analyzeDeviceDistribution, analyzeHourDistribution, analyzeGeoDistribution } = require('../google-optimization-diagnostics');
 const { buildConversionReconciliation } = require('../conversion-reconciliation');
+const { auditKeywordPortfolio } = require('../keyword-portfolio-audit');
+const { auditSearchTermCorpus } = require('../search-term-corpus-audit');
 
 function readJson(path) {
   const parsed = JSON.parse(fs.readFileSync(path, 'utf8'));
@@ -23,6 +25,8 @@ function main() {
   const overview = data.overview?.[0] || {};
   const conversionAction = data.conversion_actions?.[0] || {};
   const searchClusters = analyzeSearchTerms(data.search_terms || []);
+  const searchCorpusAudit = auditSearchTermCorpus(data.search_terms || []);
+  const keywordPortfolioAudit = auditKeywordPortfolio(data.keywords || []);
   const keywordOverlap = analyzeKeywordOverlap(data.keywords || []);
   const rsa = analyzeRsaSet(data.rsa_ads || [], { conversionTrusted: false });
   const rankBudget = analyzeRankBudget({
@@ -56,6 +60,15 @@ function main() {
       registered_conversions: Number(overview.conversions || 0),
       registered_conversions_status: 'unverified_measurement',
     },
+    corpus_coverage: {
+      keyword_rows_received: keywordPortfolioAudit.coverage.rows_received,
+      keyword_rows_audited: keywordPortfolioAudit.coverage.rows_audited,
+      search_term_rows_received: searchCorpusAudit.coverage.search_term_rows_received,
+      search_term_rows_accounted_for: searchCorpusAudit.coverage.search_term_rows_accounted_for,
+      raw_search_terms_logged: false,
+    },
+    keyword_portfolio_audit: keywordPortfolioAudit,
+    search_term_corpus_audit: searchCorpusAudit,
     rank_budget: rankBudget,
     search_intent_clusters: searchClusters,
     keyword_overlap: keywordOverlap,
