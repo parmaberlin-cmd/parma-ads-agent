@@ -40,6 +40,33 @@ rendering showed accepting orders and populated products. Do not use search
 snippets, server-rendered placeholders or the saved historical fixture as a live
 availability check. This is desktop evidence, not a mobile usability certification.
 
+## Follow-up checkout check — 2026-09-01, 19:24 UTC / 21:24 Berlin
+
+One BIO MARGHERITA was added to an initially empty guest cart. The cart retained
+quantity 1, EUR 10 and free pickup. The normal checkout link opened the checkout
+form with customer details (email, first/last name and phone), delivery-method and
+payment sections. An account-sign-in option was present alongside the guest form.
+Express-payment controls were visible but were **not** clicked or validated.
+
+The check stopped before entering any personal data or submitting any checkout
+step. No purchase/payment was attempted. The single test item was then removed;
+the cart badge returned to 0. No existing customer cart or booking was changed.
+Do not confuse the temporary guest cart/checkout with a completed order. Provider
+storage and analytics side effects of ordinary page/cart navigation were not
+inspected; no claim of zero page-view/cart telemetry is made.
+
+Result: **desktop product-to-cart-to-checkout reachability PASS**. Payment success,
+order receipt, restaurant notification, mobile behavior and order-event semantics
+remain unverified. No site configuration, advertisement, budget or production
+deployment was changed. The earlier observation is retained as historical evidence,
+not silently overwritten or re-dated.
+
+Replay the sanitized follow-up using
+`node scripts/check-direct-orders.js docs/diagnostics/direct-order-checkout-observation-2026-09-01.json`.
+The fixture uses the earliest verification timestamp conservatively; its later menu
+recheck counted 20 rendered product controls (not the complete catalog). Like the
+earlier fixture, it expires and must not be used as a permanent healthy signal.
+
 ## Implemented capability
 
 `direct-order-readiness.js` is a pure evidence evaluator. It emits a fixed-schema

@@ -130,3 +130,15 @@ test("daily report supports orders separately without changing existing channels
   assert.equal(withOrders.direct_orders.executable, false);
   assert.equal(withOrders.writes_allowed, false);
 });
+
+test("actual checkout observation is reachable but still not an order outcome", () => {
+  const observation = require("../docs/diagnostics/direct-order-checkout-observation-2026-09-01.json");
+  const r = assessDirectOrders(observation, { now: new Date("2026-09-01T19:26:00Z") });
+  assert.equal(r.journey.status, "checkout_reachable");
+  assert.equal(has(r, "ORDER_CHECKOUT_UNVERIFIED"), false);
+  assert.equal(has(r, "ORDER_OUTCOME_UNVERIFIED"), true);
+  assert.equal(r.ready_for_order_optimization_review, false);
+  assert.equal(r.journey.payment_and_order_receipt_verified, false);
+  assert.equal("audit" in r, false);
+  assert.equal(r.writes_allowed, false);
+});
