@@ -26,6 +26,14 @@ test("current-looking counts remain unverified without semantic and business gro
   assert.ok(out.blockers.includes("business_ground_truth_missing"));
 });
 
+test("missing evidence remains null rather than becoming a false zero", () => {
+  const out = buildConversionReconciliation({ ads_primary_conversions: 10, ads_all_conversions: 73 });
+  assert.equal(out.evidence.ga4_booking_completed, null);
+  assert.equal(out.evidence.wix_online_reservations, null);
+  assert.equal(out.comparisons.ga4_booking_to_ads_primary_ratio, null);
+  assert.equal(out.comparisons.wix_to_ads_primary_ratio, null);
+});
+
 test("even aligned platforms stay blocked when semantic identity is unverified", () => {
   const out = buildConversionReconciliation({
     ads_primary_conversions: 10,
