@@ -1,11 +1,12 @@
 function finite(value) {
+  if (value == null || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
 function ratio(a, b) {
   const x = finite(a), y = finite(b);
-  return x != null && y > 0 ? x / y : null;
+  return x != null && y != null && y > 0 ? x / y : null;
 }
 
 function buildConversionReconciliation(input = {}) {
