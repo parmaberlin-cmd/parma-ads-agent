@@ -1,5 +1,3 @@
-const axios = require("axios");
-
 function validateDate(value, name) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) throw new TypeError(`${name} must be YYYY-MM-DD`);
 }
@@ -11,12 +9,13 @@ function validateEventNames(eventNames) {
   return names;
 }
 
-async function runEventDateSemantics({ accessToken, propertyId, start, end, eventNames }) {
+async function runEventDateSemantics({ accessToken, propertyId, start, end, eventNames, httpClient }) {
   if (!accessToken) throw new TypeError("accessToken is required");
   if (!/^\d+$/.test(String(propertyId || ""))) throw new TypeError("propertyId is invalid");
   validateDate(start, "start"); validateDate(end, "end");
   const names = validateEventNames(eventNames);
-  const response = await axios.post(
+  const client = httpClient || require("axios");
+  const response = await client.post(
     `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
     {
       dateRanges: [{ startDate: start, endDate: end }],
