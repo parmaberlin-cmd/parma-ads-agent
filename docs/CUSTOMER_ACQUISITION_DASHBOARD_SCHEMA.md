@@ -10,11 +10,22 @@
 
 ## Value layer
 - direct_order_contribution_value
+- direct_order_value_state: `verified | unknown`
 - reservation_contribution_value
+- reservation_value_state: `verified | unknown`
 - marketplace_contribution_value
+- marketplace_value_state: `verified | unknown`
+- walk_in_contribution_value
+- walk_in_value_state: `verified | unknown`
 - break_even_cpa
 - simplified_ltv
-All dependent values become unknown when required economics are missing.
+
+Value-state rules:
+- A missing direct-order contribution input MUST render `direct_order_contribution_value=unknown` and `direct_order_value_state=unknown`.
+- A missing verified walk-in economics input MUST render `walk_in_contribution_value=unknown` and `walk_in_value_state=unknown`; a walk-in proxy is never silently promoted to economic value.
+- The same fail-closed rule applies to reservation and marketplace contribution value.
+- Do not populate unknown values from industry averages, platform conversion values, click value, or numerical similarity between measurement systems.
+- A value can move to `verified` only when its underlying business-economic input has explicit provenance.
 
 ## Demand layer
 - impressions, clicks, CTR, CPC
