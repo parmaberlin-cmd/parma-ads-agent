@@ -9,7 +9,17 @@ Report verified direct orders, verified reservations, marketplace orders and any
 Google impressions/clicks/CTR/CPC, intent-cluster mix, mobile share, local-intent share, impression-share constraints and public local-search changes. Registered platform conversions are labelled unverified until the Measurement Contract passes.
 
 ## 3. Commercial value
-Contribution value, break-even CPA and LTV only where all required economics are verified. Never infer profitability from conversion volume.
+Commercial economics are evaluated through the `customer-value-economics` contract and only from explicit verified inputs.
+
+Report, where supported:
+- `contribution_per_incremental_customer`
+- `break_even_cpa`
+- `contribution_per_order`
+- `expected_verified_orders_per_customer`
+- `incremental_retention_cost_per_customer`
+- `simplified_ltv`
+
+If any required input is absent, the dependent output remains `unknown`; do not substitute restaurant-industry averages or inferred Parma economics. Direct-order, reservation, marketplace and walk-in values remain separately identifiable when their economics differ. A complete economics model does not itself create recommendation permission, spend authorization or write permission.
 
 ## 4. What changed
 Material week-over-week changes with freshness and maturity status. Separate observation, hypothesis and causal proof.
