@@ -20,6 +20,8 @@ const {
 } = require("./meta-paused-draft");
 
 const app = express();
+// Fail-closed, opt-in connector. Does not change Google/Meta credentials or write guards.
+require('./mcp-server').installMcp(app);
 app.use(express.json({ limit: "100kb" }));
 
 app.use((req, res, next) => {
