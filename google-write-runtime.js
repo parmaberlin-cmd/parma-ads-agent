@@ -2,7 +2,7 @@
 // Diagnostics only: this module never sends a real mutation.
 const { customerFrom, configured, validateWritePath } = require('./google-write-path');
 const {createBudgetRestAdapter}=require('./google-budget-rest-adapter');
-const safeCode = error => Number.isInteger(error?.code) ? error.code : null;
+const safeCode = error => Number.isInteger(error?.response?.status) ? error.response.status : Number.isInteger(error?.code) ? error.code : null;
 function berlinDay(now = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
 }
