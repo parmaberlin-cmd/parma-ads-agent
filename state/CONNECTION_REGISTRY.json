@@ -1,5 +1,5 @@
 {
-  "registry_version": "1.0.1",
+  "registry_version": "1.0.2",
   "purpose": "Authoritative non-secret registry of external capabilities available to Parma agents. Secrets and refresh tokens must never be stored here.",
   "operating_rule": "Agents consume named capabilities through the Parma backend/control tower; Philippe is required only for provider-enforced human authorization, security/payment recovery, or RED mutations.",
   "connections": [
@@ -37,7 +37,7 @@
     {
       "id": "wix",
       "system": "Wix",
-      "status": "CHAT_CONNECTOR_CURRENTLY_DISABLED",
+      "status": "CHAT_CONNECTOR_DISABLED_VERIFIED_2026_09_04",
       "transport": "target_backend_api_or_oauth",
       "canonical_site": {
         "name": "PARMA di VINIBENEDETTI",
@@ -46,8 +46,9 @@
       "capabilities_target": ["reservation_aggregate_read", "reservation_status_read", "orders_read", "source_health"],
       "capabilities_verified": ["aggregate_ground_truth_via_manual_wix_ai_relay"],
       "shared_agent_backend_access": "BLOCKED",
-      "blocker": "Current Wix chat tooling is disabled; direct autonomous backend credential/API path still needs materialization",
-      "human_gate": "One-time OAuth/API authorization if required by Wix; no repeated manual data relay",
+      "last_verified_at": "2026-09-04",
+      "blocker": "Direct Wix connector invocation is currently disabled in the active tool environment; autonomous backend credential/API path still needs materialization.",
+      "human_gate": "Only one-time provider OAuth/API authorization if required once a supported direct path is available; no repeated manual data relay",
       "priority": "P0"
     },
     {
