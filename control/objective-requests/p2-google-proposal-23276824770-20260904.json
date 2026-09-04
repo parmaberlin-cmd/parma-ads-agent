@@ -1,0 +1,33 @@
+{
+  "id": "p2-google-proposal-23276824770-20260904",
+  "objective": "Read Google Ads campaign 23276824770 live in read-only mode, generate and validate a proposal-only change plan for Parma tonight, enforce the aggregate configured daily budget cage at 10 EUR, persist evidence and report, and execute zero mutations",
+  "tasks": [
+    {
+      "id": "campaign-23276824770",
+      "kind": "google_ads.read_campaign",
+      "idempotency_key": "p2-google-proposal-23276824770-20260904:read"
+    },
+    {
+      "id": "proposal",
+      "kind": "google_ads.propose_changes",
+      "depends_on": ["campaign-23276824770"],
+      "idempotency_key": "p2-google-proposal-23276824770-20260904:proposal",
+      "input": {
+        "context": {
+          "daily_budget_cap_eur": 10,
+          "goal": "maximize_probability_of_real_local_customers_at_Parma_di_Vinibenedetti_Wrangelstrasse_Kreuzberg_especially_tonight",
+          "late_night_strategy": true,
+          "weather_context": "2026-09-04 Kreuzberg: rain/wind characterized the earlier evening; conditions expected to improve later. Context signal only, not proof of ad performance.",
+          "conversion_integrity": "booking_completed_not_ground_truth; Google Ads conversion values raw only; table_reservation_completed_not_final_ground_truth",
+          "protected_intents": ["pizza near me", "pizza in meiner nähe", "pizza kreuzberg", "equivalent local high-intent queries"]
+        }
+      }
+    },
+    {
+      "id": "report",
+      "kind": "generate_report",
+      "depends_on": ["proposal"],
+      "idempotency_key": "p2-google-proposal-23276824770-20260904:report"
+    }
+  ]
+}
