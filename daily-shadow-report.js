@@ -1,21 +1,21 @@
 const { buildShadowDecisions, assertShadowSafe } = require("./shadow-decision-engine");
 const { evaluateShadowDataQuality, assertQualityFailClosed } = require("./shadow-data-quality");
-
-function n(value) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
+const { assessDirectOrders } = require("./direct-order-readiness");
+const { observedNumber } = require('./observed-number');
 
 function summarizeChannel(channel = {}) {
-  const spend = n(channel.cost ?? channel.spend);
-  const clicks = n(channel.clicks);
-  const bookings = n(channel.bookings ?? channel.conversions);
+  const spend = observedNumber(channel.cost ?? channel.spend);
+  const clicks = observedNumber(channel.clicks);
+  const signals = observedNumber(channel.bookings ?? channel.conversions);
+  const bookings = channel.booking_semantics_verified === true ? signals : null;
   return {
     spend_eur: spend,
     clicks,
     bookings,
-    cpc_eur: clicks ? Number((spend / clicks).toFixed(2)) : null,
-    cost_per_booking_eur: bookings ? Number((spend / bookings).toFixed(2)) : null,
+    observed_conversion_signals: signals,
+    booking_semantics_verified: channel.booking_semantics_verified === true,
+    cpc_eur: spend !== null && clicks > 0 ? Number((spend / clicks).toFixed(2)) : null,
+    cost_per_booking_eur: spend !== null && bookings > 0 ? Number((spend / bookings).toFixed(2)) : null,
   };
 }
 
@@ -80,6 +80,12 @@ function buildDailyShadowReport(snapshot = {}) {
       verification_status: "not_applicable",
     })),
   };
+
+  // Optional separate business objective: never relabel channel bookings as orders.
+  // No evidence collector is implied; callers must explicitly supply page observations.
+  if (snapshot.direct_orders !== undefined) {
+    report.direct_orders = assessDirectOrders(snapshot.direct_orders, { now: shadow.generated_at });
+  }
 
   if (report.writes_allowed !== false || report.spend_changed !== false) {
     throw new Error("daily shadow report violated no-write contract");

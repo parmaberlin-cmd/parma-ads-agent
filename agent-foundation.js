@@ -1,3 +1,6 @@
+const { assessConversionConfidence } = require('./conversion-confidence');
+const { observedNumber } = require('./observed-number');
+
 function numberOrZero(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -21,9 +24,11 @@ function assessConversionIntegrity({
   staleAfterHours = 48,
   toleranceRatio = 0.35,
   minimumComparableConversions = 3,
+  reconciliationEvidence = {},
 } = {}) {
-  const googleAvailable = googleAdsConversions !== null && googleAdsConversions !== undefined;
-  const ga4Available = ga4Bookings !== null && ga4Bookings !== undefined;
+  const googleAvailable = observedNumber(googleAdsConversions) !== null;
+  const ga4Available = observedNumber(ga4Bookings) !== null;
+  const reconciliation = assessConversionConfidence(reconciliationEvidence);
   const issues = [];
 
   if (!googleAvailable) issues.push("google_ads_conversion_signal_missing");
@@ -40,7 +45,8 @@ function assessConversionIntegrity({
       issues.push(staleCode);
       return { present: true, stale: true };
     }
-    const stale = now.getTime() - parsed.getTime() > staleAfterHours * 60 * 60 * 1000;
+    const age = now.getTime() - parsed.getTime();
+    const stale = age < 0 || age > staleAfterHours * 60 * 60 * 1000;
     if (stale) issues.push(staleCode);
     return { present: true, stale };
   }
@@ -62,7 +68,7 @@ function assessConversionIntegrity({
     discrepancyRatio = relativeDifference(google, ga4);
     comparableVolume = Math.max(Math.abs(google), Math.abs(ga4)) >= minimumComparableConversions;
     if (!comparableVolume) issues.push("conversion_volume_too_low_for_optimization");
-    if (comparableVolume && discrepancyRatio > toleranceRatio) issues.push("conversion_sources_disagree");
+    if (reconciliation.optimization_allowed && comparableVolume && discrepancyRatio > toleranceRatio) issues.push("conversion_sources_disagree");
   }
 
   let status = "healthy";
@@ -75,6 +81,11 @@ function assessConversionIntegrity({
     confidence = status === "unverified" ? "low" : "medium";
   }
 
+  if (!reconciliation.optimization_allowed) {
+    issues.push('conversion_comparison_unverified');
+    if (status === 'healthy') { status = 'unverified'; confidence = 'low'; }
+  }
+
   return {
     status,
     confidence,
@@ -82,6 +93,8 @@ function assessConversionIntegrity({
     google_ads_conversions: googleAvailable ? numberOrZero(googleAdsConversions) : null,
     ga4_bookings: ga4Available ? numberOrZero(ga4Bookings) : null,
     discrepancy_ratio: discrepancyRatio,
+    discrepancy_is_descriptive_only: !reconciliation.optimization_allowed,
+    reconciliation,
     tolerance_ratio: toleranceRatio,
     minimum_comparable_conversions: minimumComparableConversions,
     comparable_volume: comparableVolume,
@@ -112,8 +125,8 @@ function detectAnomalies({ current = {}, baseline = {}, access = {} } = {}) {
   const currentCpc = numberOrZero(current.cpc);
   const baselineCpc = numberOrZero(baseline.cpc);
 
-  if (currentSpend >= Math.max(10, baselineSpend * 0.5) && currentClicks === 0) push("SPEND_WITHOUT_CLICKS", "high", "Meaningful spend is present without clicks.");
-  if (baselineConversions >= 3 && currentConversions === 0 && currentClicks >= 5) push("CONVERSION_COLLAPSE", "high", "Conversions dropped to zero while traffic is still present.", "conversion");
+  if (currentSpend >= Math.max(10, baselineSpend * 0.5) && observedNumber(current.clicks) === 0) push("SPEND_WITHOUT_CLICKS", "high", "Meaningful spend is present without clicks.");
+  if (baselineConversions >= 3 && observedNumber(current.conversions) === 0 && currentClicks >= 5) push("CONVERSION_COLLAPSE", "high", "Conversions dropped to zero while traffic is still present.", "conversion");
   if (baselineCpc > 0 && currentCpc >= baselineCpc * 1.75 && currentClicks >= 3) push("CPC_SPIKE", "medium", "Current CPC is at least 75% above baseline.");
 
   const severityRank = { critical: 3, high: 2, medium: 1, low: 0 };

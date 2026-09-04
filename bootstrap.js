@@ -90,23 +90,27 @@ function buildRuntimeViews() {
     },
     history: publicHistorySummary(shadowHistory, publicStorage),
     promotion,
+    decision_brief: r.decision_brief ? {
+      ...r.decision_brief,
+      snapshot_status: state.last_refresh_error ? 'last_refresh_failed' : 'last_completed_snapshot',
+    } : undefined,
     anomalies: (r.anomalies || []).map((a) => ({
       code: a.code,
       severity: a.severity,
       reason: a.reason,
       channel: a.channel,
     })),
-    primary_priorities: (r.daily_manager?.primary_priorities || []).map((p) => ({
+    primary_priorities: (r.decision_brief?.priorities || r.daily_manager?.primary_priorities || []).map((p) => ({
       code: p.code,
-      severity: p.severity,
-      source: p.source,
-      reason: p.reason,
+      severity: p.severity || (p.priority >= 95 ? 'high' : 'medium'),
+      source: p.source || 'decision_brief',
+      reason: p.reason || p.action,
       requires_authorization: Boolean(p.requires_authorization),
     })),
   };
   const cycle = buildReadonlyCycleState({
     snapshot: { now: r.generated_at, data_quality: r.data_quality, live_sources: r.live_sources },
-    report: { conversion_integrity: r.conversion_integrity, anomalies: r.anomalies, daily_manager: r.daily_manager, mode: "shadow" },
+    report: { conversion_integrity: r.conversion_integrity, anomalies: r.anomalies, daily_manager: r.daily_manager, decision_brief: r.decision_brief, mode: "shadow" },
     history: shadowHistory,
     historyStorage: publicStorage,
   });
@@ -147,6 +151,7 @@ function triggerShadowReport() {
         channel_roles: report.channel_roles,
         business_value: report.business_value,
         journal: report.journal,
+        decision_brief: report.decision_brief,
       };
 
       const record = buildSanitizedHistoryRecord({ snapshot: input, report, generatedAt: state.finished_at });

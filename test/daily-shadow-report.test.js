@@ -16,8 +16,8 @@ function trustedEvidence() {
 
 test("channel summary calculates CPC and cost per booking", () => {
   assert.deepEqual(
-    summarizeChannel({ cost: 24, clicks: 12, bookings: 3 }),
-    { spend_eur: 24, clicks: 12, bookings: 3, cpc_eur: 2, cost_per_booking_eur: 8 }
+    summarizeChannel({ cost: 24, clicks: 12, bookings: 3, booking_semantics_verified: true }),
+    { spend_eur: 24, clicks: 12, bookings: 3, observed_conversion_signals: 3, booking_semantics_verified: true, cpc_eur: 2, cost_per_booking_eur: 8 }
   );
 });
 

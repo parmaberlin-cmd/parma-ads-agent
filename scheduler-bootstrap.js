@@ -26,8 +26,11 @@ function startReadonlyShadowScheduler({ env = process.env, client = axios } = {}
   const intervalMinutes = clampRefreshMinutes(env.SHADOW_REFRESH_INTERVAL_MINUTES || 60);
   const intervalMs = intervalMinutes * 60 * 1000;
   const url = buildRefreshUrl(env);
+  let inFlight = false;
 
   async function tick() {
+    if (inFlight) return;
+    inFlight = true;
     try {
       const response = await client.post(url, null, {
         headers: { 'x-api-key': apiKey },
@@ -39,7 +42,7 @@ function startReadonlyShadowScheduler({ env = process.env, client = axios } = {}
         event: 'shadow_scheduler_tick',
         success: ok,
         status_code: response.status,
-        refresh_status: response.data?.status || null,
+        refresh_status: ['started', 'already_running'].includes(response.data?.status) ? response.data.status : null,
         interval_minutes: intervalMinutes,
         writes_allowed: false,
       }));
@@ -51,6 +54,8 @@ function startReadonlyShadowScheduler({ env = process.env, client = axios } = {}
         interval_minutes: intervalMinutes,
         writes_allowed: false,
       }));
+    } finally {
+      inFlight = false;
     }
   }
 
