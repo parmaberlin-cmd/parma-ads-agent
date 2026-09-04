@@ -4,11 +4,16 @@ const express = require('express');
 const { AutonomousRuntime, statePath, storageStatus } = require('./autonomous-runtime');
 const { autonomyPolicySummary } = require('./autonomy-policy');
 const { authorize:authorizeIngress, verify:verifyIngress, summary:ingressSummary } = require('./objective-ingress-auth');
+const { readCampaign } = require('./google-ads-specialist-read');
 
 function localHandlers(env=process.env){
   return {
     run_diagnostics: async () => ({ validated:true, evidence:{ component:'autonomous_runtime', storage:storageStatus(env), delegation_policy:autonomyPolicySummary(), kill_switch_supported:true } }),
-    generate_report: async ({objective_id,task}) => ({ validated:true, evidence:{ report:'runtime_execution_audit', objective_id, task_id:task.id, attempts:task.attempts } }),
+    'google_ads.read_campaign': async ({task}) => {
+      const campaignId=String(task.id||'').replace(/^campaign-/, '');
+      return readCampaign({campaignId,env});
+    },
+    generate_report: async ({objective_id,task}) => ({ validated:true, evidence:{ report:'runtime_execution_audit', objective_id, task_id:task.id, attempts:task.attempts, structured:true } }),
   };
 }
 
