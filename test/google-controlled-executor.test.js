@@ -66,3 +66,12 @@ test('configured mode still requires live economic read',async t=>{
  const f=fixture(t);f.safety.limit_semantics='enabled_configured_daily_budget';f.safety.today_read_success=false;
  await assert.rejects(createControlledExecutor({...f.args,limitSemantics:'enabled_configured_daily_budget'}).execute(f.p.proposal_id),/economic_or_runtime/);
 });
+test('explicit enabled proposal policy excludes paused budgets but retains conversion gate',()=>{
+ const {prepareControlledProposal}=require('../google-controlled-proposals');const now=Date.now();
+ const snapshot={customer_id:'1',currency:'EUR',captured_at:new Date(now).toISOString(),account_inventory_complete:true,campaigns:[{campaign_id:'2',budget_id:'3',daily_budget_micros:3500000,status:'ENABLED',shared_budget:false,conversion_integrity_trusted:false},{campaign_id:'4',budget_id:'5',daily_budget_micros:9200000,status:'PAUSED',shared_budget:false,conversion_integrity_trusted:false}]};
+ const policy={customer_id:'1',campaign_ids:['2','4'],allowed_actions:['set_daily_budget'],expires_at:new Date(now+60000).toISOString(),max_account_daily_budget_micros:10000000,max_campaign_daily_budget_micros:10000000,max_budget_change_percent:100,max_snapshot_age_seconds:60,budget_limit_semantics:'enabled_configured'};
+ const reduction=prepareControlledProposal({action:{type:'set_daily_budget',campaign_id:'2',amount_micros:3000000},policy,snapshot,now});
+ assert.equal(reduction.policy_fit,true);assert.equal(reduction.proposal.proposed_account_daily_budget_micros,3000000);
+ const increase=prepareControlledProposal({action:{type:'set_daily_budget',campaign_id:'2',amount_micros:6000000},policy,snapshot,now});
+ assert.deepEqual(increase.blockers,['conversion_integrity_untrusted']);
+});

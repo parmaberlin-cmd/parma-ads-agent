@@ -23,7 +23,7 @@ async function runControlledBudgetJob({env=process.env,action=null}={}){
  };
  const snapshot=await readSnapshot();const today=await readToday(customer);
  const policy={customer_id:mandate.customer_id,campaign_ids:snapshot.campaigns.map(c=>c.campaign_id),allowed_actions:['set_daily_budget'],expires_at:mandate.expires_at,
-   max_account_daily_budget_micros:mandate.cap_micros,max_campaign_daily_budget_micros:mandate.cap_micros,max_budget_change_percent:100,max_snapshot_age_seconds:60};
+   max_account_daily_budget_micros:mandate.cap_micros,max_campaign_daily_budget_micros:mandate.cap_micros,max_budget_change_percent:100,max_snapshot_age_seconds:60,budget_limit_semantics:'enabled_configured'};
  const summary={mandate:mandate.id,limit_semantics:'enabled_configured_daily_budget',hard_daily_cost_cap:false,
    campaigns:snapshot.campaigns.map(c=>({campaign_id:c.campaign_id,status:c.status,daily_budget_micros:c.daily_budget_micros})),
    enabled_budget_micros:snapshot.campaigns.filter(c=>c.status==='ENABLED').reduce((n,c)=>n+c.daily_budget_micros,0),today,writes_executed:false};
@@ -45,6 +45,7 @@ async function runControlledBudgetJob({env=process.env,action=null}={}){
    limitSemantics:'enabled_configured_daily_budget',killSwitch:async()=>env.GOOGLE_ADS_WRITE_KILL_SWITCH!=='false'||env.GOOGLE_CONTROLLED_BUDGET_JOB!=='true',
    readSafety:async()=>{const fresh=await readToday(customer);return {...fresh,customer_id:mandate.customer_id,limit_semantics:'enabled_configured_daily_budget',today_read_success:true,checked_at:Date.now(),proposal_id:proposed.proposal_id,audit_storage_durable:true,live_execution_gate:true};}});
  const result=await executor.execute(proposed.proposal_id);
- return {...summary,...result,audit_id:proposed.proposal_id};
+ const audit=ledger.read(proposed.proposal_id);
+ return {...summary,...result,audit_id:proposed.proposal_id,before:audit?.before?.campaigns||null,after:audit?.after?.campaigns||null,rollback:audit?.rollback||null};
 }
 module.exports={runControlledBudgetJob};
