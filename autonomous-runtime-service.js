@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { AutonomousRuntime, statePath, storageStatus } = require('./autonomous-runtime');
+const { AutonomousRuntime, statePath, storageStatus, readState } = require('./autonomous-runtime');
 const { autonomyPolicySummary } = require('./autonomy-policy');
 const { authorize:authorizeIngress, verify:verifyIngress, summary:ingressSummary } = require('./objective-ingress-auth');
 const { readCampaign } = require('./google-ads-specialist-read');
@@ -13,7 +13,19 @@ function localHandlers(env=process.env){
       const campaignId=String(task.id||'').replace(/^campaign-/, '');
       return readCampaign({campaignId,env});
     },
-    generate_report: async ({objective_id,task}) => ({ validated:true, evidence:{ report:'runtime_execution_audit', objective_id, task_id:task.id, attempts:task.attempts, structured:true } }),
+    generate_report: async ({objective_id,task}) => {
+      const state=readState(statePath(env));
+      const objective=state.objectives.find(x=>x.id===objective_id);
+      const source=objective?.tasks.find(x=>x.kind==='google_ads.read_campaign'&&x.status==='DONE')?.evidence?.[0]||null;
+      const o=source?.overview;
+      const evidence=source?{
+        report:'google_ads_campaign_read_summary',schema:'google_ads.read_campaign.report.v1',objective_id,task_id:task.id,campaign_id:source.campaign_id,date_range:source.date_range,
+        campaign:{status:o?.status||null,daily_budget_eur:Number(o?.daily_budget_eur||0),impressions:Number(o?.impressions||0),clicks:Number(o?.clicks||0),cost_eur:Number(o?.cost_eur||0),ctr:Number(o?.ctr||0),avg_cpc_eur:Number(o?.avg_cpc_eur||0),conversions_raw:Number(o?.conversions||0),conversion_value_raw:Number(o?.conversion_value||0)},
+        availability:{search_terms:Array.isArray(source.search_terms),keyword_summary:Array.isArray(source.keyword_summary),ad_group_summary:Array.isArray(source.ad_group_summary),hourly_distribution:Array.isArray(source.hourly_distribution),device_distribution:Array.isArray(source.device_distribution)},
+        conversion_metrics_interpretation:'raw_reported_values_only',writes_allowed:false,execution_allowed:false,spend_allowed:false,
+      }:{report:'runtime_execution_audit',objective_id,task_id:task.id,attempts:task.attempts,structured:true};
+      return {validated:true,evidence};
+    },
   };
 }
 
