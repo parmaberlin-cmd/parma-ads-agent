@@ -14,6 +14,7 @@ const policySchema = z.object({
   max_campaign_daily_budget_micros: money,
   max_budget_change_percent: z.number().min(0).max(100),
   max_snapshot_age_seconds: z.number().int().min(1).max(3600),
+  budget_limit_semantics: z.enum(['all_configured','enabled_configured']).optional(),
 }).strict();
 const actionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('set_daily_budget'), campaign_id: id, amount_micros: money.positive() }).strict(),
@@ -70,9 +71,14 @@ function prepareControlledProposal(input = {}) {
   // Reject shared/reused budgets rather than underestimate their account impact.
   if (snapshot.campaigns.some(c => c.shared_budget) || new Set(snapshot.campaigns.map(c => c.budget_id)).size !== snapshot.campaigns.length)
     result.blockers.push('shared_budget_requires_separate_review');
-  const currentTotal = snapshot.campaigns.reduce((sum, c) => sum + c.daily_budget_micros, 0);
+  const enabledOnly=policy.budget_limit_semantics==='enabled_configured';
+  const currentTotal = snapshot.campaigns.filter(c=>!enabledOnly||c.status==='ENABLED').reduce((sum, c) => sum + c.daily_budget_micros, 0);
   const nextBudget = action.type === 'set_daily_budget' ? action.amount_micros : campaign.daily_budget_micros;
-  const proposedTotal = currentTotal - campaign.daily_budget_micros + nextBudget;
+  const proposedTotal = enabledOnly?snapshot.campaigns.reduce((sum,c)=>{
+    const target=c.campaign_id===action.campaign_id;
+    const enabled=target&&action.type==='resume'?true:target&&action.type==='pause'?false:c.status==='ENABLED';
+    return sum+(enabled?(target?nextBudget:c.daily_budget_micros):0);
+  },0):currentTotal - campaign.daily_budget_micros + nextBudget;
   if (!Number.isSafeInteger(currentTotal) || !Number.isSafeInteger(proposedTotal)) result.blockers.push('budget_arithmetic_overflow');
   if (action.type === 'set_daily_budget' || action.type === 'resume') {
     if (nextBudget > policy.max_campaign_daily_budget_micros) result.blockers.push('campaign_budget_limit_exceeded');
