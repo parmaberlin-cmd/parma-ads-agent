@@ -1,0 +1,12 @@
+{
+  "id": "p4-p5-autonomous-cycle-23276824770-20260904",
+  "objective": "Run one persistent autonomous Google Ads optimization cycle for campaign 23276824770: dynamically choose READ, PROPOSE, PREFLIGHT, controlled authorized execution verification, OBSERVE and REPORT. Use verify-only execution and execute zero Google Ads mutations.",
+  "tasks": [
+    {
+      "id": "cycle-plan-start-23276824770",
+      "kind": "google_ads.cycle_plan",
+      "input": {"campaign_id": "23276824770"},
+      "idempotency_key": "p4-p5-autonomous-cycle-23276824770-20260904:start"
+    }
+  ]
+}
