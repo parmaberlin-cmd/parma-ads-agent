@@ -1,0 +1,13 @@
+'use strict';
+const SPECIALISTS=Object.freeze({
+  google_ads:{id:'google_ads',status:'CONNECTED_RUNTIME',capabilities:['read_campaign','propose_changes','execution_preflight','execute_authorized','optimization_cycle'],read:true,write:'controlled_standing_delegation_only',required_authorization:'standing_delegation_for_mutations',evidence_schema:['google_ads.read_campaign.v1','google_ads.propose_changes.v1','google_ads.execution_preflight.v1','google_ads.controlled_execution.v1'],validation:'provider reads + executor contracts + read-after-write for mutations',rollback:'existing controlled executor only',health:'runtime_integrated'},
+  ga4:{id:'ga4',status:'AVAILABLE_NOT_STANDARDIZED',capabilities:[],read:'existing project access outside specialist interface',write:false,required_authorization:null,evidence_schema:[],validation:null,rollback:null,health:'not_runtime_standardized'},
+  wix:{id:'wix',status:'NOT_RUNTIME_INTEGRATED',capabilities:[],read:'not asserted live here',write:false,required_authorization:null,evidence_schema:[],validation:null,rollback:null,health:'unknown_until_provider_read'},
+  orderbird:{id:'orderbird',status:'AWAITING_OFFICIAL_PROVIDER_PATH',capabilities:[],read:false,write:false,required_authorization:'official merchant-authorized read-only integration',evidence_schema:['economic_ground_truth.v1'],validation:'provider-supported read only when available',rollback:null,health:'blocked_external_provider_access'},
+  meta:{id:'meta',status:'NOT_RUNTIME_STANDARDIZED',capabilities:[],read:'existing project source may exist outside this interface',write:false,required_authorization:'explicit future standing delegation for mutations',evidence_schema:[],validation:null,rollback:null,health:'not_runtime_standardized'},
+  google_business_profile:{id:'google_business_profile',status:'NOT_INTEGRATED',capabilities:[],read:false,write:false,required_authorization:'future provider authorization',evidence_schema:[],validation:null,rollback:null,health:'not_integrated'},
+  seo_website:{id:'seo_website',status:'NOT_INTEGRATED',capabilities:[],read:false,write:false,required_authorization:'future provider/runtime integration',evidence_schema:[],validation:null,rollback:null,health:'not_integrated'},
+});
+function listSpecialists(){return Object.values(SPECIALISTS).map(x=>({...x,capabilities:[...x.capabilities],evidence_schema:[...x.evidence_schema]}));}
+function getSpecialist(id){const s=SPECIALISTS[id];return s?{...s,capabilities:[...s.capabilities],evidence_schema:[...s.evidence_schema]}:null;}
+module.exports={SPECIALISTS,listSpecialists,getSpecialist};
