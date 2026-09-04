@@ -37,3 +37,28 @@ test('pause and exact negative proposals work without trusting conversions', () 
   }
   f.action.match_type = 'BROAD'; assert.equal(prepare(f).policy_fit, false);
 });
+test('resume cannot bypass budget ceilings or conversion integrity', () => {
+  const f = fixture(); f.action = {type:'resume',campaign_id:'1'};
+  f.snapshot.campaigns[0].status = 'PAUSED';
+  assert.equal(prepare(f).policy_fit, true);
+  f.snapshot.campaigns[0].conversion_integrity_trusted = false;
+  assert.ok(prepare(f).blockers.includes('conversion_integrity_untrusted'));
+  f.snapshot.campaigns[0].conversion_integrity_trusted = true;
+  f.policy.max_account_daily_budget_micros = 7000000;
+  assert.ok(prepare(f).blockers.includes('account_budget_limit_exceeded'));
+});
+test('exact expiry is blocked and changed policy or snapshot changes proposal binding', () => {
+  const f = fixture(), before = prepare(f).proposal_id;
+  f.policy.max_budget_change_percent = 30;
+  assert.notEqual(prepare(f).proposal_id, before);
+  const policyChanged = prepare(f).proposal_id;
+  f.snapshot.campaigns[0].status = 'PAUSED';
+  assert.notEqual(prepare(f).proposal_id, policyChanged);
+  f.now += 300000;
+  assert.equal(prepare(f).policy_fit, false);
+});
+test('budget reductions remain proposals, not authority to spend or rollback money', () => {
+  const f = fixture(); f.action.amount_micros = 3000000;
+  f.snapshot.campaigns[0].conversion_integrity_trusted = false;
+  const r = prepare(f); assert.equal(r.policy_fit, true); assert.equal(r.execution_allowed, false);
+});
