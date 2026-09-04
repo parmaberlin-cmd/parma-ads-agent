@@ -94,12 +94,17 @@ function createControlledExecutor({journal,ledger,customer,readSnapshot,readSafe
         const prepared=prepareControlledProposal({action:proposal.action,policy,snapshot,now:clock,kill_switch:false});
         if(!prepared.policy_fit)fail('policy_gate_failed');
         const safety=await readSafety();
+        // A network read completes after the clock captured above. Compare evidence
+        // with the completion clock, while retaining future/stale/expiry rejection.
+        const safetyClock=now();
+        if(!Number.isSafeInteger(safetyClock)||safetyClock<clock)fail('invalid_clock');
+        if(Date.parse(proposal.expires_at)<=safetyClock)fail('proposal_expired');
         if(limitSemantics==='enabled_configured_daily_budget'){
           configuredBudgetGuard(snapshot,proposal.action);
           if(safety?.customer_id!==owner||safety.currency!=='EUR'||safety.time_zone!=='Europe/Berlin'||
              safety.limit_semantics!==limitSemantics||safety.today_read_success!==true||
              !Number.isSafeInteger(safety.reported_cost_micros)||safety.reported_cost_micros<0||
-             !Number.isSafeInteger(safety.checked_at)||clock-safety.checked_at<0||clock-safety.checked_at>5000||
+             !Number.isSafeInteger(safety.checked_at)||safetyClock-safety.checked_at<0||safetyClock-safety.checked_at>5000||
              safety.proposal_id!==proposalId||safety.audit_storage_durable!==true||safety.live_execution_gate!==true)fail('economic_or_runtime_gate_unverified');
           return snapshot;
         }
@@ -109,7 +114,7 @@ function createControlledExecutor({journal,ledger,customer,readSnapshot,readSafe
           safety.hard_daily_spend_cap_verified!==true||safety.today_history_reconciled!==true||
           !Number.isSafeInteger(safety.maximum_billable_today_micros)||safety.maximum_billable_today_micros>10000000||safety.maximum_billable_today_micros<0||
           !Number.isSafeInteger(safety.reported_cost_micros)||safety.reported_cost_micros<0||safety.reported_cost_micros>10000000||
-          !Number.isSafeInteger(safety.checked_at)||clock-safety.checked_at<0||clock-safety.checked_at>5000||
+          !Number.isSafeInteger(safety.checked_at)||safetyClock-safety.checked_at<0||safetyClock-safety.checked_at>5000||
           safety.proposal_id!==proposalId||safety.audit_storage_durable!==true||safety.live_execution_gate!==true)fail('economic_or_runtime_gate_unverified');
         return snapshot;
       };
