@@ -1,0 +1,15 @@
+'use strict';
+const fs=require('node:fs');const path=require('node:path');const crypto=require('node:crypto');
+const FILE='parma-control-tower-state.json';
+function statePath(env=process.env){return env.AUTONOMOUS_STATE_PATH||(env.RAILWAY_VOLUME_MOUNT_PATH?path.join(env.RAILWAY_VOLUME_MOUNT_PATH,FILE):path.join('/tmp',FILE));}
+function storageStatus(env=process.env){const p=statePath(env);const durable=!p.startsWith('/tmp/');return{path:p,durable,source:env.AUTONOMOUS_STATE_PATH?'explicit_path':env.RAILWAY_VOLUME_MOUNT_PATH?'railway_volume':'default_tmp'};}
+function rejectSecrets(value){const text=JSON.stringify(value??{});if(/(?:password|secret|token|api[_-]?key|credential|refresh[_-]?token|client[_-]?secret)/i.test(text))throw new Error('secret_shaped_state_rejected');return JSON.parse(text);}
+function validateState(s){if(!s||typeof s!=='object'||s.version!==1||typeof s.goal!=='string'||!Array.isArray(s.tasks)||!Array.isArray(s.events)||!Array.isArray(s.blockers))throw new Error('autonomous_state_invalid');return s;}
+function load(file=statePath()){if(!fs.existsSync(file))return{exists:false,healthy:true,state:null,reason:null};try{return{exists:true,healthy:true,state:validateState(JSON.parse(fs.readFileSync(file,'utf8'))),reason:null};}catch{return{exists:true,healthy:false,state:null,reason:'autonomous_state_corrupt'};}}
+function atomicWrite(file,state){fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});const tmp=`${file}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;const fd=fs.openSync(tmp,'wx',0o600);try{fs.writeFileSync(fd,JSON.stringify(state)+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}fs.renameSync(tmp,file);}
+function save(state,file=statePath()){const clean=validateState(rejectSecrets(state));atomicWrite(file,clean);const check=load(file);if(!check.healthy||!check.state)throw new Error('autonomous_state_persistence_failed');return check.state;}
+function withLock(file,fn){const lock=`${file}.lock`;let fd;try{fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});fd=fs.openSync(lock,'wx',0o600);}catch{throw new Error('autonomous_state_locked');}try{return fn();}finally{try{fs.closeSync(fd);}catch{}try{fs.unlinkSync(lock);}catch{}}}
+function update(file,mutator){return withLock(file,()=>{const current=load(file);if(current.exists&&!current.healthy)throw new Error('autonomous_state_corrupt');const next=mutator(current.state);return save(next,file);});}
+function newState({goal,tasks=[]}={}){return{version:1,goal:String(goal||''),status:'READY',current_task_id:null,next_task_id:null,tasks:tasks.map(t=>({...t,status:t.status||'pending',attempts:Number(t.attempts||0),max_attempts:Number(t.max_attempts||3),result:null,error:null})),events:[],blockers:[],updated_at:new Date().toISOString(),revision:0};}
+function appendEvent(state,event){return{...state,events:[...state.events,{...event,at:event.at||new Date().toISOString()}].slice(-500),revision:Number(state.revision||0)+1,updated_at:new Date().toISOString()};}
+module.exports={FILE,statePath,storageStatus,rejectSecrets,validateState,load,save,withLock,update,newState,appendEvent};
