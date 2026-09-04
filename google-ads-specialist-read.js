@@ -45,7 +45,8 @@ async function collectEnabledCampaignBudgetContext(customer){
 }
 function validateEvidence(e,campaignId){
   if(!e||e.campaign_id!==String(campaignId)||!e.overview) return false;
-  const nums=[e.overview.daily_budget_eur,e.overview.impressions,e.overview.clicks,e.overview.cost_eur,e.overview.ctr,e.overview.avg_cpc_eur,e.overview.conversions,e.overview.conversion_value,e.account_budget_context?.enabled_budget_total_eur];
+  const nums=[e.overview.daily_budget_eur,e.overview.impressions,e.overview.clicks,e.overview.cost_eur,e.overview.ctr,e.overview.avg_cpc_eur,e.overview.conversions,e.overview.conversion_value];
+  if(e.account_budget_context) nums.push(e.account_budget_context.enabled_budget_total_eur);
   if(nums.some(v=>!finite(v)||Number(v)<0)) return false;
   if(e.overview.clicks>e.overview.impressions) return false;
   return !/token|secret|password|api[_-]?key|authorization|bearer/i.test(JSON.stringify(e));
