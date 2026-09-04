@@ -1,6 +1,7 @@
 'use strict';
 // Diagnostics only: this module never sends a real mutation.
 const { customerFrom, configured, validateWritePath } = require('./google-write-path');
+const {createBudgetRestAdapter}=require('./google-budget-rest-adapter');
 const safeCode = error => Number.isInteger(error?.code) ? error.code : null;
 function berlinDay(now = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
@@ -27,7 +28,11 @@ async function runRuntimePreflight({ env = process.env, customer, log = entry =>
   let timer;
   const work = async () => {
     customer = customer || customerFrom(env);
-    const preflight = await validateWritePath({ env, customer, maxTotalMicros: 10000000 });
+    const adapter=createBudgetRestAdapter(customer);
+    let queryNumber=0;
+    const observed={query:async q=>{log({event:'google_write_path_stage',stage:'read',number:++queryNumber,writes_executed:false});return customer.query(q);},
+      mutateResources:async(...args)=>{log({event:'google_write_path_stage',stage:'validate_only_rest',writes_executed:false});return adapter.mutateResources(...args);}};
+    const preflight = await validateWritePath({ env, customer:observed, maxTotalMicros: 10000000 });
     let today = null, today_error = null;
     try { today = await readToday(customer); } catch (error) { today_error = safeCode(error); }
     return { event: 'google_write_path_preflight', success: preflight.success === true,
