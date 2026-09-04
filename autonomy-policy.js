@@ -15,6 +15,7 @@ const SAFE_AUTONOMOUS_ACTIONS = new Set([
   'record_internal_journal',
   'score_recommendation',
   'simulate_budget',
+  'google_ads.read_campaign',
 ]);
 
 function classifyAction(action = {}) {
