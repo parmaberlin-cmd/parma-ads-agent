@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parmaberlin.local/schemas/delegation-policy-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version","policy_version","status","approved_at","approved_by","green","yellow","red","kill_switch","escalation","evolution"],
+  "properties": {
+    "schema_version": {"type":"string","const":"1.0.0"},
+    "policy_version": {"type":"string","const":"1.0"},
+    "status": {"type":"string","const":"AUTHORIZED"},
+    "approved_at": {"type":"string","pattern":"^\\d{4}-\\d{2}-\\d{2}$"},
+    "approved_by": {"type":"string","minLength":1},
+    "purpose": {"type":"string"},
+    "green": {"type":"object"},
+    "yellow": {
+      "type":"object",
+      "required":["deploy","tracking","google_ads"],
+      "properties": {
+        "deploy":{"type":"object"},
+        "tracking":{"type":"object"},
+        "google_ads":{
+          "type":"object",
+          "required":["economic_cage"],
+          "properties":{
+            "economic_cage":{
+              "type":"object",
+              "required":["total_authorized_daily_budget_may_increase","max_single_campaign_budget_increase_pct_via_reallocation","new_campaign_may_spend_without_specific_authorized_cap"],
+              "properties":{
+                "total_authorized_daily_budget_may_increase":{"const":false},
+                "max_single_campaign_budget_increase_pct_via_reallocation":{"type":"number","maximum":20},
+                "new_campaign_may_spend_without_specific_authorized_cap":{"const":false}
+              }
+            }
+          }
+        }
+      }
+    },
+    "red":{"type":"object"},
+    "kill_switch":{"type":"object","required":["may_expand_privileges_to_fix"],"properties":{"may_expand_privileges_to_fix":{"const":false}}},
+    "escalation":{"type":"object"},
+    "evolution":{"type":"object","required":["authorization_boundaries_may_self_expand"],"properties":{"authorization_boundaries_may_self_expand":{"const":false}}}
+  }
+}
