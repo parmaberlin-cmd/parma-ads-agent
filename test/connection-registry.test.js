@@ -4,9 +4,10 @@ const { listConnections, connectionHealth, canUseCapability, humanActionNeeded }
 
 test('connection registry exposes systems without secrets', () => {
   const rows = listConnections();
-  assert.ok(rows.length >= 6);
+  assert.ok(rows.length >= 7);
   assert.ok(rows.some((x) => x.id === 'wix'));
   assert.ok(rows.some((x) => x.id === 'railway'));
+  assert.ok(rows.some((x) => x.id === 'orderbird'));
   const text = JSON.stringify(rows).toLowerCase();
   assert.equal(text.includes('refresh_token'), false);
   assert.equal(text.includes('api_key'), false);
@@ -43,6 +44,17 @@ test('Wix verified direct reservation reads are usable while mutations remain ga
   assert.equal(canUseCapability('wix', 'reservation_aggregate_read').allowed, false);
   assert.equal(canUseCapability('wix', 'reservation_read', { mutation:true }).allowed, false);
   assert.equal(humanActionNeeded('wix').needed, false);
+});
+
+test('orderbird automatic read target fails closed until provider-supported access is verified', () => {
+  const health = connectionHealth('orderbird');
+  assert.equal(health.found, true);
+  assert.equal(health.health, 'unavailable');
+  assert.equal(health.usable, false);
+  assert.equal(health.autonomous_read_allowed, false);
+  assert.equal(canUseCapability('orderbird', 'revenue_daily_read').allowed, false);
+  assert.equal(canUseCapability('orderbird', 'revenue_daily_read').reason, 'connection_not_usable');
+  assert.equal(humanActionNeeded('orderbird').needed, false);
 });
 
 test('degraded Meta read can remain usable while writes stay separately gated', () => {
