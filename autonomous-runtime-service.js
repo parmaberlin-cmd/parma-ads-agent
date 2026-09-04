@@ -6,6 +6,7 @@ const { autonomyPolicySummary } = require('./autonomy-policy');
 const { authorize:authorizeIngress, verify:verifyIngress, summary:ingressSummary } = require('./objective-ingress-auth');
 const { readCampaign } = require('./google-ads-specialist-read');
 const { proposeChanges } = require('./google-ads-specialist-propose');
+const { buildExecutionDryRun } = require('./google-ads-specialist-execution');
 
 function localHandlers(env=process.env){
   return {
@@ -20,9 +21,21 @@ function localHandlers(env=process.env){
       const source=objective?.tasks.find(x=>x.kind==='google_ads.read_campaign'&&x.status==='DONE')?.evidence?.[0]||null;
       return proposeChanges({readEvidence:source,context:task.input?.context||{}});
     },
+    'google_ads.execution_preflight': async ({objective_id,task}) => {
+      const state=readState(statePath(env));
+      const objective=state.objectives.find(x=>x.id===objective_id);
+      const readTask=objective?.tasks.find(x=>x.kind==='google_ads.read_campaign'&&x.status==='DONE');
+      const proposalTask=objective?.tasks.find(x=>x.kind==='google_ads.propose_changes'&&x.status==='DONE');
+      const historicalKeys=state.objectives.flatMap(o=>o.tasks.filter(t=>t.kind==='google_ads.execution_preflight'&&t.status==='DONE').flatMap(t=>t.evidence||[])).map(e=>e?.execution_key).filter(Boolean);
+      return buildExecutionDryRun({proposal:proposalTask?.evidence?.[0]||null,readEvidence:readTask?.evidence?.[0]||null,proposalCompletedAt:proposalTask?.completed_at||null,taskInput:task.input||{},killSwitch:state.runner.kill_switch===true,now:Date.now(),executionLedger:historicalKeys});
+    },
     generate_report: async ({objective_id,task}) => {
       const state=readState(statePath(env));
       const objective=state.objectives.find(x=>x.id===objective_id);
+      const execution=objective?.tasks.find(x=>x.kind==='google_ads.execution_preflight'&&x.status==='DONE')?.evidence?.[0]||null;
+      if(execution){
+        return {validated:true,evidence:{report:'google_ads_execution_preflight_summary',schema:'google_ads.execution_preflight.report.v1',objective_id,task_id:task.id,mode:'dry_run',execution_key:execution.execution_key,replayed:execution.replayed===true,counts:execution.counts,budget_cage:execution.budget_cage,rollback_readiness:execution.rollback_readiness,actions:(execution.actions||[]).map(a=>({action_id:a.action_id,action_type:a.action_type,status:a.status,reason:a.reason,executor_supported:a.executor_supported===true,rollback_ready:a.rollback_ready===true})),mutations_executed:0,writes_allowed:false,execution_allowed:false,spend_allowed:false}};
+      }
       const proposal=objective?.tasks.find(x=>x.kind==='google_ads.propose_changes'&&x.status==='DONE')?.evidence?.[0]||null;
       if(proposal){
         return {validated:true,evidence:{
