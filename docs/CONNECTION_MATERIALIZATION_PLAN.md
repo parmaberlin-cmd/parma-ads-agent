@@ -9,26 +9,29 @@ Goal: remove Philippe as manual middleware between Parma agents and external sys
 3. Read capabilities can be GREEN when already authorized and verified.
 4. Writes retain separate permission classes and approval gates.
 5. Connection loss becomes durable state with the smallest required human action; no repeated browser relay loops.
+6. Connection health is normalized to `healthy`, `degraded`, `reauth_required`, `external_security_gate`, or `unavailable`.
+7. `autonomous_read_allowed` is explicit and independent from mutation permission.
+8. Delegation Policy v1.0 is durable state; authorization boundaries cannot self-expand.
 
-## Priority order
+## Priority order and current state
 
-### P0-A — Shared capability discovery
-Materialize protected backend endpoints for capability discovery and health. Required contracts already exist in `connection-api.js`, `connection-registry.js`, and `connection-runtime-health.js`. Runtime route integration remains blocked until the dependency-audit issue is resolved and CI is green.
+### P0-A — Shared capability discovery — IN PROGRESS
+Protected connection registry/API modules exist. Registry health is normalized and secret-shaped keys are guarded. Runtime route integration remains blocked until the production dependency audit is green.
 
-### P0-B — Wix direct backend read
-Target capabilities: reservation aggregate/status read, orders read, source health. Canonical Parma site is recorded in the non-secret registry. One-time OAuth/API authorization may be required, after which recurring reservation/order reads must not require Philippe.
+### P0-B — Wix direct backend read — EXTERNAL TOOL GATE
+Canonical Parma site is pinned. Direct Wix invocation was re-tested on 2026-09-04 and the active Wix tool reports itself disabled. Do not ask Philippe to repeatedly relay reservations manually. Target remains durable reservation aggregate/status read, orders read and source health. If a supported direct path later requires provider owner OAuth, raise one minimal durable owner gate.
 
-### P0-C — Railway direct backend operations read
-Target capabilities: service/deployment status, logs, environment health and service configuration metadata. Tokens belong in Railway/backend secret storage. Deploy remains a separate explicit gate.
+### P0-C — Railway direct operations read — VERIFIED / MATERIALIZATION PARTIAL
+Direct authorized Railway read is verified for project, service, environment, deployment status/history, logs, runtime health and production domain. Production domain is `supportive-stillness-production-ec37.up.railway.app` on port 8080. Shared-agent backend materialization plus service-config/metrics validation remain. Deploy remains separately gated by Delegation v1.0 YELLOW-A.
 
-### P0-D — Google Ads + GA4 consolidation
-Existing backend OAuth/read paths should be surfaced through the shared capability contract so every authorized Parma agent can consume them without recreating auth state.
+### P0-D — Google Ads + GA4 consolidation — LIVE READ VERIFIED / SHARED CONTRACT PARTIAL
+Production runtime evidence shows Google and GA4 source health true; Google test and campaign intelligence requests returned 200. Existing backend OAuth/read paths should be surfaced through the shared capability contract after the security gate is cleared.
 
-### P1 — Meta consolidation
-Preserve existing diagnostics while separating account/security/payment recovery from normal read access and from all spend/activation mutations.
+### P1 — Meta consolidation — READ DEGRADED / WRITE BLOCKED
+Production runtime evidence shows Meta source health true and read-only preflight ready, while write readiness is false. Account/security/payment/write recovery remains separate from read access and from all spend/activation mutations.
 
-### P1 — GitHub backend capability
-Current chat connector is useful for engineering, but persistent agents should eventually consume scoped repository capabilities through the Control Tower/backend rather than depending on a specific chat session.
+### P1 — GitHub backend capability — CHAT CONNECTED / BACKEND MATERIALIZATION PENDING
+Current connector is useful for engineering. Persistent agents should eventually consume scoped repository capabilities through the Control Tower/backend rather than depend on one chat session.
 
 ## Definition of done per provider
 
@@ -43,4 +46,4 @@ A provider is DIRECT when all are true:
 
 ## Current security blocker
 
-On 2026-09-03 CI began failing before syntax/tests because `qs@6.15.3`, pulled through Express 4.22.2/body-parser, received new security advisories. `qs@6.16.0` is the patched line. Do not silence the audit or force an Express 5 migration merely to make CI green. Resolve the transitive dependency safely, regenerate the lockfile, then run the complete regression suite before runtime route integration or deployment.
+`qs` has been safely remediated to 6.16.0 with an npm-generated lockfile and clean install. A new advisory published 2026-09-03 affects `stream-json<=3.4.0`; `google-ads-api@24.1.0` currently depends on the 1.x stream-json interface, while the fixed stream-json line begins at 3.5.0 and uses a substantially reworked ESM/module architecture. The audit remains fail-closed. Do not weaken the audit, force a breaking google-ads-api downgrade, or blindly override stream-json 3.x. Syntax and tests run diagnostically even when audit fails, but deployment remains blocked until all security gates are green.
