@@ -32,7 +32,7 @@ Preparation component implemented with automated positive/adversarial tests.
 Live controlled management NOT complete or enabled.
 
 ## Remaining gates before any external write
-1. Owner supplies allowed campaign IDs/actions, budget limits and validity period.
+1. Owner supplies the customer ID, allowed campaign IDs/actions, budget limits and validity period.
 2. Trusted read adapter collects fresh whole-account budget inventory, IDs and
    conversion integrity; resolve shared budgets explicitly.
 3. Persist authenticated approval bound to exact proposal digest, expiry and owner;
@@ -48,3 +48,13 @@ Live controlled management NOT complete or enabled.
 
 Tests use synthetic policies only. No campaign, budget, announcement, credentials
 or spend has been changed by this preparation.
+
+## Review fixes — 2026-09-04
+
+The policy now requires customer_id and rejects a different snapshot account.
+Null/primitive/array inputs return a non-executable validation failure rather than throwing.
+Percentage comparisons use exact integer arithmetic against the decimal policy value,
+so an exact 7% boundary is not rejected as 7.000000000000001%.
+Policies without customer_id must be regenerated; no policy is auto-authorized.
+Targeted local validation: 27/27 tests with zod 3.25.76. Full repository suite
+and deployed validation were not rerun in this review. No merge or deployment.

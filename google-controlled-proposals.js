@@ -6,6 +6,7 @@ const id = z.string().regex(/^\d{1,20}$/);
 const money = z.number().int().nonnegative().safe();
 const time = z.string().datetime();
 const policySchema = z.object({
+  customer_id: id,
   campaign_ids: z.array(id).min(1),
   allowed_actions: z.array(z.enum(['set_daily_budget', 'pause', 'resume', 'add_negative_keyword'])),
   expires_at: time,
@@ -30,9 +31,24 @@ const snapshotSchema = z.object({
   }).strict()).min(1),
 }).strict();
 function digest(value) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
-function prepareControlledProposal({ action, policy, snapshot, now = Date.now(), kill_switch = false } = {}) {
+// Compare integer micros against the exact decimal form of the configured percent.
+function exceedsPercent(delta, current, percent) {
+  const [coefficient, exponent = '0'] = String(percent).split('e');
+  const decimals = (coefficient.split('.')[1] || '').length;
+  const scale = decimals - Number(exponent);
+  const numerator = BigInt(coefficient.replace('.', ''));
+  const left = BigInt(delta) * 100n * (scale > 0 ? 10n ** BigInt(scale) : 1n);
+  const right = BigInt(current) * numerator * (scale < 0 ? 10n ** BigInt(-scale) : 1n);
+  return left > right;
+}
+function prepareControlledProposal(input = {}) {
   const result = { mode: 'prepare_only', writes_allowed: false, spend_allowed: false,
     execution_allowed: false, policy_fit: false, requires_owner_approval: true, blockers: [] };
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+    result.blockers.push('invalid_proposal_input');
+    return result;
+  }
+  let { action, policy, snapshot, now = Date.now(), kill_switch = false } = input;
   if (kill_switch !== false) result.blockers.push('kill_switch_active');
   if (!Number.isSafeInteger(now)) result.blockers.push('invalid_clock');
   const a = actionSchema.safeParse(action), p = policySchema.safeParse(policy), s = snapshotSchema.safeParse(snapshot);
@@ -41,6 +57,7 @@ function prepareControlledProposal({ action, policy, snapshot, now = Date.now(),
   if (!s.success) result.blockers.push('trusted_complete_snapshot_required');
   if (result.blockers.length) return result;
   action = a.data; policy = p.data; snapshot = s.data;
+  if (policy.customer_id !== snapshot.customer_id) result.blockers.push('customer_not_authorized');
   const age = now - Date.parse(snapshot.captured_at);
   if (age < 0 || age >= policy.max_snapshot_age_seconds * 1000) result.blockers.push('snapshot_stale_or_future');
   if (Date.parse(policy.expires_at) <= now) result.blockers.push('owner_policy_expired');
@@ -65,8 +82,7 @@ function prepareControlledProposal({ action, policy, snapshot, now = Date.now(),
     }
   }
   if (action.type === 'set_daily_budget') {
-    const changePercent = Math.abs(nextBudget - campaign.daily_budget_micros) / campaign.daily_budget_micros * 100;
-    if (changePercent > policy.max_budget_change_percent) result.blockers.push('budget_change_limit_exceeded');
+    if (exceedsPercent(Math.abs(nextBudget - campaign.daily_budget_micros), campaign.daily_budget_micros, policy.max_budget_change_percent)) result.blockers.push('budget_change_limit_exceeded');
     if (nextBudget === campaign.daily_budget_micros) result.blockers.push('no_change');
   }
   if ((action.type === 'pause' && campaign.status === 'PAUSED') || (action.type === 'resume' && campaign.status === 'ENABLED')) result.blockers.push('no_change');

@@ -4,7 +4,7 @@ const { prepareControlledProposal: prepare } = require('../google-controlled-pro
 const now = Date.parse('2026-09-04T10:00:00Z');
 function fixture() { return { now,
   action: { type: 'set_daily_budget', campaign_id: '1', amount_micros: 4000000 },
-  policy: { campaign_ids: ['1'], allowed_actions: ['set_daily_budget','pause','resume','add_negative_keyword'],
+  policy: { customer_id: '123', campaign_ids: ['1'], allowed_actions: ['set_daily_budget','pause','resume','add_negative_keyword'],
     expires_at: '2026-09-05T00:00:00Z', max_account_daily_budget_micros: 8000000,
     max_campaign_daily_budget_micros: 5000000, max_budget_change_percent: 20, max_snapshot_age_seconds: 300 },
   snapshot: { customer_id: '123', currency: 'EUR', captured_at: '2026-09-04T10:00:00Z', account_inventory_complete: true,
@@ -17,6 +17,34 @@ test('valid proposal stays non-executable and includes paused campaign budgets',
   assert.equal(r.requires_owner_approval, true); assert.deepEqual(f, copy);
   assert.equal(r.proposal_id, prepare(f).proposal_id);
   f.action.amount_micros++; assert.notEqual(r.proposal_id, prepare(f).proposal_id);
+});
+test('policy must name and match the snapshot account', () => {
+  const f = fixture(); f.policy.customer_id = '456';
+  assert.ok(prepare(f).blockers.includes('customer_not_authorized'));
+  delete f.policy.customer_id;
+  assert.ok(prepare(f).blockers.includes('owner_limits_missing_or_invalid'));
+});
+test('null and primitive inputs fail closed without throwing', () => {
+  for (const input of [null, false, 42, 'input', []]) {
+    const r = prepare(input);
+    assert.equal(r.policy_fit, false); assert.equal(r.execution_allowed, false);
+    assert.ok(r.blockers.length);
+  }
+});
+test('percentage ceiling accepts exact boundary and rejects one micro above', () => {
+  const f = fixture(); f.policy.max_budget_change_percent = 7;
+  f.action.amount_micros = 3745000;
+  assert.equal(prepare(f).policy_fit, true);
+  f.action.amount_micros++;
+  assert.ok(prepare(f).blockers.includes('budget_change_limit_exceeded'));
+  f.policy.max_budget_change_percent = 0.07;
+  f.action.amount_micros = 3502450;
+  assert.equal(prepare(f).policy_fit, true);
+  f.action.amount_micros++;
+  assert.ok(prepare(f).blockers.includes('budget_change_limit_exceeded'));
+  f.policy.max_budget_change_percent = 1e-7;
+  f.action.amount_micros = 3500001;
+  assert.ok(prepare(f).blockers.includes('budget_change_limit_exceeded'));
 });
 for (const [name, change] of [
   ['missing limits', f => delete f.policy], ['string money', f => f.action.amount_micros = '4000000'],
