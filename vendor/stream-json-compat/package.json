@@ -1,0 +1,13 @@
+{
+  "name": "@parma/stream-json-compat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal Google Ads SDK Node-stream compatibility facade over patched stream-json",
+  "main": "index.cjs",
+  "exports": {
+    ".": "./index.cjs",
+    "./streamers/StreamArray": "./stream-array.cjs"
+  },
+  "engines": { "node": ">=22.12.0" },
+  "dependencies": { "stream-json-modern": "npm:stream-json@3.5.0" }
+}

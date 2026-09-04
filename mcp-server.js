@@ -147,6 +147,10 @@ function installMcp(app, { env = process.env, store, google, read, now } = {}) {
     try {
       const state = req.query.state;
       const { csrf } = await provider.finishGoogle({ state, cookie: cookieValue(req), code: req.query.code });
+      // Form POSTs under no-referrer can send Origin: null. Preserve the
+      // origin without disclosing the callback path, code or state in Referer.
+      // Keep the strict Origin, cookie and CSRF checks on the receiving route.
+      res.set('Referrer-Policy', 'strict-origin');
       // Only cryptographically generated base64url values enter this HTML.
       res.type('html').send(`<!doctype html><html lang="it"><meta charset="utf-8"><title>Collega Parma Agent</title>
         <h1>Collega ChatGPT a Parma Agent</h1><p>Consenti esclusivamente la lettura di diagnostica e dati Google Ads.
