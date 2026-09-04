@@ -1,0 +1,17 @@
+{
+  "id": "p7-control-tower-http-e2e-20260904-v3",
+  "objective": "Verify Parma Control Tower and recurring observability through secure OIDC production HTTP endpoints after the budget-cage GREEN fix, without provider mutations.",
+  "tasks": [
+    {
+      "id": "diagnostics",
+      "kind": "run_diagnostics",
+      "idempotency_key": "p7-control-tower-http-e2e-20260904-v3:diagnostics"
+    },
+    {
+      "id": "report",
+      "kind": "generate_report",
+      "depends_on": ["diagnostics"],
+      "idempotency_key": "p7-control-tower-http-e2e-20260904-v3:report"
+    }
+  ]
+}
