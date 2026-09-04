@@ -1,0 +1,43 @@
+{
+  "id": "p3-google-execution-preflight-23276824770-20260904",
+  "objective": "Read Google Ads campaign 23276824770 live, generate a fresh proposal, classify and preflight the resulting actions through the persistent execution adapter in dry-run mode only, enforce aggregate configured daily budget <= 10 EUR, persist audit and report, and execute zero mutations",
+  "tasks": [
+    {
+      "id": "campaign-23276824770",
+      "kind": "google_ads.read_campaign",
+      "idempotency_key": "p3-google-execution-preflight-23276824770-20260904:read"
+    },
+    {
+      "id": "proposal",
+      "kind": "google_ads.propose_changes",
+      "depends_on": ["campaign-23276824770"],
+      "idempotency_key": "p3-google-execution-preflight-23276824770-20260904:proposal",
+      "input": {
+        "context": {
+          "daily_budget_cap_eur": 10,
+          "goal": "maximize_probability_of_real_local_customers_at_Parma_di_Vinibenedetti_Wrangelstrasse_Kreuzberg_especially_tonight",
+          "late_night_strategy": true,
+          "weather_context": "2026-09-04 Kreuzberg: earlier rain/wind, later improvement expected; context signal only, not performance proof",
+          "conversion_integrity": "booking_completed_not_ground_truth; Google Ads conversion values raw only; table_reservation_completed_not_final_ground_truth",
+          "protected_intents": ["pizza near me", "pizza in meiner nähe", "pizza kreuzberg", "equivalent local high-intent queries"]
+        }
+      }
+    },
+    {
+      "id": "execution-preflight",
+      "kind": "google_ads.execution_preflight",
+      "depends_on": ["proposal"],
+      "idempotency_key": "p3-google-execution-preflight-23276824770-20260904:execution-preflight",
+      "input": {
+        "mode": "dry_run",
+        "authorizations": []
+      }
+    },
+    {
+      "id": "report",
+      "kind": "generate_report",
+      "depends_on": ["execution-preflight"],
+      "idempotency_key": "p3-google-execution-preflight-23276824770-20260904:report"
+    }
+  ]
+}
