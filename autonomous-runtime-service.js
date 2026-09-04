@@ -5,17 +5,33 @@ const { AutonomousRuntime, statePath, storageStatus, readState } = require('./au
 const { autonomyPolicySummary } = require('./autonomy-policy');
 const { authorize:authorizeIngress, verify:verifyIngress, summary:ingressSummary } = require('./objective-ingress-auth');
 const { readCampaign } = require('./google-ads-specialist-read');
+const { proposeChanges } = require('./google-ads-specialist-propose');
 
 function localHandlers(env=process.env){
   return {
     run_diagnostics: async () => ({ validated:true, evidence:{ component:'autonomous_runtime', storage:storageStatus(env), delegation_policy:autonomyPolicySummary(), kill_switch_supported:true } }),
     'google_ads.read_campaign': async ({task}) => {
       const campaignId=String(task.id||'').replace(/^campaign-/, '');
-      return readCampaign({campaignId,env});
+      return readCampaign({campaignId,start:task.input?.start,end:task.input?.end,env});
+    },
+    'google_ads.propose_changes': async ({objective_id,task}) => {
+      const state=readState(statePath(env));
+      const objective=state.objectives.find(x=>x.id===objective_id);
+      const source=objective?.tasks.find(x=>x.kind==='google_ads.read_campaign'&&x.status==='DONE')?.evidence?.[0]||null;
+      return proposeChanges({readEvidence:source,context:task.input?.context||{}});
     },
     generate_report: async ({objective_id,task}) => {
       const state=readState(statePath(env));
       const objective=state.objectives.find(x=>x.id===objective_id);
+      const proposal=objective?.tasks.find(x=>x.kind==='google_ads.propose_changes'&&x.status==='DONE')?.evidence?.[0]||null;
+      if(proposal){
+        return {validated:true,evidence:{
+          report:'google_ads_change_plan_summary',schema:'google_ads.propose_changes.report.v1',objective_id,task_id:task.id,campaign_id:proposal.campaign_id,evidence_fingerprint:proposal.evidence_fingerprint,
+          counts:proposal.counts,budget_cage:proposal.budget_cage,
+          principal_actions:proposal.actions.slice(0,8).map(a=>({action_id:a.action_id,action_type:a.action_type,target:a.target,status:a.status,risk_level:a.risk_level,confidence:a.confidence,conversion_signal_used:a.conversion_signal_used})),
+          mutations_executed:0,writes_allowed:false,execution_allowed:false,spend_allowed:false,
+        }};
+      }
       const source=objective?.tasks.find(x=>x.kind==='google_ads.read_campaign'&&x.status==='DONE')?.evidence?.[0]||null;
       const o=source?.overview;
       const evidence=source?{
