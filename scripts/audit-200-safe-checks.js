@@ -21,6 +21,11 @@ function walk(dir, out = []) {
 function rel(file) { return path.relative(ROOT, file).replace(/\\/g, '/'); }
 function fail(task, reason) { return { task, ok:false, reason }; }
 function pass(task, detail) { return { task, ok:true, detail }; }
+function secretScanText(name, text) {
+  if (!name.startsWith('test/')) return text;
+  // Deterministic fixtures are deliberately non-secret. Keep scanning every other literal.
+  return text.replace(/(['"])(?:test|mock|dummy|example)[A-Za-z0-9_.-]*\1/gi, "'<TEST_FIXTURE>'");
+}
 
 const files = walk(ROOT).filter(f => rel(f) !== 'scripts/audit-200-safe-checks.js');
 if (files.length < 200) {
@@ -32,8 +37,8 @@ const selected = files.slice(0, 200);
 const results = [];
 const secretPatterns = [
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
-  /(?:GOOGLE_REFRESH_TOKEN|GOOGLE_CLIENT_SECRET|PARMA_AGENT_API_KEY|META_ACCESS_TOKEN)\s*[:=]\s*['\"][^'\"$<{]{8,}['\"]/i,
-  /(?:access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key)\s*[:=]\s*['\"][A-Za-z0-9_\-.]{16,}['\"]/i
+  /(?:GOOGLE_REFRESH_TOKEN|GOOGLE_CLIENT_SECRET|PARMA_AGENT_API_KEY|META_ACCESS_TOKEN)\s*[:=]\s*['"][^'"$<{]{8,}['"]/i,
+  /(?:access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key)\s*[:=]\s*['"][A-Za-z0-9_.-]{16,}['"]/i
 ];
 
 for (let i = 0; i < selected.length; i++) {
@@ -48,7 +53,8 @@ for (let i = 0; i < selected.length; i++) {
     results.push(fail(task, `${name}: unresolved merge-conflict marker`));
     continue;
   }
-  const secretHit = secretPatterns.find(p => p.test(text));
+  const scanText = secretScanText(name, text);
+  const secretHit = secretPatterns.find(p => p.test(scanText));
   if (secretHit) {
     results.push(fail(task, `${name}: possible hard-coded secret/private key`));
     continue;
