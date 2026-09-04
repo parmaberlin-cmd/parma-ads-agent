@@ -1,0 +1,12 @@
+{
+  "registry_version":"1.0.0",
+  "purpose":"Non-secret registry of verified external read capabilities. Credentials must never be stored here.",
+  "connections":[
+    {"id":"github","system":"GitHub","status":"CONNECTED","health":"healthy","autonomous_read_allowed":true,"priority":"P0","shared_agent_backend_access":"PARTIAL","capabilities":["repo_read","actions_read"]},
+    {"id":"google_ads","system":"Google Ads","status":"CONNECTED_BACKEND_READ_ONLY","health":"healthy","autonomous_read_allowed":true,"priority":"P0","shared_agent_backend_access":"PARTIAL","capabilities":["campaign_read","keyword_read","search_term_read","conversion_action_read","diagnostics_read"]},
+    {"id":"ga4","system":"Google Analytics 4","status":"CONNECTED_BACKEND_READ_ONLY","health":"healthy","autonomous_read_allowed":true,"priority":"P0","shared_agent_backend_access":"PARTIAL","capabilities":["report_read","event_read","source_health"]},
+    {"id":"wix","system":"Wix","status":"CONNECTED_DIRECT_READ_VERIFIED","health":"healthy","autonomous_read_allowed":true,"priority":"P0","shared_agent_backend_access":"PARTIAL","capabilities":["reservation_read","reservation_status_read"],"capabilities_target":["reservation_aggregate_read","orders_read"]},
+    {"id":"meta","system":"Meta Ads","status":"BACKEND_SOURCE_PRESENT_DIAGNOSTIC_PARTIAL","health":"degraded","autonomous_read_allowed":true,"priority":"P1","shared_agent_backend_access":"PARTIAL","capabilities":["asset_read_partial","issue_classification_read"],"blocker":"Write/activation path is separately gated.","human_gate":"Provider security/payment checkpoint or explicit mutation authorization when actually required."},
+    {"id":"railway","system":"Railway","status":"CONNECTED_DIRECT_READ_VERIFIED","health":"healthy","autonomous_read_allowed":true,"priority":"P0","shared_agent_backend_access":"PARTIAL","capabilities":["project_read","service_read","environment_read","deployment_status_read","deployment_history_read","logs_read","environment_health_read","domain_read","service_config_read","metrics_read"],"capabilities_target":["deploy_within_delegated_gate"]}
+  ]
+}
