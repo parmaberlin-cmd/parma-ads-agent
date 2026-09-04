@@ -31,7 +31,7 @@ function sanitizeEvidence(value){
   return sanitizeText(value);
 }
 function normalizeTask(task={}, index=0){
-  return { id:sanitizeText(task.id || `task-${index+1}`,80), kind:sanitizeText(task.kind,80), status:'PENDING', attempts:0, max_attempts:Math.max(1,Math.min(10,Number(task.max_attempts||3))), depends_on:Array.isArray(task.depends_on)?task.depends_on.map(x=>sanitizeText(x,80)):[], evidence:[], errors:[], retry:{ next_attempt_at:null, backoff_ms:0 }, lease:null, idempotency_key:sanitizeText(task.idempotency_key || '',120) || null, next_action:null, stop_reason:null, created_at:null, updated_at:null, completed_at:null };
+  return { id:sanitizeText(task.id || `task-${index+1}`,80), kind:sanitizeText(task.kind,80), input:sanitizeEvidence(task.input||{}), status:'PENDING', attempts:0, max_attempts:Math.max(1,Math.min(10,Number(task.max_attempts||3))), depends_on:Array.isArray(task.depends_on)?task.depends_on.map(x=>sanitizeText(x,80)):[], evidence:[], errors:[], retry:{ next_attempt_at:null, backoff_ms:0 }, lease:null, idempotency_key:sanitizeText(task.idempotency_key || '',120) || null, next_action:null, stop_reason:null, created_at:null, updated_at:null, completed_at:null };
 }
 function normalizeObjective(input={}, now=()=>Date.now()){
   const created=nowIso(now); const id=sanitizeText(input.id || crypto.randomUUID(),100);
