@@ -90,3 +90,8 @@ test('budget reductions remain proposals, not authority to spend or rollback mon
   f.snapshot.campaigns[0].conversion_integrity_trusted = false;
   const r = prepare(f); assert.equal(r.policy_fit, true); assert.equal(r.execution_allowed, false);
 });
+
+test('out-of-range clocks fail closed', () => {
+  const f = fixture(); f.now = Number.MAX_SAFE_INTEGER;
+  assert.ok(prepare(f).blockers.includes('invalid_clock'));
+});
