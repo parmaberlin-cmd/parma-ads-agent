@@ -1,5 +1,5 @@
 {
-  "registry_version": "1.0.0",
+  "registry_version": "1.0.1",
   "purpose": "Authoritative non-secret registry of external capabilities available to Parma agents. Secrets and refresh tokens must never be stored here.",
   "operating_rule": "Agents consume named capabilities through the Parma backend/control tower; Philippe is required only for provider-enforced human authorization, security/payment recovery, or RED mutations.",
   "connections": [
@@ -31,7 +31,7 @@
       "transport": "parma_backend_oauth",
       "capabilities": ["report_read", "event_read", "source_health"],
       "shared_agent_backend_access": "PARTIAL",
-      "human_gate": "OAuth/security recovery and tracking/configuration mutations",
+      "human_gate": "OAuth/security recovery and tracking/configuration mutations outside delegated scope",
       "priority": "P0"
     },
     {
@@ -64,12 +64,15 @@
     {
       "id": "railway",
       "system": "Railway",
-      "status": "NO_DIRECT_AGENT_CONNECTOR",
-      "transport": "target_api_or_service_token_via_backend_secret_store",
-      "capabilities_target": ["deployment_status_read", "logs_read", "environment_health_read", "service_config_read", "deploy_after_explicit_gate"],
-      "shared_agent_backend_access": "BLOCKED",
-      "blocker": "No Railway connector available in current tool/plugin environment; direct API integration should be implemented rather than using Philippe as browser middleware",
-      "human_gate": "One-time token/project authorization and explicit deployment gates",
+      "status": "CONNECTED_DIRECT_READ_VERIFIED",
+      "transport": "authorized_railway_connector",
+      "account_scope_verified": true,
+      "capabilities": ["project_read", "service_read", "environment_read", "deployment_status_read", "deployment_history_read"],
+      "capabilities_target": ["logs_read", "environment_health_read", "service_config_read", "metrics_read", "domain_read", "deploy_within_delegated_gate"],
+      "shared_agent_backend_access": "PARTIAL",
+      "last_verified_at": "2026-09-04",
+      "blocker": "Routine direct read access is verified. Remaining work is capability materialization for shared agents and validation of additional read surfaces; mutations remain independently gated.",
+      "human_gate": "Only provider-enforced security/credential recovery or operations outside the delegated GREEN/YELLOW envelope",
       "priority": "P0"
     }
   ],
