@@ -1,6 +1,7 @@
 'use strict';
 const { runRuntimePreflight } = require('./google-write-runtime');
 setImmediate(() => { runRuntimePreflight().catch(() => {}); });
+setImmediate(() => { require('./google-evening-read').runEveningRead().catch(() => console.error(JSON.stringify({event:'google_evening_read',section:'completion',status:'blocked',reason:'read_failed',writes_executed:false}))); });
 if(process.env.GOOGLE_CONTROLLED_BUDGET_JOB==='true')setImmediate(async()=>{
   try{
     const {runControlledBudgetJob}=require('./google-controlled-runner');
