@@ -1,8 +1,10 @@
 # Controlled inventory collection — preparation milestone
 
-The new google-controlled-inventory.js module orchestrates a trusted read-only
-fetchPage callback. It is not yet connected to the Google SDK, a route, MCP, or
-the production scheduler. No new live collection, mutation or deployment occurs.
+The google-controlled-inventory.js module orchestrates a trusted read-only
+fetchPage callback. google-controlled-inventory-reader.js now supplies that callback
+using the existing google-ads-api SDK and configured environment credentials.
+It is not connected to a route, MCP, or the production scheduler. No new live
+collection, mutation or deployment has been performed in this development pass.
 
 ## Server callback contract
 
@@ -38,7 +40,28 @@ not that campaign execution, approval, or spending is authorized.
 
 Offline tests exercise pagination, second-scan drift, paused campaigns, metadata,
 hostile input, sanitized provider failures, shared budgets and proposal integration.
-The actual Google adapter, live pagination proof, durable snapshot storage,
+Live stream-completeness validation, durable snapshot storage,
 conversion provenance, owner policy UI, approval journal and execution path remain
 unfinished. Existing 50-task backlog is retained; do not mark all trusted-input
 tasks complete on the strength of these offline checks.
+
+## SDK adapter and diagnostic command
+
+Run `node scripts/run-google-controlled-inventory.js` only in the authorized server
+environment with existing Google configuration. Output includes success, counts,
+collection time and fixed blockers; no credentials, IDs or raw API errors.
+The adapter uses google-ads-api 24.1.0 queryStream (inspected from the pinned npm
+package). Each scan reads customer metadata and every non-removed campaign to
+stream completion. There are no metric, date or campaign-ID filters. Normalized
+pages of 1,000 are local slices of this fully consumed stream, not provider pages.
+The 10,000-row limit is checked while consuming the stream. Identifiers and linked
+resource names are validated against the configured account. Only DAILY budgets
+are accepted; lifetime/custom periods, missing sharing flags and unsafe numeric
+IDs/amounts block the entire inventory. Timeout withholds results, but this SDK
+does not expose AbortSignal cancellation through queryStream; a pending network
+read may finish after timeout and is never used as a successful result.
+
+Offline validation: 60/60 tests across reader, inventory and current proposal
+evaluator; includes a 1,001-campaign stream and errors after partial delivery.
+No full repository regression or live provider test has been claimed.
+Reference: https://developers.google.com/google-ads/api/reference/rpc/v24/BudgetPeriodEnum.BudgetPeriod
