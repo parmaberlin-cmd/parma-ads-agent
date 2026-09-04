@@ -89,7 +89,7 @@ function prepareControlledProposal(input = {}) {
   result.policy_fit = result.blockers.length === 0;
   result.proposal = { customer_id: snapshot.customer_id, action, before: campaign,
     proposed_account_daily_budget_micros: proposedTotal,
-    snapshot_digest: digest(snapshot), policy_digest: digest(policy),
+    snapshot_digest: digest(snapshot), inventory_state_digest: digest({...snapshot,captured_at:undefined}), policy_digest: digest(policy),
     created_at: new Date(now).toISOString(),
     expires_at: new Date(Math.min(Date.parse(policy.expires_at), Date.parse(snapshot.captured_at) + policy.max_snapshot_age_seconds * 1000)).toISOString(),
   };

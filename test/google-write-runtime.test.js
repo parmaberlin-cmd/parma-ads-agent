@@ -28,6 +28,6 @@ test('truncated history fails closed',async()=>{
 test('unresponsive provider yields bounded sanitized failure',async()=>{
  const env=Object.fromEntries(['GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','GOOGLE_DEVELOPER_TOKEN','GOOGLE_REFRESH_TOKEN','GOOGLE_CUSTOMER_ID'].map(k=>[k,randomUUID()]));
  env.GOOGLE_ADS_VALIDATE_WRITE_PATH_ON_START='true';
- const r=await runRuntimePreflight({env,customer:{query:()=>new Promise(()=>{})},timeoutMs:5,log:()=>{}});
+ const r=await runRuntimePreflight({env,customer:{credentials:{customer_id:'1'},getAccessToken:async()=>'',query:()=>new Promise(()=>{})},timeoutMs:5,log:()=>{}});
  assert.deepEqual(r.blockers,['preflight_timeout']);assert.equal(r.execution_allowed,false);
 });
