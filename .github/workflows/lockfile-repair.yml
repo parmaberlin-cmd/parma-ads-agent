@@ -1,0 +1,31 @@
+name: lockfile-repair
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Regenerate package lock only
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Verify clean install
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify production audit
+        run: npm audit --omit=dev --audit-level=moderate
+      - name: Upload regenerated lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: regenerated-package-lock
+          path: package-lock.json
+          if-no-files-found: error
