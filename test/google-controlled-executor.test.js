@@ -55,3 +55,14 @@ test('Google adapter explicitly disables transport retries',async()=>{
  await adapter.mutateResources([],{validate_only:true,partial_failure:false});assert.equal(opts.retry,null);assert.equal(opts.timeout,15000);
 });
 test('adapter cannot target another customer',async t=>{const f=fixture(t);f.customer.customerId='9';await assert.rejects(createControlledExecutor(f.args).execute(f.p.proposal_id),/customer_mismatch/);});
+test('explicit configured-budget mandate does not claim hard cost ceiling',async t=>{
+ const f=fixture(t);f.safety.hard_daily_spend_cap_verified=false;f.safety.today_history_reconciled=false;
+ f.safety.limit_semantics='enabled_configured_daily_budget';f.safety.today_read_success=true;
+ f.safety.reported_cost_micros=11000000;
+ const r=await createControlledExecutor({...f.args,limitSemantics:'enabled_configured_daily_budget'}).execute(f.p.proposal_id);
+ assert.equal(r.status,'verified');assert.equal(f.ledger.read(f.p.proposal_id).limit_semantics,'enabled_configured_daily_budget');
+});
+test('configured mode still requires live economic read',async t=>{
+ const f=fixture(t);f.safety.limit_semantics='enabled_configured_daily_budget';f.safety.today_read_success=false;
+ await assert.rejects(createControlledExecutor({...f.args,limitSemantics:'enabled_configured_daily_budget'}).execute(f.p.proposal_id),/economic_or_runtime/);
+});

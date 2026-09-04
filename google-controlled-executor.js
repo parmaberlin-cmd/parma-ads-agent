@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {createHash, createHmac, timingSafeEqual, randomUUID} = require('node:crypto');
 const {prepareControlledProposal} = require('./google-controlled-proposals');
+const {configuredBudgetGuard}=require('./google-configured-budget-guard');
 const hash = x => createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const fail = code => { throw new Error(code); };
 class ExecutionLedger {
@@ -66,7 +67,8 @@ function createSingleAttemptAdapter(customer){
     return (await service.mutate(request,{retry:null,timeout:15000,otherArgs:{headers:customer.callHeaders}}))[0];
   }};
 }
-function createControlledExecutor({journal,ledger,customer,readSnapshot,readSafety,readPolicy,killSwitch,now=Date.now}){
+function createControlledExecutor({journal,ledger,customer,readSnapshot,readSafety,readPolicy,killSwitch,now=Date.now,limitSemantics='actual_daily_cost'}){
+  if(!['actual_daily_cost','enabled_configured_daily_budget'].includes(limitSemantics))fail('invalid_limit_semantics');
   for(const fn of [readSnapshot,readSafety,readPolicy,killSwitch,now])if(typeof fn!=='function')fail('trusted_runtime_dependencies_required');
   if(!(ledger instanceof ExecutionLedger)||!journal||typeof journal.get!=='function'||typeof customer?.mutateResources!=='function')fail('trusted_runtime_dependencies_required');
   async function execute(proposalId){
@@ -92,6 +94,15 @@ function createControlledExecutor({journal,ledger,customer,readSnapshot,readSafe
         const prepared=prepareControlledProposal({action:proposal.action,policy,snapshot,now:clock,kill_switch:false});
         if(!prepared.policy_fit)fail('policy_gate_failed');
         const safety=await readSafety();
+        if(limitSemantics==='enabled_configured_daily_budget'){
+          configuredBudgetGuard(snapshot,proposal.action);
+          if(safety?.customer_id!==owner||safety.currency!=='EUR'||safety.time_zone!=='Europe/Berlin'||
+             safety.limit_semantics!==limitSemantics||safety.today_read_success!==true||
+             !Number.isSafeInteger(safety.reported_cost_micros)||safety.reported_cost_micros<0||
+             !Number.isSafeInteger(safety.checked_at)||clock-safety.checked_at<0||clock-safety.checked_at>5000||
+             safety.proposal_id!==proposalId||safety.audit_storage_durable!==true||safety.live_execution_gate!==true)fail('economic_or_runtime_gate_unverified');
+          return snapshot;
+        }
         // Evidence must be live, account-bound, reconciled and certified by a trusted gate.
         // A configured average budget or client boolean must never produce this evidence.
         if(safety?.customer_id!==owner||safety.currency!=='EUR'||safety.time_zone!=='Europe/Berlin'||
@@ -105,7 +116,7 @@ function createControlledExecutor({journal,ledger,customer,readSnapshot,readSafe
       const before=await check();const mutation=buildBudgetMutation(proposal);
       await customer.mutateResources([mutation],{validate_only:true,partial_failure:false});
       await check();
-      const record={id:proposalId,status:'sending',before,mutation,rollback:{type:'set_daily_budget',campaign_id:proposal.action.campaign_id,amount_micros:proposal.before.daily_budget_micros},created_at:now()};
+      const record={id:proposalId,status:'sending',limit_semantics:limitSemantics,before,mutation,rollback:{type:'set_daily_budget',campaign_id:proposal.action.campaign_id,amount_micros:proposal.before.daily_budget_micros},created_at:now()};
       ledger.pending(owner,true);
       ledger.write(proposalId,record);
       // Once sending is durable, this ID can never send again, even after a timeout/crash.
