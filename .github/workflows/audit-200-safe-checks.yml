@@ -1,0 +1,28 @@
+name: audit-200-safe-checks
+
+on:
+  pull_request:
+    paths:
+      - '**/*.js'
+      - '**/*.json'
+      - '**/*.md'
+      - '**/*.yml'
+      - '**/*.yaml'
+      - 'scripts/audit-200-safe-checks.js'
+      - '.github/workflows/audit-200-safe-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Execute exactly 200 independent repository safety audits
+        run: node scripts/audit-200-safe-checks.js
