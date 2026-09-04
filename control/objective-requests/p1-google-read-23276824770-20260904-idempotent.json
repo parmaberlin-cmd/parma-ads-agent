@@ -1,0 +1,18 @@
+{
+  "id": "p1-google-read-23276824770-20260904",
+  "objective": "Read Google Ads campaign 23276824770 in read-only mode through the autonomous specialist, persist validated evidence, then generate a structured report",
+  "tasks": [
+    {
+      "id": "campaign-23276824770",
+      "kind": "google_ads.read_campaign",
+      "max_attempts": 3,
+      "idempotency_key": "p1-google-read-23276824770-20260904:read"
+    },
+    {
+      "id": "report",
+      "kind": "generate_report",
+      "depends_on": ["campaign-23276824770"],
+      "idempotency_key": "p1-google-read-23276824770-20260904:report"
+    }
+  ]
+}
