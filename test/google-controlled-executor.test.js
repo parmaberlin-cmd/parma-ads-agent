@@ -66,6 +66,18 @@ test('configured mode still requires live economic read',async t=>{
  const f=fixture(t);f.safety.limit_semantics='enabled_configured_daily_budget';f.safety.today_read_success=false;
  await assert.rejects(createControlledExecutor({...f.args,limitSemantics:'enabled_configured_daily_budget'}).execute(f.p.proposal_id),/economic_or_runtime/);
 });
+test('real elapsed safety read time is not a future timestamp',async t=>{
+ const f=fixture(t);let clock=f.args.now();
+ f.args.now=()=>clock;
+ f.args.readSafety=async()=>{clock+=100;return {...f.safety,checked_at:clock};};
+ assert.equal((await createControlledExecutor(f.args).execute(f.p.proposal_id)).status,'verified');
+});
+test('proposal expiring during safety read cannot reach provider validation',async t=>{
+ const f=fixture(t);let clock=f.args.now();f.args.now=()=>clock;
+ f.args.readSafety=async()=>{clock+=61000;return {...f.safety,checked_at:clock};};
+ await assert.rejects(createControlledExecutor(f.args).execute(f.p.proposal_id),/proposal_expired/);
+ assert.equal(f.calls.length,0);
+});
 test('explicit enabled proposal policy excludes paused budgets but retains conversion gate',()=>{
  const {prepareControlledProposal}=require('../google-controlled-proposals');const now=Date.now();
  const snapshot={customer_id:'1',currency:'EUR',captured_at:new Date(now).toISOString(),account_inventory_complete:true,campaigns:[{campaign_id:'2',budget_id:'3',daily_budget_micros:3500000,status:'ENABLED',shared_budget:false,conversion_integrity_trusted:false},{campaign_id:'4',budget_id:'5',daily_budget_micros:9200000,status:'PAUSED',shared_budget:false,conversion_integrity_trusted:false}]};
