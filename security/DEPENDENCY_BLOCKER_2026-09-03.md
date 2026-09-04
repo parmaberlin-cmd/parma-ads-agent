@@ -6,11 +6,12 @@ CI is still intentionally fail-closed because GHSA-528h-pc64-c93x / CVE-2026-714
 
 ## Compatibility evidence
 
-- `google-ads-api@24.1.0` is the current latest published release at verification time.
-- Its package manifest depends on `stream-json^1.8.0`.
-- Its `src/customer.ts` imports the v1-style modules `stream-json` and `stream-json/streamers/StreamArray`.
-- The current stream-json 3.x codebase is ESM (`type: module`) and documents a reworked module/import architecture.
-- Therefore a blind override from the 1.x dependency line to `3.5.0+` is a major compatibility jump and is not considered safe without a dedicated compatibility proof.
+- `google-ads-api@24.1.0` depends on `stream-json^1.8.0`.
+- Its code imports the v1-style modules `stream-json` and `stream-json/streamers/StreamArray`.
+- A dedicated CI-only compatibility probe forced `stream-json@3.5.0` without changing the committed dependency files.
+- The temporary dependency tree installed successfully and `npm ls` confirmed `google-ads-api@24.1.0 -> stream-json@3.5.0 overridden`.
+- Loading `google-ads-api` then failed immediately with `MODULE_NOT_FOUND` because the package attempted to resolve the legacy `stream-json/.../StreamArray` path that no longer exists in stream-json 3.5.0.
+- This empirically rejects a blind stream-json 3.5 override for the current Google Ads client.
 - npm's automatic force remediation proposes moving `google-ads-api` to `20.0.0`; this is a breaking downgrade and is rejected.
 
 ## Current remediation state
@@ -18,18 +19,20 @@ CI is still intentionally fail-closed because GHSA-528h-pc64-c93x / CVE-2026-714
 - `qs`: remediated to `6.16.0` with an npm-generated lockfile.
 - `npm ci`: verified successful after lock regeneration.
 - `stream-json`: unresolved moderate DoS advisory via `google-ads-api@24.1.0`.
+- `stream-json@3.5.0` direct override: tested and proven incompatible with current google-ads-api load path.
 - `npm audit fix --force`: rejected.
-- Blind stream-json 3.x override: rejected pending compatibility proof.
+- Main syntax checks: pass.
+- Full test suite can run diagnostically while the audit fails; deployment remains blocked by the hard audit gate.
 
 ## Required remediation
 
 1. Keep the audit threshold unchanged (`npm audit --omit=dev --audit-level=moderate`).
 2. Do not force-downgrade `google-ads-api` merely to make CI green.
-3. Do not force a `stream-json` major override without a compatibility test proving the Google Ads client path works.
-4. Prefer an upstream `google-ads-api` release that adopts a fixed compatible parser, an upstream backport to the 1.x-compatible interface, or a separately validated replacement path.
-5. Track the advisory/upstream package state because this vulnerability was published on 2026-09-03 and upstream remediation may change quickly.
+3. Do not force a stream-json 3.x override; compatibility has now been disproven for the current client.
+4. Prefer an upstream `google-ads-api` release that adopts the fixed parser API, an upstream compatible backport, or a separately validated replacement/fork path.
+5. Track upstream package/issues because the advisory was published on 2026-09-03 and remediation may change quickly.
 6. Until a safe path exists, no production deployment is permitted.
 
 ## Safety
 
-Do not weaken or skip the dependency audit. Syntax/tests can be run independently for engineering diagnosis, but they do not override the security gate. This blocker is independent from campaign/tracking/spend permissions.
+Do not weaken or skip the dependency audit. Passing syntax/tests does not override the security gate. This blocker is independent from campaign/tracking/spend permissions.
