@@ -1,0 +1,37 @@
+{
+  "id": "p6-p9-runtime-platform-20260904",
+  "objective": "Verify recurring-objective persistence and runtime platform contracts in production without commercial mutations. Register a safe daily diagnostics schedule for 08:00 Europe/Berlin, inspect diagnostics evidence for specialist and conversion-integrity contracts, then report.",
+  "tasks": [
+    {
+      "id": "register-morning-health",
+      "kind": "runtime.register_recurring",
+      "input": {
+        "schedule": {
+          "id": "morning-runtime-health",
+          "enabled": true,
+          "cadence": {"type":"daily","hour":8,"minute":0},
+          "objective_template": {
+            "objective": "Run Parma autonomous runtime health diagnostics without provider mutations",
+            "tasks": [
+              {"id":"diag","kind":"run_diagnostics","idempotency_key":"recurring:morning-runtime-health:diag"},
+              {"id":"report","kind":"generate_report","depends_on":["diag"],"idempotency_key":"recurring:morning-runtime-health:report"}
+            ]
+          }
+        }
+      },
+      "idempotency_key": "p6-p9-runtime-platform-20260904:register"
+    },
+    {
+      "id": "diagnostics",
+      "kind": "run_diagnostics",
+      "depends_on": ["register-morning-health"],
+      "idempotency_key": "p6-p9-runtime-platform-20260904:diagnostics"
+    },
+    {
+      "id": "report",
+      "kind": "generate_report",
+      "depends_on": ["diagnostics"],
+      "idempotency_key": "p6-p9-runtime-platform-20260904:report"
+    }
+  ]
+}
