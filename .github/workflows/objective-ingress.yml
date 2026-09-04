@@ -75,8 +75,18 @@ jobs:
         run: |
           set -euo pipefail
           BASE='https://supportive-stillness-production-ec37.up.railway.app'
-          curl -fsS "$BASE/tools/agent/control-tower" -H "Authorization: Bearer $OIDC_TOKEN" -o control-tower.json
-          curl -fsS "$BASE/tools/agent/recurring" -H "Authorization: Bearer $OIDC_TOKEN" -o recurring.json
+          fetch_200() {
+            local url="$1" out="$2" code=''
+            for i in {1..20}; do
+              code=$(curl -sS -o "$out" -w '%{http_code}' "$url" -H "Authorization: Bearer $OIDC_TOKEN" || true)
+              if [ "$code" = 200 ]; then return 0; fi
+              sleep 3
+            done
+            printf 'endpoint_failed url=%s code=%s\n' "$url" "$code" >&2
+            return 1
+          }
+          fetch_200 "$BASE/tools/agent/control-tower" control-tower.json
+          fetch_200 "$BASE/tools/agent/recurring" recurring.json
           jq -e '(.success==true) and (.schema=="parma.control_tower.v1") and (.runner.status=="RUNNING") and (.runner.kill_switch|type=="boolean") and (.objectives.total_count>=1) and (.specialists|map(.id)|index("google_ads")!=null) and (.specialists|map(.id)|index("orderbird")!=null) and (.guardrails.conversion_integrity.booking_completed.trust=="UNTRUSTED_AS_RESERVATION") and (.guardrails.conversion_integrity.table_reservation_completed.allowed_for_autonomous_booking_optimization==false) and (.recurring.timezone=="Europe/Berlin")' control-tower.json >/dev/null
           jq -e '(.success==true) and (.timezone=="Europe/Berlin") and (.storage.durable==true) and ([.schedules[].id]|index("morning-runtime-health")!=null)' recurring.json >/dev/null
           jq '{schema,runner,objectives,current_task,next_task,last_successful_action,last_mutation,evidence_timestamp,pending_needs_human,blocked_external,retry_state,guardrails:{budget_cage:.guardrails.budget_cage,conversion_integrity:.guardrails.conversion_integrity},recurring,specialists:(.specialists|map({id,status,health}))}' control-tower.json
