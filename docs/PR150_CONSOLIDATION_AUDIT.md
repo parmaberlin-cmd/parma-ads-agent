@@ -33,6 +33,19 @@ Historical cycle/checkpoint documents should remain immutable evidence but shoul
 
 Potentially stale-by-design documents include dated diagnostics/proposals and autonomous-cycle narratives. Keep them as historical evidence; add supersession pointers rather than rewriting history.
 
+## Current-main integration gate — 2026-09-04
+`main` is the authoritative production branch. Historical stacked bases are not release authority. Before promotion, PR #150 must be retargeted to current `main`, pass the full exact-head CI and production dependency audit, and be reviewed for overlap with controlled Google proposal infrastructure already landed on `main`.
+
+Promotion sequence:
+1. Retarget PR #150 to current `main`.
+2. Preserve all newer `main` safeguards while resolving any conflict.
+3. Run exact-head tests, syntax checks, and the production dependency audit.
+4. Review overlap with current controlled-proposal and runtime safety code.
+5. Merge only if the candidate remains read-only/proposal-only and all gates are green.
+6. Verify Railway deployment and runtime health after merge.
+
+Conversion-dependent recommendations remain withheld when measurement evidence is incomplete or stale. Local/near-me/open-now/brand safeguards remain mandatory. No secret values or raw search-query corpus may be published in shared state or logs.
+
 ## Safety conclusion
 There is no justified code deletion from the changed-file surface at this checkpoint. Consolidation should first happen through stable facades and authoritative-state pointers. Removing apparently duplicated guards could weaken fail-closed behavior.
 
