@@ -35,10 +35,13 @@ test('Railway verified direct reads are usable', () => {
   assert.equal(humanActionNeeded('railway').needed, false);
 });
 
-test('Wix remains unavailable without inventing an owner gate', () => {
-  assert.equal(connectionHealth('wix').usable, false);
-  assert.equal(connectionHealth('wix').health, 'unavailable');
+test('Wix verified direct reservation reads are usable while mutations remain gated', () => {
+  assert.equal(connectionHealth('wix').usable, true);
+  assert.equal(connectionHealth('wix').health, 'healthy');
+  assert.equal(canUseCapability('wix', 'reservation_read').allowed, true);
+  assert.equal(canUseCapability('wix', 'reservation_status_read').allowed, true);
   assert.equal(canUseCapability('wix', 'reservation_aggregate_read').allowed, false);
+  assert.equal(canUseCapability('wix', 'reservation_read', { mutation:true }).allowed, false);
   assert.equal(humanActionNeeded('wix').needed, false);
 });
 
