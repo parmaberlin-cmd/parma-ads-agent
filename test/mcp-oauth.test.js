@@ -246,6 +246,37 @@ test('OAuth metadata is discoverable and unauthenticated MCP is challenged', asy
   assert.equal(destination.searchParams.get('error'), 'invalid_scope');
   assert.equal(destination.searchParams.get('state'), 'preserved-state');
 });
+test('consent page preserves form Origin without disclosing callback query; rejects unsafe submissions', async t => {
+  const f = await httpFixture(t), provider = f.mounted.provider;
+  let flowCookie, googleState;
+  const original = f.google.generateAuthUrl;
+  f.google.generateAuthUrl = params => { googleState = params.state; return original(params); };
+  await provider.authorize(f.client, { state: 'chatgpt-state', scopes: ['parma.read'], codeChallenge: challenge(verifier),
+    redirectUri: f.config.redirectUri, resource: new URL(f.config.resource) }, {
+    cookie: (_, value) => { flowCookie = value; }, redirect: () => {},
+  });
+  const page = await f.request(`/mcp/oauth/google/callback?state=${googleState}&code=mock-google-code`, {
+    headers: { cookie: `${COOKIE}=${flowCookie}` },
+  });
+  assert.equal(page.status, 200);
+  assert.equal(page.headers.get('referrer-policy'), 'strict-origin');
+  assert.match(page.headers.get('content-security-policy'), /form-action 'self'/);
+  const csrf = (await page.text()).match(/name="csrf" value="([^"]+)"/)[1];
+  const submit = (requestOrigin, overrides = {}, cookie = flowCookie) => f.request('/mcp/oauth/consent', {
+    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded',
+      ...(requestOrigin === undefined ? {} : { origin: requestOrigin }), cookie: `${COOKIE}=${cookie}` },
+    body: new URLSearchParams({ state: googleState, csrf, decision: 'allow', ...overrides }),
+  });
+  for (const bad of ['null', 'https://evil.example']) assert.equal((await submit(bad)).status, 403);
+  for (const bad of [undefined, 'https://chatgpt.com']) assert.equal((await submit(bad)).status, 400);
+  assert.equal((await submit(origin, { csrf: 'invalid' })).status, 400);
+  assert.equal((await submit(origin, {}, 'wrong-cookie')).status, 400);
+  const accepted = await submit(origin);
+  assert.equal(accepted.status, 302);
+  assert.equal(new URL(accepted.headers.get('location')).origin, 'https://chatgpt.com');
+  assert.equal(accepted.headers.get('referrer-policy'), 'no-referrer');
+  assert.equal((await submit(origin)).status, 400);
+});
 test('real SDK transport initializes, lists and calls only read tools', async t => {
   const f = await httpFixture(t);
   const tokens = f.mounted.provider.issue({ subject: 'owner-subject', family: 'test-family', familyExpires: Date.now() + 86400000 });
