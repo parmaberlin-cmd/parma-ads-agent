@@ -1,0 +1,17 @@
+{
+  "id": "e2e-secure-ingress-20260904-1515",
+  "objective": "Verify secure production autonomous runner ingress end-to-end",
+  "tasks": [
+    {
+      "id": "diag",
+      "kind": "run_diagnostics",
+      "idempotency_key": "e2e-secure-ingress-20260904-1515:diag"
+    },
+    {
+      "id": "report",
+      "kind": "generate_report",
+      "depends_on": ["diag"],
+      "idempotency_key": "e2e-secure-ingress-20260904-1515:report"
+    }
+  ]
+}
