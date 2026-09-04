@@ -1,0 +1,12 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://parmaberlin.local/schemas/connection-registry-v1.json",
+  "type":"object",
+  "required":["registry_version","connections","health_enum","required_backend_contract"],
+  "properties":{
+    "registry_version":{"type":"string"},
+    "health_enum":{"type":"array","const":["healthy","degraded","reauth_required","external_security_gate","unavailable"]},
+    "connections":{"type":"array","minItems":1,"items":{"type":"object","required":["id","system","status","health","autonomous_read_allowed","priority"],"properties":{"id":{"type":"string"},"system":{"type":"string"},"status":{"type":"string"},"health":{"enum":["healthy","degraded","reauth_required","external_security_gate","unavailable"]},"autonomous_read_allowed":{"type":"boolean"},"priority":{"type":"string"}}}},
+    "required_backend_contract":{"type":"object"}
+  }
+}
