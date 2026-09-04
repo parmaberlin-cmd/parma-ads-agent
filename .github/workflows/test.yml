@@ -37,3 +37,27 @@ jobs:
         run: |
           echo "Production dependency audit remains a hard deployment gate."
           exit 1
+
+  stream-json-35-compatibility-probe:
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Create temporary stream-json 3.5 override
+        run: npm pkg set overrides.stream-json=3.5.0
+      - name: Generate temporary dependency tree
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Install temporary dependency tree
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify resolved stream-json version
+        run: npm ls stream-json
+      - name: Verify google-ads-api CommonJS load path
+        run: node -e "require('google-ads-api'); console.log('google-ads-api require ok')"
+      - name: Verify stream-json paths used by google-ads-api
+        run: node -e "require('stream-json'); require('stream-json/streamers/StreamArray'); console.log('legacy stream-json paths ok')"
