@@ -1,0 +1,78 @@
+name: objective-ingress
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'control/objective-requests/*.json'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve request
+        id: req
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | grep '^control/objective-requests/.*\.json$' | head -1)
+          test -n "$FILE"
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+      - name: Obtain short-lived GitHub OIDC identity
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESP=$(curl -fsS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=parma-autonomous-objective-ingress")
+          TOKEN=$(printf '%s' "$RESP" | jq -r '.value')
+          test -n "$TOKEN" -a "$TOKEN" != null
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+      - name: Submit objective and verify production completion
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+          REQUEST_FILE: ${{ steps.req.outputs.file }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://supportive-stillness-production-ec37.up.railway.app'
+          BODY=$(jq --arg sha "$GITHUB_SHA" --arg run "$GITHUB_RUN_ID" '. + {source_sha:$sha,source_run_id:$run}' "$REQUEST_FILE")
+          for i in {1..20}; do
+            CODE=$(curl -sS -o health.json -w '%{http_code}' "$BASE/health/autonomous-runner" || true)
+            if [ "$CODE" = 200 ]; then break; fi
+            sleep 5
+          done
+          SUBMIT=$(curl -fsS -X POST "$BASE/internal/objective-ingress" -H "Authorization: Bearer $OIDC_TOKEN" -H 'Content-Type: application/json' --data "$BODY")
+          OID=$(printf '%s' "$SUBMIT" | jq -r '.objective_id')
+          test "$OID" = "$(jq -r '.id' "$REQUEST_FILE")"
+          cp /dev/null transitions.txt
+          for i in {1..30}; do
+            curl -fsS "$BASE/health/autonomous-runner" -o health.json
+            curl -fsS "$BASE/tools/agent/objectives/status" -H "Authorization: Bearer $OIDC_TOKEN" -o status.json
+            jq -r '[.active_objective.status // "NONE", .current_task.status // "NONE", .last_task_completed.id // "NONE", .stop_reason // "NONE"]|@tsv' status.json >> transitions.txt
+            DONE=$(jq -r --arg oid "$OID" '(.active_objective == null) and (.last_task_completed.objective_id == $oid)' status.json)
+            if [ "$DONE" = true ]; then break; fi
+            sleep 2
+          done
+          jq -e --arg oid "$OID" '(.runner.status=="RUNNING") and (.storage.durable==true) and (.last_task_completed.objective_id==$oid)' status.json >/dev/null
+          jq -e --arg oid "$OID" '[.ingress.audit[]|select(.data.objective_id==$oid and .data.auth_result=="allowed")]|length>=1' status.json >/dev/null
+          printf 'objective_id=%s\n' "$OID"
+          printf 'transitions:\n'; cat transitions.txt
+          jq '{runner,active_objective,last_task_completed,current_task,next_task,stop_reason,updated_at,ingress:{audit:(.ingress.audit|map(select(.data.objective_id==$oid)) // [])}}' --arg oid "$OID" status.json
+      - name: Verify replay protection
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+          REQUEST_FILE: ${{ steps.req.outputs.file }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://supportive-stillness-production-ec37.up.railway.app'
+          BODY=$(jq --arg sha "$GITHUB_SHA" --arg run "$GITHUB_RUN_ID" '. + {source_sha:$sha,source_run_id:$run}' "$REQUEST_FILE")
+          CODE=$(curl -sS -o replay.json -w '%{http_code}' -X POST "$BASE/internal/objective-ingress" -H "Authorization: Bearer $OIDC_TOKEN" -H 'Content-Type: application/json' --data "$BODY")
+          test "$CODE" = 409
+          jq -e '.error=="replay_detected"' replay.json >/dev/null
