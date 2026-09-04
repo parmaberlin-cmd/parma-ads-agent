@@ -25,16 +25,15 @@ async function runRuntimePreflight({ env = process.env, customer, log = entry =>
   log({ event: 'google_write_path_startup', enabled, writes_executed: false });
   if (!enabled) return { status: 'disabled' };
   if (!configured(env)) { log({ event: 'google_write_path_preflight', success: false, blockers: ['google_configuration_incomplete'], writes_executed: false }); return { status: 'blocked' }; }
-  let timer;
+  let timer,today=null,today_error=null;
   const work = async () => {
     customer = customer || customerFrom(env);
     const adapter=createBudgetRestAdapter(customer);
     let queryNumber=0;
     const observed={query:async q=>{log({event:'google_write_path_stage',stage:'read',number:++queryNumber,writes_executed:false});return customer.query(q);},
       mutateResources:async(...args)=>{log({event:'google_write_path_stage',stage:'validate_only_rest',writes_executed:false});return adapter.mutateResources(...args);}};
+    try { today = await readToday(observed); } catch (error) { today_error = safeCode(error); }
     const preflight = await validateWritePath({ env, customer:observed, maxTotalMicros: 10000000 });
-    let today = null, today_error = null;
-    try { today = await readToday(customer); } catch (error) { today_error = safeCode(error); }
     return { event: 'google_write_path_preflight', success: preflight.success === true,
       mode: 'validate_only', mutation_permission_validated: preflight.mutation_permission_validated === true,
       writes_executed: false, spend_changed: false, execution_allowed: false,
@@ -47,7 +46,7 @@ async function runRuntimePreflight({ env = process.env, customer, log = entry =>
     log(result); return result;
   } catch (error) {
     const result = { event: 'google_write_path_preflight', success: false, mode: 'validate_only', writes_executed: false,
-      execution_allowed: false, blockers: [error.message === 'preflight_timeout' ? 'preflight_timeout' : 'preflight_failed'], provider_code: safeCode(error) };
+      execution_allowed: false, blockers: [error.message === 'preflight_timeout' ? 'preflight_timeout' : 'preflight_failed'], provider_code: safeCode(error),today,today_read_success:today!==null,today_error_code:today_error };
     log(result); return result;
   } finally { clearTimeout(timer); }
 }
