@@ -10,3 +10,8 @@ if(process.env.GOOGLE_CONTROLLED_BUDGET_JOB==='true')setImmediate(async()=>{
     console.log(JSON.stringify({event:'google_controlled_budget_job',...result}));
   }catch{console.error(JSON.stringify({event:'google_controlled_budget_job',status:'blocked',blockers:['runtime_job_failed'],writes_executed:'unknown'}));}
 });
+
+if(process.env.GOOGLE_CONTROLLED_NEGATIVE_JOB==='true')setImmediate(async()=>{
+ try{const result=await require('./google-controlled-negative').runControlledNegativeJob();console.log(JSON.stringify({event:'google_controlled_negative_job',...result}));}
+ catch{console.error(JSON.stringify({event:'google_controlled_negative_job',status:'blocked',blockers:['runtime_job_failed'],writes_executed:'unknown'}));}
+});
