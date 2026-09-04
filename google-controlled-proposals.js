@@ -50,7 +50,7 @@ function prepareControlledProposal(input = {}) {
   }
   let { action, policy, snapshot, now = Date.now(), kill_switch = false } = input;
   if (kill_switch !== false) result.blockers.push('kill_switch_active');
-  if (!Number.isSafeInteger(now)) result.blockers.push('invalid_clock');
+  if (!Number.isSafeInteger(now) || !Number.isFinite(new Date(now).getTime())) result.blockers.push('invalid_clock');
   const a = actionSchema.safeParse(action), p = policySchema.safeParse(policy), s = snapshotSchema.safeParse(snapshot);
   if (!a.success) result.blockers.push('invalid_or_unsupported_action');
   if (!p.success) result.blockers.push('owner_limits_missing_or_invalid');
