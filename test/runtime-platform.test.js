@@ -7,7 +7,7 @@ const path=require('node:path');
 const {upsertSchedule,read,write,RecurringObjectiveScheduler,TZ}=require('../recurring-objective-scheduler');
 const {getSpecialist}=require('../specialist-registry');
 const {validateEconomicGroundTruth,conversionPolicy}=require('../economic-ground-truth');
-const {buildControlTower}=require('../control-tower');
+const {buildControlTower,latestBudgetCage}=require('../control-tower');
 
 function temp(){return path.join(fs.mkdtempSync(path.join(os.tmpdir(),'parma-recurring-')),'state.json');}
 const safeSchedule={id:'morning-health',enabled:true,cadence:{type:'daily',hour:23,minute:0},objective_template:{objective:'Morning read-only health',tasks:[{id:'diag',kind:'run_diagnostics'}]}};
@@ -33,3 +33,9 @@ test('economic ground truth contract is separate from marketing attribution',()=
 test('conversion integrity blocks booking signals from autonomous reservation optimization',()=>{assert.equal(conversionPolicy('booking_completed').allowed_for_autonomous_booking_optimization,false);assert.equal(conversionPolicy('table_reservation_completed').allowed_for_autonomous_booking_optimization,false);});
 
 test('control tower surfaces human/block/retry state and guardrails',()=>{const state={runner:{status:'RUNNING',kill_switch:false,heartbeat_at:'2026-09-04T21:00:00Z',last_error:null},objectives:[{id:'o',status:'NEEDS_HUMAN',current_task_id:'h',next_action:'human_decision',tasks:[{id:'d',kind:'run_diagnostics',status:'DONE',completed_at:'2026-09-04T20:59:00Z',depends_on:[]},{id:'h',kind:'x',status:'NEEDS_HUMAN',stop_reason:'approval',depends_on:[]}]}]};const c=buildControlTower({runtimeState:state,schedulerSnapshot:{timezone:TZ,schedules:[]},env:{}});assert.equal(c.pending_needs_human.length,1);assert.equal(c.runner.kill_switch,false);assert.equal(c.guardrails.conversion_integrity.booking_completed.trust,'UNTRUSTED_AS_RESERVATION');});
+
+test('control tower projects latest budget cage from real preflight task shape without throwing',()=>{
+ const cageOld={ok:true,before_total_eur:7.5,proposed_total_eur:9,cap_eur:10};const cageNew={ok:true,before_total_eur:7.5,proposed_total_eur:10,cap_eur:10};
+ const state={runner:{status:'RUNNING',kill_switch:false,heartbeat_at:'2026-09-04T21:00:00Z',last_error:null},objectives:[{id:'old',status:'DONE',tasks:[{id:'p',kind:'google_ads.execution_preflight',status:'DONE',completed_at:'2026-09-04T20:00:00Z',evidence:[{budget_cage:cageOld}],depends_on:[]}]},{id:'new',status:'DONE',tasks:[{id:'p2',kind:'google_ads.execution_preflight',status:'DONE',completed_at:'2026-09-04T21:00:00Z',evidence:[{budget_cage:cageNew}],depends_on:[]}]}]};
+ assert.deepEqual(latestBudgetCage(state),cageNew);const c=buildControlTower({runtimeState:state,schedulerSnapshot:{timezone:TZ,schedules:[]},env:{}});assert.deepEqual(c.guardrails.budget_cage,cageNew);
+});
