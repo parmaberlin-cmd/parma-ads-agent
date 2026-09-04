@@ -1,0 +1,124 @@
+{
+  "schema_version": "1.0.0",
+  "policy_version": "1.0",
+  "status": "AUTHORIZED",
+  "approved_at": "2026-09-04",
+  "approved_by": "Philippe",
+  "purpose": "Durable operating authorization for Parma agents. This file contains no secrets and cannot expand its own authority.",
+  "green": {
+    "allowed": [
+      "read_and_diagnose_authorized_sources",
+      "analyze_and_reconcile_data",
+      "create_code_branches_tests_pull_requests_docs_and_proposals",
+      "run_health_checks_and_non_destructive_retries",
+      "maintain_shared_state_capability_registry_and_backlog",
+      "prepare_campaign_ads_tracking_and_experiments_without_new_spend",
+      "local_or_non_production_fixes",
+      "normal_durable_state_maintenance"
+    ]
+  },
+  "yellow": {
+    "deploy": {
+      "allowed": true,
+      "all_conditions_required": [
+        "ci_fully_green",
+        "no_new_known_vulnerability",
+        "change_limited_and_tested",
+        "no_credential_billing_owner_or_permission_change",
+        "no_spend_increase",
+        "health_check_available",
+        "rollback_defined",
+        "automatic_post_deploy_verification",
+        "automatic_rollback_on_failed_verification"
+      ]
+    },
+    "tracking": {
+      "allowed": true,
+      "all_conditions_required": [
+        "conversion_semantics_already_verified",
+        "before_after_measurable",
+        "rollback_available"
+      ],
+      "allowed_classes": [
+        "obvious_technical_bug_fix",
+        "deduplication_fix",
+        "naming_or_coherence_fix",
+        "transport_fix_for_already_approved_event"
+      ],
+      "forbidden_without_new_owner_approval": [
+        "make_new_event_primary_conversion",
+        "change_commercial_meaning_of_conversion",
+        "replace_ground_truth"
+      ]
+    },
+    "google_ads": {
+      "allowed": true,
+      "allowed_classes": [
+        "ads",
+        "assets",
+        "keywords",
+        "negative_keywords",
+        "match_types",
+        "schedules",
+        "locations",
+        "internal_budget_reallocation"
+      ],
+      "economic_cage": {
+        "total_authorized_daily_budget_may_increase": false,
+        "max_single_campaign_budget_increase_pct_via_reallocation": 20,
+        "new_campaign_may_spend_without_specific_authorized_cap": false
+      }
+    }
+  },
+  "red": {
+    "always_requires_owner_approval": [
+      "increase_total_spend",
+      "new_spend_or_new_campaign_spending_cap",
+      "change_economic_limits",
+      "new_payment_method_or_purchase",
+      "credentials_api_keys_or_oauth_scope_expansion",
+      "two_factor_passkey_or_security_action",
+      "owner_or_account_role_change",
+      "new_sensitive_privilege",
+      "irreversible_deletion",
+      "tracking_change_that_changes_meaning_or_primary_conversion",
+      "direct_checkout_price_reservation_or_customer_availability_change",
+      "high_impact_infrastructure_migration",
+      "operation_without_adequate_rollback",
+      "provider_required_owner_consent"
+    ]
+  },
+  "kill_switch": {
+    "triggers": [
+      "anomalous_spend",
+      "clearly_corrupted_tracking",
+      "severe_regression",
+      "major_post_deploy_5xx_or_errors",
+      "authentication_or_security_problem",
+      "behavior_outside_delegation"
+    ],
+    "actions": [
+      "stop",
+      "preserve_state",
+      "rollback_when_safe",
+      "diagnose",
+      "escalate"
+    ],
+    "may_expand_privileges_to_fix": false
+  },
+  "escalation": {
+    "rule": "Ask for the smallest owner decision or action actually required. Do not use the owner as middleware for routine reads or relays."
+  },
+  "evolution": {
+    "review_cadence": "weekly",
+    "green_technical_upgrades_may_be_automated": true,
+    "authorization_boundaries_may_self_expand": false,
+    "owner_approval_required_for": [
+      "increase_powers",
+      "increase_spend",
+      "increase_access",
+      "move_red_to_yellow",
+      "move_red_to_green"
+    ]
+  }
+}
