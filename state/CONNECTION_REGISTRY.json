@@ -1,5 +1,5 @@
 {
-  "registry_version": "1.0.2",
+  "registry_version": "1.0.3",
   "purpose": "Authoritative non-secret registry of external capabilities available to Parma agents. Secrets and refresh tokens must never be stored here.",
   "operating_rule": "Agents consume named capabilities through the Parma backend/control tower; Philippe is required only for provider-enforced human authorization, security/payment recovery, or RED mutations.",
   "connections": [
@@ -68,11 +68,30 @@
       "status": "CONNECTED_DIRECT_READ_VERIFIED",
       "transport": "authorized_railway_connector",
       "account_scope_verified": true,
-      "capabilities": ["project_read", "service_read", "environment_read", "deployment_status_read", "deployment_history_read"],
-      "capabilities_target": ["logs_read", "environment_health_read", "service_config_read", "metrics_read", "domain_read", "deploy_within_delegated_gate"],
+      "resource_ref": {
+        "project_id": "96e2aaf7-5e29-44c7-82f0-bd431a768647",
+        "environment_id": "ac178aaf-1d65-4784-8e73-28f15b869b03",
+        "service_id": "487e70f5-e543-456b-b3b9-120a7f6948bc",
+        "service_name": "supportive-stillness",
+        "production_domain": "supportive-stillness-production-ec37.up.railway.app",
+        "target_port": 8080
+      },
+      "capabilities": ["project_read", "service_read", "environment_read", "deployment_status_read", "deployment_history_read", "logs_read", "environment_health_read", "domain_read"],
+      "capabilities_target": ["service_config_read", "metrics_read", "deploy_within_delegated_gate"],
       "shared_agent_backend_access": "PARTIAL",
-      "last_verified_at": "2026-09-04",
-      "blocker": "Routine direct read access is verified. Remaining work is capability materialization for shared agents and validation of additional read surfaces; mutations remain independently gated.",
+      "last_verified_at": "2026-09-04T08:40:00+02:00",
+      "live_evidence": {
+        "latest_runtime_status": "SUCCESS",
+        "health_endpoint_observed_200": true,
+        "google_test_observed_200": true,
+        "google_campaign_intelligence_observed_200": true,
+        "mcp_health_observed_200": true,
+        "mcp_authenticated_requests_observed_200": true,
+        "shadow_scheduler_writes_allowed": false,
+        "source_health": {"google": true, "ga4": true, "meta": true},
+        "conversion_integrity": "degraded"
+      },
+      "blocker": "Routine direct read access is verified. Remaining work is shared-agent materialization plus service-config/metrics validation; mutations remain independently gated.",
       "human_gate": "Only provider-enforced security/credential recovery or operations outside the delegated GREEN/YELLOW envelope",
       "priority": "P0"
     }
