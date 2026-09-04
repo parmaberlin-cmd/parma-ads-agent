@@ -23,8 +23,17 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Production dependency audit
+        id: dependency_audit
+        continue-on-error: true
         run: npm audit --omit=dev --audit-level=moderate
       - name: Syntax check
+        if: always()
         run: npm run check
       - name: Tests
+        if: always()
         run: npm test
+      - name: Enforce dependency audit gate
+        if: always() && steps.dependency_audit.outcome != 'success'
+        run: |
+          echo "Production dependency audit remains a hard deployment gate."
+          exit 1
