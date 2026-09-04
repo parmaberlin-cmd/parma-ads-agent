@@ -83,3 +83,13 @@ test('bounded pagination stops a non-terminating reader', async () => {
   const r=await collect({customerId:'123',fetchPage:async()=>page([],String(++calls))});
   assert.equal(calls,100); assert.deepEqual(r.blockers,['inventory_limit_exceeded']);
 });
+test('collection timeout aborts and never returns partial inventory', async t => {
+  t.mock.timers.enable({apis:['setTimeout','Date'],now:Date.parse('2026-09-04T10:00:00Z')});
+  let signal;
+  const pending=collect({customerId:'123',fetchPage:args=>{signal=args.signal;return new Promise(()=>{});}});
+  await Promise.resolve();
+  t.mock.timers.tick(60000);
+  const result=await pending;
+  assert.equal(signal.aborted,true);assert.equal(result.snapshot,null);
+  assert.deepEqual(result.blockers,['inventory_timeout']);
+});
