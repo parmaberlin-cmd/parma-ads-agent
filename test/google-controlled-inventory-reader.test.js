@@ -58,3 +58,15 @@ test('formatted account ID is normalized before creating SDK customer',async()=>
   }});
   assert.equal(actual,'1234567890');assert.equal(r.success,false); // Empty accounts cannot back proposals.
 });
+test('diagnostic CLI fails safely without configured credentials',()=>{
+  const {spawnSync}=require('node:child_process'),path=require('node:path');
+  const r=spawnSync(process.execPath,[path.join(__dirname,'../scripts/run-google-controlled-inventory.js')],{env:{},encoding:'utf8'});
+  assert.equal(r.status,1);assert.equal(r.stderr,'');
+  const output=JSON.parse(r.stdout);assert.equal(output.success,false);
+  assert.equal(output.execution_allowed,false);assert.equal(output.campaign_count,0);
+  assert.ok(!('snapshot' in output));assert.ok(!('customer_id' in output));
+});
+test('reader refuses a stream beyond the documented account size limit',async()=>{
+  const r=await collect({env,createCustomer:factory(Array.from({length:10001},(_,i)=>row(i+1)))});
+  assert.equal(r.success,false);assert.equal(r.snapshot,null);
+});
