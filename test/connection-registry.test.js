@@ -26,11 +26,12 @@ test('mutations fail closed even on a connected provider', () => {
   assert.equal(x.reason, 'mutation_requires_separate_permission_class');
 });
 
-test('Railway direct reads are usable after live verification', () => {
+test('Railway verified direct reads are usable', () => {
   assert.equal(connectionHealth('railway').usable, true);
   assert.equal(connectionHealth('railway').health, 'healthy');
-  assert.equal(canUseCapability('railway', 'logs_read').allowed, true);
-  assert.equal(canUseCapability('railway', 'domain_read').allowed, true);
+  for (const capability of ['logs_read','domain_read','service_config_read','metrics_read']) {
+    assert.equal(canUseCapability('railway', capability).allowed, true, capability);
+  }
   assert.equal(humanActionNeeded('railway').needed, false);
 });
 
