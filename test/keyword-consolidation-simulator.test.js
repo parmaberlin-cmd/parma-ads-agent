@@ -1,0 +1,3 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {simulateKeywordConsolidation}=require('../keyword-consolidation-simulator');
+test('finds cross-ad-group overlap without declaring waste',()=>{const x=simulateKeywordConsolidation([{keyword:'beste pizza berlin',ad_group:'A',clicks:20},{keyword:'beste pizza berlin',ad_group:'B',clicks:10}]);assert.equal(x.overlap_count,1);assert.equal(x.overlaps[0].waste_proven,false);assert.equal(x.keyword_writes_allowed,false)});
+test('single ad-group keyword is not an overlap candidate',()=>{const x=simulateKeywordConsolidation([{keyword:'pizza bio berlin',ad_group:'A'}]);assert.equal(x.overlap_count,0)});

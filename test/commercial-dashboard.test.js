@@ -1,0 +1,3 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {buildCommercialDashboard}=require('../commercial-dashboard');
+test('unknown walk-ins and orders remain null rather than zero',()=>{const x=buildCommercialDashboard({google_clicks:511});assert.equal(x.acquisition.direct_orders.value,null);assert.equal(x.acquisition.walk_ins.value,null);assert.equal(x.acquisition.google_clicks.value,511);assert.equal(x.writes_allowed,false)});
+test('numeric outcome is still labelled unverified unless ground truth says otherwise',()=>{const x=buildCommercialDashboard({reservations:11,reservations_verified:false});assert.equal(x.acquisition.reservations.value,11);assert.equal(x.acquisition.reservations.verified,false);assert.equal(x.spend_authorized,false)});

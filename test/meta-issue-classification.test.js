@@ -20,6 +20,7 @@ test('builds campaign-adset-ad report without inventing causes', () => {
   assert.equal(report.categories.creative_or_media, 1);
   assert.equal(report.categories.targeting_or_placement, 1);
   assert.equal(report.objects[0].campaign_ref, 'c1');
+  assert.equal(report.propagation.cause_proven, false);
 });
 
 test('unknown diagnostics remain unknown', () => {
@@ -34,6 +35,20 @@ test('classifies Meta automatic security or payment pause without inventing a cr
   assert.deepEqual(report.issue_categories, {account_or_billing:2});
   assert.deepEqual(report.issue_reasons, {account_security_or_payment_restriction:2});
   assert.deepEqual(report.unknown_codes, {});
+  assert.equal(report.propagation.account_level_pattern_candidate, false);
+});
+
+test('same security/payment reason across delivery levels is only an account-level pattern candidate', () => {
+  const issue = {code:'2490455'};
+  const report = buildMetaIssueReport({
+    campaigns:[{id:'c1',name:'Dinner',issues:[issue]}],
+    adsets:[{campaign_id:'c1',name:'Dinner set',issues:[issue]}],
+    ads:[{campaign_id:'c1',name:'Dinner ad',issues:[issue]}],
+  });
+  assert.equal(report.propagation.account_level_pattern_candidate, true);
+  assert.equal(report.propagation.cause_proven, false);
+  assert.equal(report.propagation.requires_human_account_ui, true);
+  assert.deepEqual(report.propagation.patterns[0].object_levels, ['ad','adset','campaign']);
 });
 
 test('report counts individual issues and exposes only safe unknown codes', () => {

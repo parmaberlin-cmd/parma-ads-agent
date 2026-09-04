@@ -1,0 +1,3 @@
+const PROTECTED=['near me','in meiner nähe','kreuzberg','wrangel','schlesisches tor','parma','open now','geöffnet','offen'];
+function reviewNegativeCandidate({term,irrelevance_evidence=false}={}){const q=String(term||'').toLowerCase().trim();const protected_local=PROTECTED.some(p=>q.includes(p));return {term:q||null,protected_local,irrelevance_evidence:Boolean(irrelevance_evidence),candidate:!protected_local&&Boolean(irrelevance_evidence),automatic_negative_allowed:false,requires_human_write_gate:true,reason:protected_local?'local_or_brand_intent_protected':irrelevance_evidence?'review_candidate_only':'insufficient_irrelevance_evidence'};}
+module.exports={reviewNegativeCandidate};

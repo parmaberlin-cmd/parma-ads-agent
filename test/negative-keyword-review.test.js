@@ -1,0 +1,3 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {reviewNegativeCandidate}=require('../negative-keyword-review');
+test('near me remains protected even with apparent irrelevance evidence',()=>{const x=reviewNegativeCandidate({term:'pizza near me',irrelevance_evidence:true});assert.equal(x.protected_local,true);assert.equal(x.candidate,false);assert.equal(x.automatic_negative_allowed,false)});
+test('clearly evidenced nonlocal term can only become review candidate',()=>{const x=reviewNegativeCandidate({term:'pizza recipe dough',irrelevance_evidence:true});assert.equal(x.candidate,true);assert.equal(x.automatic_negative_allowed,false);assert.equal(x.requires_human_write_gate,true)});

@@ -1,0 +1,4 @@
+const DEFAULT_HOURS={google_ads:24,ga4:24,wix_ground_truth:72,meta:24,public_web:168,business_economics:720};
+function sourceFreshness({source,observed_at,now,max_age_hours}={}){const limit=Number(max_age_hours)||DEFAULT_HOURS[source]||24;const a=new Date(observed_at),b=new Date(now||Date.now());if(Number.isNaN(a.getTime())||Number.isNaN(b.getTime()))return {source:source||'unknown',fresh:false,status:'unknown',max_age_hours:limit};const age=(b-a)/36e5;return {source,age_hours:Number(age.toFixed(2)),max_age_hours:limit,fresh:age>=0&&age<=limit,status:age>=0&&age<=limit?'fresh':'stale'};}
+function allRequiredFresh(rows=[]){const results=rows.map(sourceFreshness);return {results,all_fresh:results.length>0&&results.every(x=>x.fresh),optimization_evidence_ready:results.length>0&&results.every(x=>x.fresh),execution_allowed:false};}
+module.exports={sourceFreshness,allRequiredFresh,DEFAULT_HOURS};
