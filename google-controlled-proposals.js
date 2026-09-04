@@ -42,7 +42,7 @@ function prepareControlledProposal({ action, policy, snapshot, now = Date.now(),
   if (result.blockers.length) return result;
   action = a.data; policy = p.data; snapshot = s.data;
   const age = now - Date.parse(snapshot.captured_at);
-  if (age < 0 || age > policy.max_snapshot_age_seconds * 1000) result.blockers.push('snapshot_stale_or_future');
+  if (age < 0 || age >= policy.max_snapshot_age_seconds * 1000) result.blockers.push('snapshot_stale_or_future');
   if (Date.parse(policy.expires_at) <= now) result.blockers.push('owner_policy_expired');
   if (!policy.campaign_ids.includes(action.campaign_id)) result.blockers.push('campaign_not_authorized');
   if (!policy.allowed_actions.includes(action.type)) result.blockers.push('action_not_authorized');
