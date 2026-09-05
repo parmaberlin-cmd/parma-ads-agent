@@ -12,6 +12,7 @@ const ACTION_CLASSES = Object.freeze({
 const SAFE_AUTONOMOUS_ACTIONS = new Set([
   'collect_metrics','refresh_shadow_snapshot','run_diagnostics','generate_report','record_internal_journal','score_recommendation','simulate_budget',
   'google_ads.read_campaign','google_ads.propose_changes','google_ads.execution_preflight','google_ads.cycle_plan',
+  'instagram.audit_capability','instagram.publish_preflight',
 ]);
 const CONTROLLED_GATEWAYS=new Set(['google_ads.execute_authorized']);
 const CONTROLLED_INTERNAL=new Set(['runtime.register_recurring']);
