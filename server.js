@@ -9,7 +9,6 @@ const {
 } = require("./google-campaign-intelligence-route");
 const { buildGoogleReadiness, buildMetaOverview } = require("./reporting");
 const { buildMetaDinnerProposal } = require("./proposals");
-const { auditInstagramContentCapability } = require('./instagram-content-publishing');
 const {
   APPROVAL_TOKEN: META_PAUSED_DRAFT_APPROVAL_TOKEN,
   ONE_SHOT_TRIGGER: META_PAUSED_DRAFT_ONE_SHOT_TRIGGER,
@@ -435,7 +434,7 @@ function parseGoogleCampaignId(value) {
 
 function parseGoogleDays(value) {
   const days = Number(value ?? 30);
-  return Number.isInteger(days) && days >= 1 && days <= 90 ? days : null;
+  return Number.isInteger(days) && days >= 0 && days <= 90 ? days : null;
 }
 
 function formatGoogleDate(date) {
@@ -445,10 +444,10 @@ function formatGoogleDate(date) {
 function getGoogleDateRange(days) {
   const end = new Date();
   end.setUTCHours(0, 0, 0, 0);
-  end.setUTCDate(end.getUTCDate() - 1);
+  if (days > 0) end.setUTCDate(end.getUTCDate() - 1);
 
   const start = new Date(end);
-  start.setUTCDate(start.getUTCDate() - (days - 1));
+  if (days > 0) start.setUTCDate(start.getUTCDate() - (days - 1));
 
   return {
     start: formatGoogleDate(start),
@@ -989,14 +988,6 @@ app.get("/tools/meta/draft-assets", requireApiKey, async (req, res) => {
         : cleanMetaError(error),
     });
   }
-});
-
-app.get('/health/instagram-content-capability', async (req,res)=>{
-  if(!META_ACCESS_TOKEN||!META_AD_ACCOUNT_ID)return res.status(503).json({success:false,status:'BLOCKED_EXTERNAL',blockers:['meta_configuration_missing']});
-  try{
-    const audit=await auditInstagramContentCapability({transport:metaReadTransport,adAccountId:META_AD_ACCOUNT_ID});
-    return res.json({success:true,status:'completed',mode:'read_only',audit,writes_attempted:0});
-  }catch(error){return res.status(502).json({success:false,status:'BLOCKED_EXTERNAL',mode:'read_only',error:cleanMetaError(error),writes_attempted:0});}
 });
 
 const PARMA_REEL_PERMALINK =
