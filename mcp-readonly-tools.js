@@ -6,7 +6,7 @@ const DEFINITIONS = [
   ['parma_google_test', 'Test the configured Google Ads reader without writes', {}],
   ['parma_campaign_intelligence', 'Read search terms, keywords, devices, hours and geography', {
     campaign_id: { type: 'string', pattern: '^[0-9]{1,20}$' },
-    days: { type: 'integer', minimum: 1, maximum: 90, default: 30 },
+    days: { type: 'integer', minimum: 0, maximum: 90, default: 30, description: '0 means today; 1 means yesterday; 2-90 are historical windows ending yesterday' },
   }],
 ];
 
@@ -32,7 +32,7 @@ function target(name, args) {
     if (Object.keys(args).some(key => !['campaign_id', 'days'].includes(key))) return null;
     const days = args.days === undefined ? 30 : args.days;
     if (typeof args.campaign_id !== 'string' || !/^\d{1,20}$/.test(args.campaign_id)) return null;
-    if (!Number.isInteger(days) || days < 1 || days > 90) return null;
+    if (!Number.isInteger(days) || days < 0 || days > 90) return null;
     return { path: `/tools/google/campaign/${args.campaign_id}/intelligence`, query: { days } };
   }
   if (Object.keys(args).length) return null;
