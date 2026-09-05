@@ -2,6 +2,8 @@
 
 const REQUIRED_READ_PERMISSIONS=Object.freeze(['instagram_basic','pages_show_list','pages_read_engagement','instagram_manage_insights']);
 const REQUIRED_PUBLISH_PERMISSIONS=Object.freeze([...REQUIRED_READ_PERMISSIONS,'instagram_content_publish']);
+const INSTAGRAM_LOGIN_READ_PERMISSIONS=Object.freeze(['instagram_business_basic','instagram_business_manage_insights']);
+const INSTAGRAM_LOGIN_PUBLISH_PERMISSIONS=Object.freeze([...INSTAGRAM_LOGIN_READ_PERMISSIONS,'instagram_business_content_publish']);
 const TERMINAL_CONTAINER_FAILURES=new Set(['ERROR','EXPIRED']);
 
 function requireTransport(transport,{write=false}={}){
@@ -37,6 +39,19 @@ async function auditInstagramContentCapability({transport,adAccountId,username='
   return {schema:'instagram.capability_audit.v1',username:String(username).toLowerCase(),checks,permissions:{required_read:[...REQUIRED_READ_PERMISSIONS],required_publish:[...REQUIRED_PUBLISH_PERMISSIONS],granted_required:REQUIRED_PUBLISH_PERMISSIONS.filter(granted),missing_or_unverified:REQUIRED_PUBLISH_PERMISSIONS.filter(x=>!granted(x))},inventory:{media_count:media.length,media_types:[...new Set(media.map(x=>x.media_product_type||x.media_type).filter(Boolean))]},capabilities:{read_account:checks.instagram_account_discovered&&checks.page_linked,read_media:checks.media_read,read_insights:checks.insights_read&&readPermissionsVerified,create_container:publishPermissionVerified&&checks.page_linked,publish:publishPermissionVerified&&checks.page_linked,stories:publishPermissionVerified&&checks.page_linked},blockers:[...new Set(blockers)],contains_secret:false};
 }
 
+async function auditInstagramLoginCapability({transport,username='parma.divinibenedetti'}={}){
+  requireTransport(transport);
+  const checks={token_present:true,account_read:false,username_match:false,media_read:false,insights_read:false};
+  const blockers=[];let account=null;let media=[];
+  try{account=await transport.get('/me',{fields:'id,user_id,username,account_type,media_count'});checks.account_read=Boolean(account?.id||account?.user_id);checks.username_match=String(account?.username||'').toLowerCase()===String(username).toLowerCase();}catch{blockers.push('instagram_login_account_not_readable');}
+  if(checks.account_read){
+    try{const r=await transport.get('/me/media',{fields:'id,caption,media_type,media_product_type,permalink,timestamp,thumbnail_url',limit:25});media=r?.data||[];checks.media_read=true;}catch{blockers.push('instagram_login_media_not_readable');}
+    try{await transport.get('/me/insights',{metric:'reach,profile_views',period:'day'});checks.insights_read=true;}catch{blockers.push('instagram_login_insights_not_readable');}
+  }
+  if(!checks.username_match)blockers.push('instagram_username_not_verified');
+  return {schema:'instagram.login_capability_audit.v1',login_type:'instagram_login',username:String(username).toLowerCase(),account:{id_present:checks.account_read,username:account?.username||null,account_type:account?.account_type||null},checks,permissions:{required_read:[...INSTAGRAM_LOGIN_READ_PERMISSIONS],required_publish:[...INSTAGRAM_LOGIN_PUBLISH_PERMISSIONS],verification:'not_enumerable_without_token_debug'},inventory:{media_count:media.length,media_types:[...new Set(media.map(x=>x.media_product_type||x.media_type).filter(Boolean))]},capabilities:{read_account:checks.account_read&&checks.username_match,read_media:checks.media_read,read_insights:checks.insights_read,create_container:checks.account_read&&checks.username_match?'SUPPORTED_NOT_YET_TESTED':false,publish:checks.account_read&&checks.username_match?'SUPPORTED_NOT_YET_TESTED':false,stories:checks.account_read&&checks.username_match?'SUPPORTED_NOT_YET_TESTED':false},blockers:[...new Set(blockers)],contains_secret:false};
+}
+
 function buildContainerPayload({mediaType='REELS',videoUrl,caption='',shareToFeed=true}={}){
   const type=String(mediaType).toUpperCase();if(!['REELS','STORIES'].includes(type))throw new TypeError('mediaType must be REELS or STORIES');
   const payload={media_type:type,video_url:httpsUrl(videoUrl,'videoUrl')};
@@ -50,4 +65,4 @@ async function publishMedia({transport,instagramUserId,containerId}){requireTran
 async function verifyPublishedMedia({transport,mediaId}){requireTransport(transport);const r=await transport.get(`/${numericId(mediaId,'media id')}`,{fields:'id,media_type,media_product_type,permalink,timestamp,username'});return {published:Boolean(r?.id&&r?.permalink),media:{id:r?.id||null,media_type:r?.media_type||null,media_product_type:r?.media_product_type||null,permalink:r?.permalink||null,timestamp:r?.timestamp||null,username:r?.username||null}};}
 async function readMediaInsights({transport,mediaId,metrics=['reach','views','likes','comments','shares','saved','total_interactions']}){requireTransport(transport);return transport.get(`/${numericId(mediaId,'media id')}/insights`,{metric:metrics.join(',')});}
 
-module.exports={REQUIRED_READ_PERMISSIONS,REQUIRED_PUBLISH_PERMISSIONS,auditInstagramContentCapability,buildContainerPayload,createMediaContainer,getContainerStatus,publishMedia,verifyPublishedMedia,readMediaInsights};
+module.exports={REQUIRED_READ_PERMISSIONS,REQUIRED_PUBLISH_PERMISSIONS,INSTAGRAM_LOGIN_READ_PERMISSIONS,INSTAGRAM_LOGIN_PUBLISH_PERMISSIONS,auditInstagramContentCapability,auditInstagramLoginCapability,buildContainerPayload,createMediaContainer,getContainerStatus,publishMedia,verifyPublishedMedia,readMediaInsights};
