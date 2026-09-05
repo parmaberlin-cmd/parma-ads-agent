@@ -152,7 +152,7 @@ paths:
     get:
       operationId: getGoogleCampaignIntelligence
       summary: Get complete read-only Google Ads campaign diagnostics
-      description: Returns campaign status, daily budget, impression share, ad groups, search terms, keywords, devices, hours, geography and RSA analysis. It never changes campaigns, ads, budgets, configuration or spend.
+      description: Returns campaign status, daily budget, impression share, active negative keywords, ad groups, search terms, keywords, devices, hours, geography and RSA analysis. days=0 reads today; days=1 reads yesterday. It never changes campaigns, ads, budgets, configuration or spend.
       security:
         - ApiKeyAuth: []
       parameters:
@@ -166,7 +166,7 @@ paths:
           required: false
           schema:
             type: integer
-            minimum: 1
+            minimum: 0
             maximum: 90
             default: 30
       responses:
