@@ -3,6 +3,7 @@ const { GoogleAdsApi } = require('google-ads-api');
 const {
   collectCampaignSearchTerms, collectCampaignKeywords, collectCampaignDevices,
   collectCampaignHours, collectCampaignOverview, collectCampaignAdGroups, collectCampaignGeography,
+  collectCampaignNegativeKeywords,
 } = require('./google-campaign-breakdowns');
 const { collectCampaignConversionActions } = require('./google-conversion-action-breakdown');
 
@@ -64,17 +65,19 @@ async function readCampaign({campaignId,start,end,env=process.env,timeoutMs=2500
     collectCampaignConversionActions({customer,campaignId:String(campaignId),start:range.start,end:range.end}),
     collectCampaignGeography({customer,campaignId:String(campaignId),start:range.start,end:range.end}),
     collectEnabledCampaignBudgetContext(customer),
+    collectCampaignNegativeKeywords({customer,campaignId:String(campaignId)}),
   ]);
   const timeout=new Promise((_,reject)=>setTimeout(()=>reject(Object.assign(new Error('google_ads_read_timeout'),{code:'ETIMEDOUT',status:504})),timeoutMs));
-  const [overviewRows,adGroups,searchTerms,keywords,devices,hours,conversionActions,geography,budgetContext]=await Promise.race([work,timeout]);
+  const [overviewRows,adGroups,searchTerms,keywords,devices,hours,conversionActions,geography,budgetContext,negativeKeywords]=await Promise.race([work,timeout]);
   if(!Array.isArray(overviewRows)||overviewRows.length===0) throw Object.assign(new Error('campaign_response_empty'),{status:404});
   const o=overviewRows[0], impressions=Number(o.impressions||0), clicks=Number(o.clicks||0), cost=Number(o.cost_eur||0);
   const evidence={
     schema:'google_ads.read_campaign.v1', source:'google_ads', mode:'read_only', campaign_id:String(campaignId),
     date_range:{start:range.start,end:range.end,days:range.days},
-    overview:{status:o.status||null,primary_status:o.primary_status||null,channel_type:o.channel_type||null,daily_budget_eur:Number(o.daily_budget_eur||0),impressions,clicks,cost_eur:cost,ctr:impressions?clicks/impressions:0,avg_cpc_eur:clicks?cost/clicks:0,conversions:Number(o.conversions||0),conversion_value:Number(o.conversion_value||0)},
+    overview:{status:o.status||null,primary_status:o.primary_status||null,channel_type:o.channel_type||null,daily_budget_eur:Number(o.daily_budget_eur||0),impressions,clicks,cost_eur:cost,ctr:impressions?clicks/impressions:0,avg_cpc_eur:clicks?cost/clicks:0,conversions:Number(o.conversions||0),conversion_value:Number(o.conversion_value||0),search_impression_share:o.search_impression_share,search_budget_lost_impression_share:o.search_budget_lost_impression_share,search_rank_lost_impression_share:o.search_rank_lost_impression_share,search_top_impression_share:o.search_top_impression_share,search_absolute_top_impression_share:o.search_absolute_top_impression_share},
     search_terms:searchTerms, keyword_summary:keywords, ad_group_summary:adGroups, hourly_distribution:hours, device_distribution:devices, geographic_distribution:geography,
     account_budget_context:budgetContext,
+    negative_keywords:negativeKeywords,
     conversion_metrics:{raw_reported_values:true,actions:conversionActions}, writes_allowed:false,execution_allowed:false,spend_allowed:false,
   };
   return {validated:validateEvidence(evidence,campaignId),correctable:false,evidence};
