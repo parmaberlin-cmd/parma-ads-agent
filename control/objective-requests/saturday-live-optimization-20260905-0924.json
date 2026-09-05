@@ -1,0 +1,57 @@
+{
+  "id": "saturday-live-optimization-20260905-0924",
+  "objective": "Read-only Saturday optimization for Parma di Vinibenedetti. Compare exact Google Ads delivery on 2026-09-04 and LIVE 2026-09-05 for enabled campaigns Dinner 23276824770 and Pizza Kreuzberg 23853417314. Inspect status, delivery, search terms, keyword/match type, ad group, device, hour, budget, Search IS and lost IS where available, and explicit active negative keywords. Protect pizza near me, pizza in meiner nähe, pizza in der nähe, pizza kreuzberg, pizzeria kreuzberg, beste pizza kreuzberg, neapolitan pizza near me and relevant local equivalents. Reassess bötzow privat berlin only from actual evidence. Confirm [sly restaurant berlin] as an explicit active negative entity. Never interpret booking_completed, Ads conversions or conversion_value as bookings. Execute zero Google Ads mutations; persist evidence and finish DONE or BLOCKED_EXTERNAL.",
+  "tasks": [
+    {
+      "id": "read-dinner-20260904-exact",
+      "kind": "google_ads.read_campaign",
+      "input": {
+        "campaign_id": "23276824770",
+        "start_date": "2026-09-04",
+        "end_date": "2026-09-04"
+      },
+      "idempotency_key": "sat-live-0924:dinner:0904"
+    },
+    {
+      "id": "read-pizza-20260904-exact",
+      "kind": "google_ads.read_campaign",
+      "input": {
+        "campaign_id": "23853417314",
+        "start_date": "2026-09-04",
+        "end_date": "2026-09-04"
+      },
+      "idempotency_key": "sat-live-0924:pizza:0904"
+    },
+    {
+      "id": "read-dinner-20260905-live",
+      "kind": "google_ads.read_campaign",
+      "input": {
+        "campaign_id": "23276824770",
+        "start_date": "2026-09-05",
+        "end_date": "2026-09-05"
+      },
+      "idempotency_key": "sat-live-0924:dinner:0905"
+    },
+    {
+      "id": "read-pizza-20260905-live",
+      "kind": "google_ads.read_campaign",
+      "input": {
+        "campaign_id": "23853417314",
+        "start_date": "2026-09-05",
+        "end_date": "2026-09-05"
+      },
+      "idempotency_key": "sat-live-0924:pizza:0905"
+    },
+    {
+      "id": "report-saturday-live-20260905",
+      "kind": "generate_report",
+      "depends_on": [
+        "read-dinner-20260904-exact",
+        "read-pizza-20260904-exact",
+        "read-dinner-20260905-live",
+        "read-pizza-20260905-live"
+      ],
+      "idempotency_key": "sat-live-0924:report"
+    }
+  ]
+}
