@@ -9,7 +9,7 @@ const {
 } = require("./google-campaign-intelligence-route");
 const { buildGoogleReadiness, buildMetaOverview } = require("./reporting");
 const { buildMetaDinnerProposal } = require("./proposals");
-const { auditInstagramContentCapability } = require("./instagram-content-publishing");
+const { auditInstagramContentCapability, auditInstagramLoginCapability } = require("./instagram-content-publishing");
 const {
   APPROVAL_TOKEN: META_PAUSED_DRAFT_APPROVAL_TOKEN,
   ONE_SHOT_TRIGGER: META_PAUSED_DRAFT_ONE_SHOT_TRIGGER,
@@ -106,6 +106,16 @@ const metaWriteTransport = {
   },
 };
 
+const instagramLoginReadTransport = {
+  async get(endpoint, params = {}) {
+    const response = await axios.get(`https://graph.instagram.com/${META_API_VERSION}${endpoint}`, {
+      timeout: 20000,
+      params: { ...params, access_token: META_ACCESS_TOKEN },
+    });
+    return response.data;
+  },
+};
+
 function requireApiKey(req, res, next) {
   const apiKey =
     req.headers["x-api-key"] ||
@@ -151,11 +161,16 @@ app.get("/health/instagram-content-capability", async (req, res) => {
     return res.status(503).json({ success:false, status:"BLOCKED", blocker:"instagram_access_token_missing", contains_secret:false });
   }
   try {
-    const audit = await auditInstagramContentCapability({
+    let audit = await auditInstagramContentCapability({
       transport: metaReadTransport,
       adAccountId: META_AD_ACCOUNT_ID || null,
       username: "parma.divinibenedetti",
     });
+    if (!audit.checks.permissions_readable && !audit.capabilities.read_account) {
+      audit = await auditInstagramLoginCapability({ transport:instagramLoginReadTransport, username:"parma.divinibenedetti" });
+    } else {
+      audit = { ...audit, login_type:"facebook_login" };
+    }
     const verified = audit.capabilities.read_account;
     return res.status(verified ? 200 : 503).json({ success:verified, status:verified?"VERIFIED_LIVE":"BLOCKED", ...audit });
   } catch (error) {
