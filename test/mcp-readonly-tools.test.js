@@ -33,6 +33,12 @@ test('maps intelligence to a fixed GET route, preserving campaign IDs and diagno
   assert.equal(result.structuredContent.writes_allowed, false);
 });
 
+test('maps days zero to an explicitly read-only today request', async () => {
+  const f = fixture();
+  await f.callTool('parma_campaign_intelligence', { campaign_id: '23276824770', days: 0 });
+  assert.deepEqual(f.calls, [{ method: 'GET', path: '/tools/google/campaign/23276824770/intelligence', query: { days: 0 } }]);
+});
+
 test('fixed health and Google test routes accept no arbitrary destinations', async () => {
   const f = fixture();
   await f.callTool('parma_shadow_health');
@@ -45,7 +51,7 @@ for (const [name, args] of [
   ['parma_google_test', { method: 'POST' }], ['parma_google_test', null],
   ['parma_campaign_intelligence', { campaign_id: '../start' }],
   ['parma_campaign_intelligence', { campaign_id: 23276824770 }],
-  ['parma_campaign_intelligence', { campaign_id: '1', days: 0 }],
+  ['parma_campaign_intelligence', { campaign_id: '1', days: -1 }],
   ['parma_campaign_intelligence', { campaign_id: '1', days: 91 }],
   ['parma_campaign_intelligence', { campaign_id: '1', days: '30' }],
 ]) {
