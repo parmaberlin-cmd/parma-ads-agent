@@ -51,6 +51,14 @@
       "done_criteria": ["connected assets and campaign metrics can be collected reliably", "live preflight remains safe"]
     },
     {
+      "id": "CAP-INSTAGRAM-CONTENT-PUBLISHING",
+      "domain": "meta",
+      "name": "Instagram organic content publishing",
+      "status": "PREFLIGHT_IMPLEMENTED_LIVE_PERMISSION_PENDING",
+      "depends_on": ["CAP-META-READ"],
+      "done_criteria": ["Business Instagram account and linked Page are verified", "instagram_content_publish and insights permissions are verified", "Reel container creation and status polling work", "authorized publish is verified by read-after-write", "state and insights collection run in persistent runtime"]
+    },
+    {
       "id": "CAP-DECISION-ENGINE",
       "domain": "intelligence",
       "name": "Evidence-based recommendation engine",
