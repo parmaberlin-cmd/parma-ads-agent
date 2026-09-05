@@ -1,6 +1,7 @@
 'use strict';
 const { normalizeOrderbirdAggregate, containsDisallowedPii } = require('./orderbird-normalize');
 const { keyFor } = require('./orderbird-store');
+const { buildOrderbirdRevenueStatus } = require('./orderbird-revenue-status');
 
 function createOrderbirdIngestion({ adapter, store, normalize=normalizeOrderbirdAggregate, now=()=>new Date() } = {}) {
   if (!adapter || typeof adapter.readAggregates !== 'function') throw new TypeError('adapter_required');
@@ -44,8 +45,9 @@ function createOrderbirdIngestion({ adapter, store, normalize=normalizeOrderbird
     const storeHealth = typeof store.health === 'function' ? store.health() : {healthy:true,writable:true};
     return { provider:'orderbird', source_kind:'pos_revenue_ground_truth', attribution_kind:'none', adapter:adapterHealth, store:storeHealth, last_run:{...lastRun}, healthy:Boolean(adapterHealth.usable && storeHealth.healthy && lastRun.status !== 'error') };
   }
+  function revenueStatus() { return buildOrderbirdRevenueStatus(health()); }
 
-  return { ingestRange, backfill7Days:(endDate)=>backfillDays(endDate,7), backfillDays, ingestCompletedDay, health };
+  return { ingestRange, backfill7Days:(endDate)=>backfillDays(endDate,7), backfillDays, ingestCompletedDay, health, revenueStatus };
 }
 
 module.exports = { createOrderbirdIngestion };
