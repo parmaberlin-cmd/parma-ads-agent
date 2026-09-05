@@ -9,6 +9,7 @@ const {
 } = require("./google-campaign-intelligence-route");
 const { buildGoogleReadiness, buildMetaOverview } = require("./reporting");
 const { buildMetaDinnerProposal } = require("./proposals");
+const { auditInstagramContentCapability } = require("./instagram-content-publishing");
 const {
   APPROVAL_TOKEN: META_PAUSED_DRAFT_APPROVAL_TOKEN,
   ONE_SHOT_TRIGGER: META_PAUSED_DRAFT_ONE_SHOT_TRIGGER,
@@ -144,6 +145,30 @@ function checkMetaConfig(res) {
   }
   return true;
 }
+
+app.get("/health/instagram-content-capability", async (req, res) => {
+  if (!META_ACCESS_TOKEN) {
+    return res.status(503).json({ success:false, status:"BLOCKED", blocker:"instagram_access_token_missing", contains_secret:false });
+  }
+  try {
+    const audit = await auditInstagramContentCapability({
+      transport: metaReadTransport,
+      adAccountId: META_AD_ACCOUNT_ID || null,
+      username: "parma.divinibenedetti",
+    });
+    const verified = audit.capabilities.read_account;
+    return res.status(verified ? 200 : 503).json({ success:verified, status:verified?"VERIFIED_LIVE":"BLOCKED", ...audit });
+  } catch (error) {
+    return res.status(503).json({
+      success:false,
+      status:"BLOCKED",
+      blocker:"instagram_capability_audit_failed",
+      graph_code:error?.response?.data?.error?.code||null,
+      graph_subcode:error?.response?.data?.error?.error_subcode||null,
+      contains_secret:false,
+    });
+  }
+});
 
 function sanitizeMetaDiagnosticText(value) {
   if (typeof value !== "string") return null;
