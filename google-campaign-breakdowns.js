@@ -161,6 +161,49 @@ async function collectCampaignOverview({ customer, campaignId, start, end }) {
   }));
 }
 
+async function collectCampaignNegativeKeywords({ customer, campaignId }) {
+  if (!customer || typeof customer.query !== "function") throw new TypeError("customer.query is required");
+  if (!/^\d{1,20}$/.test(String(campaignId || ""))) throw new TypeError("campaignId is invalid");
+  const [campaignRows, adGroupRows] = await Promise.all([
+    customer.query(`
+      SELECT campaign.id, campaign_criterion.criterion_id,
+        campaign_criterion.keyword.text, campaign_criterion.keyword.match_type,
+        campaign_criterion.status, campaign_criterion.negative
+      FROM campaign_criterion
+      WHERE campaign.id = ${campaignId}
+        AND campaign_criterion.type = 'KEYWORD'
+        AND campaign_criterion.negative = TRUE
+        AND campaign_criterion.status != 'REMOVED'
+    `),
+    customer.query(`
+      SELECT campaign.id, ad_group.id, ad_group.name,
+        ad_group_criterion.criterion_id, ad_group_criterion.keyword.text,
+        ad_group_criterion.keyword.match_type, ad_group_criterion.status,
+        ad_group_criterion.negative
+      FROM ad_group_criterion
+      WHERE campaign.id = ${campaignId}
+        AND ad_group_criterion.type = 'KEYWORD'
+        AND ad_group_criterion.negative = TRUE
+        AND ad_group_criterion.status != 'REMOVED'
+    `),
+  ]);
+  return [
+    ...(campaignRows || []).map((row) => ({
+      level: "CAMPAIGN", criterion_id: String(row.campaign_criterion?.criterion_id || ""),
+      keyword: row.campaign_criterion?.keyword?.text || null,
+      match_type: enumName(row.campaign_criterion?.keyword?.match_type, KEYWORD_MATCH),
+      status: enumName(row.campaign_criterion?.status, STATUS), negative: row.campaign_criterion?.negative === true,
+    })),
+    ...(adGroupRows || []).map((row) => ({
+      level: "AD_GROUP", ad_group_id: String(row.ad_group?.id || ""), ad_group: row.ad_group?.name || null,
+      criterion_id: String(row.ad_group_criterion?.criterion_id || ""),
+      keyword: row.ad_group_criterion?.keyword?.text || null,
+      match_type: enumName(row.ad_group_criterion?.keyword?.match_type, KEYWORD_MATCH),
+      status: enumName(row.ad_group_criterion?.status, STATUS), negative: row.ad_group_criterion?.negative === true,
+    })),
+  ];
+}
+
 async function collectCampaignAdGroups({ customer, campaignId, start, end }) {
   validateInput({ customer, campaignId, start, end });
   const rows = await customer.query(`
@@ -192,4 +235,5 @@ module.exports = {
   collectCampaignGeography,
   collectCampaignOverview,
   collectCampaignAdGroups,
+  collectCampaignNegativeKeywords,
 };

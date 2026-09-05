@@ -3,6 +3,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const {safeRange,validateEvidence}=require('../google-ads-specialist-read');
 const {authorizeAutonomy}=require('../autonomy-policy');
+const {taskDateRange}=require('../autonomous-runtime-service');
 
 test('google_ads.read_campaign is explicitly safe read-only',()=>{
   const r=authorizeAutonomy({name:'google_ads.read_campaign'},{kill_switch:false,human_approved:false});
@@ -12,6 +13,11 @@ test('google_ads.read_campaign is explicitly safe read-only',()=>{
 test('date range is bounded to 90 days',()=>{
   assert.deepEqual(safeRange({start:'2026-08-02',end:'2026-08-31'}),{start:'2026-08-02',end:'2026-08-31',days:30});
   assert.throws(()=>safeRange({start:'2026-01-01',end:'2026-08-31'}),/date_range_out_of_bounds/);
+});
+
+test('runtime read handler accepts objective start_date/end_date aliases', async()=>{
+  assert.deepEqual(taskDateRange({start_date:'2026-09-05',end_date:'2026-09-05'}),{start:'2026-09-05',end:'2026-09-05'});
+  assert.deepEqual(taskDateRange({start:'2026-09-04',end:'2026-09-04',start_date:'ignored',end_date:'ignored'}),{start:'2026-09-04',end:'2026-09-04'});
 });
 
 test('deterministic evidence validates and rejects secret-shaped output',()=>{
