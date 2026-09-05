@@ -45,14 +45,14 @@ const allowedRoots = {
   '/tools/google/test': ['success', 'connected', 'account'],
   intelligence: ['success', 'source', 'mode', 'reader_version', 'campaign_id', 'period_days', 'date_range',
     'exact_date_range', 'overview', 'ad_groups', 'search_terms', 'keywords', 'devices', 'hours', 'geography',
-    'rsa_ads', 'rsa_analysis', 'conversion_actions', 'writes_allowed', 'execution_allowed', 'spend_allowed'],
+    'rsa_ads', 'rsa_analysis', 'conversion_actions', 'negative_keywords', 'writes_allowed', 'execution_allowed', 'spend_allowed'],
 };
 function createLocalReader(config, client = axios) {
   return async ({ method, path: endpoint, query }) => {
     const intelligence = /^\/tools\/google\/campaign\/\d{1,20}\/intelligence$/.test(endpoint);
     if (method !== 'GET' || (!intelligence && !Object.hasOwn(allowedRoots, endpoint)) ||
         !query || Object.keys(query).some(key => key !== 'days') ||
-        (intelligence && (!Number.isInteger(query.days) || query.days < 1 || query.days > 90)) ||
+        (intelligence && (!Number.isInteger(query.days) || query.days < 0 || query.days > 90)) ||
         (!intelligence && Object.keys(query).length)) throw new Error('read_not_allowed');
     const response = await client.get(`http://127.0.0.1:${config.port}${endpoint}`, {
       params: query, headers: { 'x-api-key': config.apiKey }, proxy: false, maxRedirects: 0,
@@ -179,7 +179,7 @@ function installMcp(app, { env = process.env, store, google, read, now } = {}) {
     const server = new McpServer({ name: 'parma-readonly', version: '0.1.0' });
     for (const definition of listTools()) {
       const inputSchema = definition.name === 'parma_campaign_intelligence'
-        ? z.object({ campaign_id: z.string().regex(/^\d{1,20}$/), days: z.number().int().min(1).max(90).optional() }).strict()
+        ? z.object({ campaign_id: z.string().regex(/^\d{1,20}$/), days: z.number().int().min(0).max(90).optional() }).strict()
         : z.object({}).strict();
       server.registerTool(definition.name, { description: definition.description, annotations: definition.annotations, inputSchema },
         async args => tools.callTool(definition.name, args, req.auth));
