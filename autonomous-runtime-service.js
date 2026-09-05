@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const axios = require('axios');
 const { AutonomousRuntime, statePath, storageStatus, readState } = require('./autonomous-runtime');
 const { autonomyPolicySummary } = require('./autonomy-policy');
 const { authorize:authorizeIngress, verify:verifyIngress, summary:ingressSummary } = require('./objective-ingress-auth');
@@ -15,11 +16,24 @@ const {RecurringObjectiveScheduler,filePath:recurringFilePath,upsertSchedule}=re
 const {buildControlTower}=require('./control-tower');
 const {listSpecialists}=require('./specialist-registry');
 const {conversionIntegrity}=require('./economic-ground-truth');
+const {auditInstagramContentCapability,buildContainerPayload}=require('./instagram-content-publishing');
+
+function metaReadTransport(env){
+  const version=String(env.META_API_VERSION||'v19.0');
+  return {async get(endpoint,params={}){const response=await axios.get(`https://graph.facebook.com/${version}${endpoint}`,{timeout:20000,params:{...params,access_token:env.META_ACCESS_TOKEN}});return response.data;}};
+}
+async function instagramAudit(env){
+  if(!env.META_ACCESS_TOKEN||!env.META_AD_ACCOUNT_ID){const error=new Error('meta_configuration_missing');error.code='META_CONFIGURATION_MISSING';throw error;}
+  const raw=String(env.META_AD_ACCOUNT_ID);const adAccountId=raw.startsWith('act_')?raw:`act_${raw}`;
+  return auditInstagramContentCapability({transport:metaReadTransport(env),adAccountId});
+}
 
 function firstDone(objective,kind){return objective?.tasks.find(x=>x.kind===kind&&x.status==='DONE')||null;}
 function localHandlers(env=process.env){
   return {
     run_diagnostics: async () => ({ validated:true, evidence:{ component:'autonomous_runtime', storage:storageStatus(env), delegation_policy:autonomyPolicySummary(), standing_delegation:standingDelegationSummary(), specialists:listSpecialists(), conversion_integrity:conversionIntegrity, kill_switch_supported:true } }),
+    'instagram.audit_capability': async()=>{const audit=await instagramAudit(env);return {validated:true,evidence:audit};},
+    'instagram.publish_preflight': async({task})=>{let media;try{media=buildContainerPayload(task.input||{});}catch(error){return {validated:false,correctable:false,evidence:{schema:'instagram.publish_preflight.v1',blockers:['invalid_media_contract'],detail:String(error.message).slice(0,160),writes_attempted:0}};}const audit=await instagramAudit(env);const blockers=[...audit.blockers];if(!audit.capabilities.publish)blockers.push('live_publish_capability_not_verified');return {validated:blockers.length===0,correctable:false,evidence:{schema:'instagram.publish_preflight.v1',media_type:media.media_type,caption_present:Boolean(media.caption),share_to_feed:media.share_to_feed??null,public_https_media:true,account_linked:audit.checks.page_linked,publish_permission_verified:audit.capabilities.publish,blockers:[...new Set(blockers)],writes_attempted:0,authorized_publish:false}};},
     'runtime.register_recurring': async ({task})=>{const schedule=upsertSchedule(task.input?.schedule,{file:recurringFilePath(env),now:Date.now()});return {validated:true,evidence:{schema:'runtime.recurring_registration.v1',schedule:{id:schedule.id,enabled:schedule.enabled,cadence:schedule.cadence,timezone:schedule.timezone},commercial_mutations_enabled:false}};},
     'google_ads.read_campaign': async ({task}) => {const campaignId=String(task.input?.campaign_id||task.id||'').replace(/^campaign-/, '').replace(/^cycle-(?:read|observe)-/, '');return readCampaign({campaignId,start:task.input?.start,end:task.input?.end,env});},
     'google_ads.propose_changes': async ({objective_id,task}) => {const state=readState(statePath(env));const objective=state.objectives.find(x=>x.id===objective_id);const source=firstDone(objective,'google_ads.read_campaign')?.evidence?.[0]||null;return proposeChanges({readEvidence:source,context:task.input?.context||{}});},
