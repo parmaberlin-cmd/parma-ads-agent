@@ -1,0 +1,80 @@
+{
+  "id": "operational-recovery-20260905",
+  "objective": "Analyze consolidated Google Ads evidence for 2026-09-04 for enabled Parma campaigns 23276824770 (Dinner) and 23853417314 (Pizza Kreuzberg/Late Night), treat the owner's report of historically minimal restaurant visits as business evidence without inferring Ads causality, then produce the safest evidence-based operating plan for 2026-09-05. Never use booking_completed, raw Ads conversions, CPA or ROAS as reservation/revenue ground truth. Protect local/high-intent demand including pizza near me, pizza in meiner nähe, pizza kreuzberg and equivalents. Re-examine bötzow privat berlin, beste pizza berlin, competitors and dispersion. Verify the exact negative [sly restaurant berlin] from live evidence. Compare 17:00-20:30, 20:30-22:00, 22:00-23:00 and 23:00-24:00 where delivered, devices, search terms, keywords/match types/ad groups, budget/rank signals and whether the 22:26 observation was at least partly incomplete intraday reporting. Apply Standing Delegation Policy without expanding delegation. Aggregate configured daily budgets must remain <= EUR 10. Do not change Primary Conversion or tracking. Execute only actions already genuinely delegated through controlled gateway; otherwise persist NEEDS_HUMAN per action and continue all allowed tasks.",
+  "tasks": [
+    {
+      "id": "read-dinner-20260904",
+      "kind": "google_ads.read_campaign",
+      "input": {"campaign_id": "23276824770", "start_date": "2026-09-04", "end_date": "2026-09-04"},
+      "idempotency_key": "operational-recovery-20260905:read:dinner"
+    },
+    {
+      "id": "read-late-night-20260904",
+      "kind": "google_ads.read_campaign",
+      "input": {"campaign_id": "23853417314", "start_date": "2026-09-04", "end_date": "2026-09-04"},
+      "idempotency_key": "operational-recovery-20260905:read:late-night"
+    },
+    {
+      "id": "propose-dinner-20260905",
+      "kind": "google_ads.propose_changes",
+      "depends_on": ["read-dinner-20260904"],
+      "input": {"context": {"daily_budget_cap_eur": 10, "business_evidence": "Owner reports 2026-09-04 had the historically lowest restaurant visits; no visit count supplied and no Ads causality may be inferred.", "analysis_date": "2026-09-04", "operating_date": "2026-09-05", "late_night_strategy": true, "conversion_integrity": "booking_completed untrusted as reservation; raw Ads conversions are not ground truth; table_reservation_completed candidate only", "protected_intents": ["pizza near me", "pizza in meiner nähe", "pizza kreuzberg", "equivalent local high-intent queries"], "review_terms": ["bötzow privat berlin", "beste pizza berlin", "competitors and consolidated dispersion"], "required_windows": ["17:00-20:30", "20:30-22:00", "22:00-23:00", "23:00-24:00"], "required_negative_verification": "sly restaurant berlin"}},
+      "idempotency_key": "operational-recovery-20260905:propose:dinner"
+    },
+    {
+      "id": "propose-late-night-20260905",
+      "kind": "google_ads.propose_changes",
+      "depends_on": ["read-late-night-20260904"],
+      "input": {"context": {"daily_budget_cap_eur": 10, "business_evidence": "Owner reports 2026-09-04 had the historically lowest restaurant visits; no visit count supplied and no Ads causality may be inferred.", "analysis_date": "2026-09-04", "operating_date": "2026-09-05", "late_night_strategy": true, "conversion_integrity": "booking_completed untrusted as reservation; raw Ads conversions are not ground truth; table_reservation_completed candidate only", "protected_intents": ["pizza near me", "pizza in meiner nähe", "pizza kreuzberg", "equivalent local high-intent queries"], "review_terms": ["bötzow privat berlin", "beste pizza berlin", "competitors and consolidated dispersion"], "required_windows": ["17:00-20:30", "20:30-22:00", "22:00-23:00", "23:00-24:00"], "required_negative_verification": "sly restaurant berlin"}},
+      "idempotency_key": "operational-recovery-20260905:propose:late-night"
+    },
+    {
+      "id": "preflight-dinner-20260905",
+      "kind": "google_ads.execution_preflight",
+      "depends_on": ["propose-dinner-20260905"],
+      "input": {"mode": "dry_run"},
+      "idempotency_key": "operational-recovery-20260905:preflight:dinner"
+    },
+    {
+      "id": "preflight-late-night-20260905",
+      "kind": "google_ads.execution_preflight",
+      "depends_on": ["propose-late-night-20260905"],
+      "input": {"mode": "dry_run"},
+      "idempotency_key": "operational-recovery-20260905:preflight:late-night"
+    },
+    {
+      "id": "execute-delegated-dinner-20260905",
+      "kind": "google_ads.execute_authorized",
+      "depends_on": ["preflight-dinner-20260905"],
+      "input": {"mode": "controlled"},
+      "idempotency_key": "operational-recovery-20260905:execute:dinner"
+    },
+    {
+      "id": "execute-delegated-late-night-20260905",
+      "kind": "google_ads.execute_authorized",
+      "depends_on": ["preflight-late-night-20260905"],
+      "input": {"mode": "controlled"},
+      "idempotency_key": "operational-recovery-20260905:execute:late-night"
+    },
+    {
+      "id": "observe-dinner-20260905",
+      "kind": "google_ads.read_campaign",
+      "depends_on": ["execute-delegated-dinner-20260905"],
+      "input": {"campaign_id": "23276824770", "start_date": "2026-09-04", "end_date": "2026-09-04"},
+      "idempotency_key": "operational-recovery-20260905:observe:dinner"
+    },
+    {
+      "id": "observe-late-night-20260905",
+      "kind": "google_ads.read_campaign",
+      "depends_on": ["execute-delegated-late-night-20260905"],
+      "input": {"campaign_id": "23853417314", "start_date": "2026-09-04", "end_date": "2026-09-04"},
+      "idempotency_key": "operational-recovery-20260905:observe:late-night"
+    },
+    {
+      "id": "report-operational-recovery-20260905",
+      "kind": "generate_report",
+      "depends_on": ["observe-dinner-20260905", "observe-late-night-20260905"],
+      "idempotency_key": "operational-recovery-20260905:report"
+    }
+  ]
+}
