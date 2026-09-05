@@ -1,0 +1,17 @@
+{
+  "id": "instagram-content-capability-audit-20260905",
+  "objective": "Run a live read-only audit of the Parma Instagram Business content publishing capability for parma.divinibenedetti. Verify current Meta permissions, linked Facebook Page and Instagram Business account, media read, insights read, create-container readiness, Reel publish readiness and Stories readiness. Do not create media containers, do not publish, do not mutate Meta/Instagram, do not expose tokens or secrets. Persist the sanitized capability evidence and stop at DONE, NEEDS_HUMAN or BLOCKED_EXTERNAL.",
+  "tasks": [
+    {
+      "id": "instagram-live-capability-audit",
+      "kind": "instagram.audit_capability",
+      "idempotency_key": "instagram-content-capability-audit-20260905:audit"
+    },
+    {
+      "id": "instagram-runtime-diagnostics",
+      "kind": "run_diagnostics",
+      "depends_on": ["instagram-live-capability-audit"],
+      "idempotency_key": "instagram-content-capability-audit-20260905:diagnostics"
+    }
+  ]
+}
