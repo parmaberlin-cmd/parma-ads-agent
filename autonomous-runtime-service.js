@@ -16,16 +16,19 @@ const {RecurringObjectiveScheduler,filePath:recurringFilePath,upsertSchedule}=re
 const {buildControlTower}=require('./control-tower');
 const {listSpecialists}=require('./specialist-registry');
 const {conversionIntegrity}=require('./economic-ground-truth');
-const {auditInstagramContentCapability,buildContainerPayload}=require('./instagram-content-publishing');
+const {auditInstagramContentCapability,auditInstagramLoginCapability,buildContainerPayload}=require('./instagram-content-publishing');
 
 function metaReadTransport(env){
   const version=String(env.META_API_VERSION||'v19.0');
   return {async get(endpoint,params={}){const response=await axios.get(`https://graph.facebook.com/${version}${endpoint}`,{timeout:20000,params:{...params,access_token:env.META_ACCESS_TOKEN}});return response.data;}};
 }
+function instagramLoginReadTransport(env){const version=String(env.META_API_VERSION||'v19.0');return {async get(endpoint,params={}){const response=await axios.get(`https://graph.instagram.com/${version}${endpoint}`,{timeout:20000,params:{...params,access_token:env.META_ACCESS_TOKEN}});return response.data;}};}
 async function instagramAudit(env){
   if(!env.META_ACCESS_TOKEN){const error=new Error('instagram_configuration_missing');error.code='INSTAGRAM_CONFIGURATION_MISSING';throw error;}
   const raw=String(env.META_AD_ACCOUNT_ID||'');const adAccountId=raw?(raw.startsWith('act_')?raw:`act_${raw}`):null;
-  return auditInstagramContentCapability({transport:metaReadTransport(env),adAccountId});
+  const facebookAudit=await auditInstagramContentCapability({transport:metaReadTransport(env),adAccountId});
+  if(facebookAudit.checks.permissions_readable||facebookAudit.capabilities.read_account)return {...facebookAudit,login_type:'facebook_login'};
+  return auditInstagramLoginCapability({transport:instagramLoginReadTransport(env)});
 }
 
 function firstDone(objective,kind){return objective?.tasks.find(x=>x.kind===kind&&x.status==='DONE')||null;}
