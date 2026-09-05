@@ -10,6 +10,7 @@ test("live shadow collectors fail closed when credentials are absent", () => {
 test("live shadow collectors detect complete credential presence without exposing values", () => {
   assert.equal(googleConfigured({ GOOGLE_CLIENT_ID:"x", GOOGLE_CLIENT_SECRET:"x", GOOGLE_DEVELOPER_TOKEN:"x", GOOGLE_REFRESH_TOKEN:"x", GOOGLE_CUSTOMER_ID:"x" }), true);
   assert.equal(metaConfigured({ META_ACCESS_TOKEN:"x", META_AD_ACCOUNT_ID:"x" }), true);
+  assert.equal(metaConfigured({ META_USER_ACCESS_TOKEN:"ads-token", META_AD_ACCOUNT_ID:"x" }), true);
 });
 
 test("date range uses completed days only", () => {
