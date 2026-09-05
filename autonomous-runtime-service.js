@@ -23,8 +23,8 @@ function metaReadTransport(env){
   return {async get(endpoint,params={}){const response=await axios.get(`https://graph.facebook.com/${version}${endpoint}`,{timeout:20000,params:{...params,access_token:env.META_ACCESS_TOKEN}});return response.data;}};
 }
 async function instagramAudit(env){
-  if(!env.META_ACCESS_TOKEN||!env.META_AD_ACCOUNT_ID){const error=new Error('meta_configuration_missing');error.code='META_CONFIGURATION_MISSING';throw error;}
-  const raw=String(env.META_AD_ACCOUNT_ID);const adAccountId=raw.startsWith('act_')?raw:`act_${raw}`;
+  if(!env.META_ACCESS_TOKEN){const error=new Error('instagram_configuration_missing');error.code='INSTAGRAM_CONFIGURATION_MISSING';throw error;}
+  const raw=String(env.META_AD_ACCOUNT_ID||'');const adAccountId=raw?(raw.startsWith('act_')?raw:`act_${raw}`):null;
   return auditInstagramContentCapability({transport:metaReadTransport(env),adAccountId});
 }
 

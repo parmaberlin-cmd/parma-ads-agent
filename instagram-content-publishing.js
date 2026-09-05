@@ -13,11 +13,12 @@ function cleanCaption(value){const text=String(value||'');if(text.length>2200)th
 function permissionMap(rows=[]){return Object.fromEntries(rows.map(x=>[String(x.permission),String(x.status)]));}
 
 async function auditInstagramContentCapability({transport,adAccountId,username='parma.divinibenedetti'}={}){
-  requireTransport(transport); const account=String(adAccountId||'');if(!/^act_\d{1,30}$/.test(account))throw new TypeError('adAccountId must use act_<digits> format');
+  requireTransport(transport); const account=String(adAccountId||'');if(account&&!/^act_\d{1,30}$/.test(account))throw new TypeError('adAccountId must use act_<digits> format');
   const checks={token_present:true,permissions_readable:false,business_discovered:false,instagram_account_discovered:false,page_linked:false,media_read:false,insights_read:false};
   let permissions={};let businessId=null;let ig=null;let page=null;let media=[];const blockers=[];
   try{const r=await transport.get('/me/permissions');permissions=permissionMap(r?.data||[]);checks.permissions_readable=true;}catch{blockers.push('token_permissions_not_readable');}
-  try{const a=await transport.get(`/${account}`,{fields:'business{id}'});businessId=a?.business?.id?numericId(a.business.id,'business id'):null;checks.business_discovered=Boolean(businessId);}catch{blockers.push('business_not_discoverable');}
+  try{const r=await transport.get('/me/accounts',{fields:'id,name,instagram_business_account{id,username}',limit:100});page=(r?.data||[]).find(x=>String(x?.instagram_business_account?.username||'').toLowerCase()===String(username).toLowerCase())||null;ig=page?.instagram_business_account||null;}catch{blockers.push('pages_not_readable');}
+  if(!ig&&account)try{const a=await transport.get(`/${account}`,{fields:'business{id}'});businessId=a?.business?.id?numericId(a.business.id,'business id'):null;checks.business_discovered=Boolean(businessId);}catch{blockers.push('business_not_discoverable');}
   if(businessId){
     try{const r=await transport.get(`/${businessId}/owned_pages`,{fields:'id,name,instagram_business_account{id,username}',limit:100});page=(r?.data||[]).find(x=>String(x?.instagram_business_account?.username||'').toLowerCase()===String(username).toLowerCase())||null;ig=page?.instagram_business_account||null;}catch{blockers.push('owned_pages_not_readable');}
     if(!ig)try{const r=await transport.get(`/${businessId}/owned_instagram_accounts`,{fields:'id,username',limit:100});ig=(r?.data||[]).find(x=>String(x?.username||'').toLowerCase()===String(username).toLowerCase())||null;}catch{blockers.push('owned_instagram_accounts_not_readable');}

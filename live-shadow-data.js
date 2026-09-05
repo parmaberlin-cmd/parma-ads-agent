@@ -7,7 +7,8 @@ const { buildMetaIssueReport } = require("./meta-issue-classification");
 
 function normalizeGoogleCustomerId(value) { return String(value || "").replace(/\D/g, ""); }
 function googleConfigured(env = process.env) { return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_DEVELOPER_TOKEN && env.GOOGLE_REFRESH_TOKEN && env.GOOGLE_CUSTOMER_ID); }
-function metaConfigured(env = process.env) { return Boolean(env.META_ACCESS_TOKEN && env.META_AD_ACCOUNT_ID); }
+function metaAdsAccessToken(env = process.env) { return env.META_USER_ACCESS_TOKEN || env.META_ACCESS_TOKEN || null; }
+function metaConfigured(env = process.env) { return Boolean(metaAdsAccessToken(env) && env.META_AD_ACCOUNT_ID); }
 function getDateRange(days = 30, now = new Date()) { const end = new Date(now); end.setUTCHours(0,0,0,0); end.setUTCDate(end.getUTCDate()-1); const start = new Date(end); start.setUTCDate(start.getUTCDate()-(days-1)); return { start:start.toISOString().slice(0,10), end:end.toISOString().slice(0,10) }; }
 
 function flattenGoogleErrorCode(rawCode) {
@@ -109,8 +110,9 @@ async function collectMetaShadowData({env=process.env,datePreset="last_30d",now=
   const accountId=String(env.META_AD_ACCOUNT_ID).startsWith("act_")?String(env.META_AD_ACCOUNT_ID):`act_${env.META_AD_ACCOUNT_ID}`;
   const candidate=String(env.META_API_VERSION||META_API_VERSION);const apiVersion=/^v\d+\.0$/.test(candidate)?candidate:META_API_VERSION;
   const client=axios.create({baseURL:`https://graph.facebook.com/${apiVersion}`,timeout:20000});
+  const accessToken=metaAdsAccessToken(env);
   const getCollection=async(endpoint,params)=>{
-    const collected=await collectMetaPages({client,endpoint,params,accessToken:env.META_ACCESS_TOKEN});
+    const collected=await collectMetaPages({client,endpoint,params,accessToken});
     if(collected.truncated)throw new Error('meta_collection_truncated');
     return collected.items;
   };
@@ -146,4 +148,4 @@ async function collectLiveShadowInput({env=process.env,days=30,now=new Date()}={
   };
 }
 
-module.exports={collectGoogleShadowData,collectMetaPages,collectMetaShadowData,collectLiveShadowInput,getDateRange,googleConfigured,metaConfigured,flattenGoogleErrorCode,googleDiagnosticReason,cleanGoogleDiagnostic,sanitizeMetaIssues,normalizePrimaryStatusReasons};
+module.exports={collectGoogleShadowData,collectMetaPages,collectMetaShadowData,collectLiveShadowInput,getDateRange,googleConfigured,metaAdsAccessToken,metaConfigured,flattenGoogleErrorCode,googleDiagnosticReason,cleanGoogleDiagnostic,sanitizeMetaIssues,normalizePrimaryStatusReasons};
