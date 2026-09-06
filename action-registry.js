@@ -3,6 +3,7 @@
 const ACTIONS=Object.freeze({
   run_diagnostics:{specialist:'runtime',write:false,spend:false,authorization:'autonomous_read_only',concurrency:'runtime:diagnostics'},
   generate_report:{specialist:'runtime',write:false,spend:false,authorization:'autonomous_read_only',concurrency:'runtime:report'},
+  'runtime.self_test':{specialist:'runtime',write:false,spend:false,authorization:'autonomous_read_only',concurrency:'runtime:self_test'},
   'runtime.register_recurring':{specialist:'runtime',write:'internal',spend:false,authorization:'controlled_internal',concurrency:'runtime:scheduler'},
   'google_ads.read_campaign':{specialist:'google_ads',write:false,spend:false,authorization:'autonomous_read_only',concurrency:'google_ads:read'},
   'google_ads.propose_changes':{specialist:'google_ads',write:false,spend:false,authorization:'autonomous_read_only',concurrency:'google_ads:proposal'},
