@@ -2,7 +2,8 @@
 
 const realExpress = require('express');
 const { apiKeysMatch } = require('./api-key-auth');
-const { registerAutonomousRuntimeRoutes, startAutonomousRuntime } = require('./autonomous-runtime-service');
+const { registerAutonomousRuntimeRoutes, startAutonomousRuntime, runtime } = require('./autonomous-runtime-service');
+const { registerAutonomousResumeRoutes } = require('./autonomous-runtime-resume');
 
 function authorized(req){
   const supplied=req.headers['x-api-key']||String(req.headers['authorization']||'').replace(/^Bearer\s+/i,'');
@@ -12,6 +13,7 @@ function authorized(req){
 function wrappedExpress(...args){
   const app=realExpress(...args);
   registerAutonomousRuntimeRoutes(app,{authorized});
+  registerAutonomousResumeRoutes(app,{authorized,runtime});
   return app;
 }
 Object.assign(wrappedExpress,realExpress);
