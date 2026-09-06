@@ -1,6 +1,6 @@
 'use strict';
 
-const {withLockedState,statePath,sanitizeEvidence}=require('./autonomous-runtime');
+const {withLockedState,statePath,sanitizeEvidence,readState}=require('./autonomous-runtime');
 const {describeAction}=require('./action-registry');
 
 const RESUMABLE=new Set(['NEEDS_HUMAN','BLOCKED_EXTERNAL']);
@@ -23,8 +23,11 @@ function annotateTerminalBlockers(state){
   }
   return changed;
 }
+function needsTerminalAnnotation(state){return (state.objectives||[]).some(objective=>RESUMABLE.has(objective.status)&&(!objective.required_action||(objective.tasks||[]).some(t=>t.status===objective.status&&!t.required_action)));}
 function persistTerminalBlockers(runtime){
   const file=runtime?.file||statePath();
+  let snapshot;try{snapshot=readState(file);}catch{return false;}
+  if(!needsTerminalAnnotation(snapshot))return false;
   const result=withLockedState(file,state=>annotateTerminalBlockers(state),{leaseMs:runtime?.leaseMs||30000});
   if(!result.locked)return false;
   return result.value===true;
@@ -70,4 +73,4 @@ function registerAutonomousResumeRoutes(app,{authorized,runtime}={}){
     catch(error){const code=error?.code||'RESUME_FAILED';const status=code==='OBJECTIVE_NOT_FOUND'||code==='BLOCKED_TASK_NOT_FOUND'?404:code==='STATE_LOCK_BUSY'?409:400;return res.status(status).json({success:false,error:code});}
   });
 }
-module.exports={RESUMABLE,MODES,requiredActionFor,annotateTerminalBlockers,persistTerminalBlockers,resumeObjective,registerAutonomousResumeRoutes};
+module.exports={RESUMABLE,MODES,requiredActionFor,annotateTerminalBlockers,needsTerminalAnnotation,persistTerminalBlockers,resumeObjective,registerAutonomousResumeRoutes};
