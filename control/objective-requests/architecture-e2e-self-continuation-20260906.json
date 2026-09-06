@@ -1,0 +1,29 @@
+{
+  "id": "architecture-e2e-self-continuation-20260906",
+  "objective": "Verify the autonomous architecture end-to-end without provider writes: ingest through GitHub OIDC, execute a bounded correctable failure and retry, hold a safe runtime task long enough to overlap the Railway redeploy caused by this commit, recover from any expired lease after restart, continue dependent tasks automatically, persist evidence, expose Control Tower state, and finish DONE without ChatGPT polling or provider mutations.",
+  "tasks": [
+    {
+      "id": "self-correct-once",
+      "kind": "runtime.self_test",
+      "input": {"mode": "retry_once"},
+      "max_attempts": 3
+    },
+    {
+      "id": "redeploy-recovery-window",
+      "kind": "runtime.self_test",
+      "input": {"mode": "hold", "hold_ms": 45000},
+      "max_attempts": 3,
+      "depends_on": ["self-correct-once"]
+    },
+    {
+      "id": "runtime-diagnostics-after-recovery",
+      "kind": "run_diagnostics",
+      "depends_on": ["redeploy-recovery-window"]
+    },
+    {
+      "id": "architecture-final-report",
+      "kind": "generate_report",
+      "depends_on": ["runtime-diagnostics-after-recovery"]
+    }
+  ]
+}
