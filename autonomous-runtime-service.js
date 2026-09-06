@@ -13,6 +13,7 @@ const { executeAuthorized } = require('./google-ads-controlled-gateway');
 const { planNext } = require('./autonomous-cycle-planner');
 const { spawnTasks } = require('./runtime-task-spawner');
 const {RecurringObjectiveScheduler,filePath:recurringFilePath,upsertSchedule}=require('./recurring-objective-scheduler');
+const {reconcileRecurringBootstrap}=require('./recurring-objective-bootstrap');
 const {buildControlTower}=require('./control-tower');
 const {listSpecialists}=require('./specialist-registry');
 const {conversionIntegrity}=require('./economic-ground-truth');
@@ -68,5 +69,14 @@ function registerAutonomousRuntimeRoutes(app,{authorized}={}){
   app.post('/internal/objective-ingress',parseJson,async(req,res)=>{const body=req.body||{};if(!validObjective(body))return res.status(400).json({success:false,error:'id_objective_and_tasks_required'});const gate=await authorizeIngress(req,body,{consume:true});if(!gate.ok)return res.status(gate.status||401).json({success:false,error:gate.error});if(gate.idempotent)return res.status(200).json({success:true,objective_id:body.id,status:'EXISTING',idempotent:true});const objective=runtime.submit({id:body.id,objective:body.objective,tasks:body.tasks});return res.status(202).json({success:true,objective_id:objective.id,status:objective.status,task_count:objective.tasks.length,issuer:'github-actions-oidc'});});
   app.post('/tools/agent/objectives/kill-switch',parseJson,(req,res)=>{if(!authorized?.(req))return res.status(401).json({success:false,error:'Unauthorized'});if(typeof req.body?.active!=='boolean')return res.status(400).json({success:false,error:'boolean_active_required'});runtime.setKillSwitch(req.body.active);return res.json({success:true,active:req.body.active});});
 }
-function startAutonomousRuntime(){runtime.start();scheduler.start();return runtime;}
+function startAutonomousRuntime(){
+  runtime.start();
+  try{
+    scheduler.setBootstrapStatus(reconcileRecurringBootstrap({env:process.env,file:recurringFilePath(process.env),now:Date.now()}));
+  }catch(error){
+    scheduler.setBootstrapStatus({status:'missing',managed_schedule_id:process.env.AUTONOMOUS_BUSINESS_LOOP_SCHEDULE_ID||'autonomous-business-loop-google-cycle',reconciled:false,reason:String(error?.message||'bootstrap_reconcile_failed').slice(0,120),action:'none'});
+  }
+  scheduler.start();
+  return runtime;
+}
 module.exports={runtime,scheduler,registerAutonomousRuntimeRoutes,startAutonomousRuntime,localHandlers,taskDateRange};
