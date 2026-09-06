@@ -412,7 +412,7 @@ async function collectCampaignConfiguredDiagnostics({ customer, campaignId }) {
         campaign_budget_resource: campaign.campaign?.campaign_budget || null,
         budget_id: String(campaign.campaign_budget?.id || ""),
         budget_name: campaign.campaign_budget?.name || null,
-        amount_eur: microsToEur(campaign.campaign_budget?.amount_micros),
+        amount_eur: microsToEurOrNull(campaign.campaign_budget?.amount_micros),
         explicitly_shared: campaign.campaign_budget?.explicitly_shared === true,
         status: campaign.campaign_budget?.status || null,
       },

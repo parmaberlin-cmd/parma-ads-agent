@@ -42,6 +42,8 @@ test('today_intraday mode reports explicit intraday partial/empty notice', async
   await handler({ params: { id: '23276824770' }, query: { read_mode: 'today_intraday', days: '1' } }, res);
   assert.equal(res.output.status, 200);
   assert.equal(res.output.body.read_mode, 'today_intraday');
+  assert.equal(res.output.body.period_days, 0);
+  assert.equal(res.output.body.requested_period_days, 1);
   assert.equal(res.output.body.date_range.intraday, true);
   assert.equal(res.output.body.inferred_diagnosis.intraday_reporting_notice.mode, 'intraday_partial_possible');
   assert.match(res.output.body.inferred_diagnosis.intraday_reporting_notice.note, /No intraday delivery is currently visible/);
