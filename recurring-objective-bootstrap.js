@@ -66,21 +66,22 @@ function diffFields(a,b){
 function reconcileRecurringBootstrap({env=process.env,file=filePath(env),now=Date.now()}={}){
   const at=new Date(now).toISOString();
   const desired=desiredSchedule(env,now);
+  const campaignValid=validCampaignId(desired.campaignId);
   const storage={durable:!file.startsWith('/tmp/'),path:file};
   const state=read(file);
   const existing=state.schedules.find(x=>x.id===desired.scheduleId)||null;
   if(!desired.enabled){
     if(!existing)return {status:'disabled',managed_schedule_id:desired.scheduleId,reconciled:true,action:'none',reason:'disabled_by_configuration',storage,evidence:{existing:false},updated_at:at};
+    const canonicalDisabled=campaignValid?{...existing,...desired.schedule,enabled:false,timezone:'Europe/Berlin',created_at:existing.created_at||desired.schedule.created_at}:{...existing,enabled:false,timezone:'Europe/Berlin'};
     const current=managedShape(existing);
-    const wanted=managedShape({...desired.schedule,enabled:false,timezone:'Europe/Berlin'});
+    const wanted=managedShape(canonicalDisabled);
     const driftFields=diffFields(current,wanted);
     const nonEnabledDrift=driftFields.filter(x=>x!=='enabled');
     if(existing.enabled===false&&!driftFields.length)return {status:'disabled',managed_schedule_id:desired.scheduleId,reconciled:true,action:'preserved_disabled',reason:'disabled_by_configuration',storage,evidence:{existing:true,drift:false},updated_at:at};
-    const reconciled={...existing,...desired.schedule,enabled:false,timezone:'Europe/Berlin',created_at:existing.created_at||desired.schedule.created_at};
-    upsertSchedule(reconciled,{file,now});
-    return {status:nonEnabledDrift.length?'drift':'disabled',managed_schedule_id:desired.scheduleId,reconciled:true,action:nonEnabledDrift.length?'updated_disabled_drift':'updated_to_disabled',reason:'disabled_by_configuration',drift_fields:driftFields,storage,evidence:{existing:true,previous_enabled:existing.enabled===true,drift:Boolean(nonEnabledDrift.length)},updated_at:at};
+    upsertSchedule(canonicalDisabled,{file,now});
+    return {status:nonEnabledDrift.length?'drift':'disabled',managed_schedule_id:desired.scheduleId,reconciled:true,action:nonEnabledDrift.length?'updated_disabled_drift':'updated_to_disabled',reason:'disabled_by_configuration',drift_fields:driftFields,storage,evidence:{existing:true,previous_enabled:existing.enabled===true,drift:Boolean(nonEnabledDrift.length),campaign_id_valid:campaignValid},updated_at:at};
   }
-  if(!validCampaignId(desired.campaignId)){
+  if(!campaignValid){
     return {status:'missing',managed_schedule_id:desired.scheduleId,reconciled:false,action:'none',reason:'invalid_campaign_id',storage,evidence:{campaign_id_valid:false},updated_at:at};
   }
   if(!existing){

@@ -81,6 +81,17 @@ test('invalid campaign id reports missing and does not create schedules',()=>{
   assert.equal(state.schedules.length,0);
 });
 
+test('disabled mode with invalid campaign id does not rewrite campaign-dependent fields',()=>{
+  const file=temp();
+  reconcileRecurringBootstrap({file,env:{AUTONOMOUS_BUSINESS_LOOP_ENABLED:'true',AUTONOMOUS_BUSINESS_LOOP_CAMPAIGN_ID:'23276824770'},now:Date.parse('2026-09-06T08:00:00.000Z')});
+  const before=read(file).schedules[0];
+  const result=reconcileRecurringBootstrap({file,env:{AUTONOMOUS_BUSINESS_LOOP_ENABLED:'false',AUTONOMOUS_BUSINESS_LOOP_CAMPAIGN_ID:'invalid'},now:Date.parse('2026-09-06T08:05:00.000Z')});
+  const after=read(file).schedules[0];
+  assert.equal(result.status,'disabled');
+  assert.equal(after.enabled,false);
+  assert.deepEqual(after.objective_template,before.objective_template);
+});
+
 test('default recurring objective is zero-write safe and begins with cycle planner',()=>{
   const desired=desiredSchedule({AUTONOMOUS_BUSINESS_LOOP_ENABLED:'true',AUTONOMOUS_BUSINESS_LOOP_CAMPAIGN_ID:'23276824770'},Date.parse('2026-09-06T08:00:00.000Z'));
   const task=desired.schedule.objective_template.tasks[0];
