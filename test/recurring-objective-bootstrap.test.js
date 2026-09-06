@@ -81,6 +81,15 @@ test('invalid campaign id reports missing and does not create schedules',()=>{
   assert.equal(state.schedules.length,0);
 });
 
+test('empty configured campaign id is treated as invalid instead of falling back silently',()=>{
+  const file=temp();
+  const result=reconcileRecurringBootstrap({file,env:{AUTONOMOUS_BUSINESS_LOOP_ENABLED:'true',AUTONOMOUS_BUSINESS_LOOP_CAMPAIGN_ID:''},now:()=>Date.parse('2026-09-06T08:00:00.000Z')});
+  const state=read(file);
+  assert.equal(result.status,'missing');
+  assert.equal(result.reason,'invalid_campaign_id');
+  assert.equal(state.schedules.length,0);
+});
+
 test('disabled mode with invalid campaign id does not rewrite campaign-dependent fields',()=>{
   const file=temp();
   reconcileRecurringBootstrap({file,env:{AUTONOMOUS_BUSINESS_LOOP_ENABLED:'true',AUTONOMOUS_BUSINESS_LOOP_CAMPAIGN_ID:'23276824770'},now:()=>Date.parse('2026-09-06T08:00:00.000Z')});

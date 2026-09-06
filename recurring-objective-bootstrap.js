@@ -28,7 +28,7 @@ function desiredSchedule(env=process.env,now=Date.now()){
   const atMs=nowMs(now);
   const scheduleId=sanitizeScheduleId(env.AUTONOMOUS_BUSINESS_LOOP_SCHEDULE_ID);
   const enabled=boolEnv(env.AUTONOMOUS_BUSINESS_LOOP_ENABLED,true);
-  const campaignId=String(env.AUTONOMOUS_BUSINESS_LOOP_CAMPAIGN_ID||DEFAULT_CAMPAIGN_ID).trim();
+  const campaignId=String(env.AUTONOMOUS_BUSINESS_LOOP_CAMPAIGN_ID??DEFAULT_CAMPAIGN_ID).trim();
   const hour=intEnv(env.AUTONOMOUS_BUSINESS_LOOP_HOUR,8,0,23);
   const minute=intEnv(env.AUTONOMOUS_BUSINESS_LOOP_MINUTE,0,0,59);
   return {
