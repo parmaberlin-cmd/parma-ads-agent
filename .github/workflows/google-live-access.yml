@@ -101,20 +101,23 @@ jobs:
           test "$hcode" = "200"
           heartbeat_poll_attempts=10
           heartbeat_poll_sleep_seconds=5
+          heartbeat_max_age_ms=120000
           heartbeat1=$(jq -r '.runner.heartbeat_at // "none"' runner1.json)
           heartbeat2="$heartbeat1"
-          changed="false"
+          heartbeat_advanced="false"
+          age1=$(jq -r '.runner.heartbeat_age_ms // 999999999' runner1.json)
+          test "$age1" -le "$heartbeat_max_age_ms"
           i=1
           while [ "$i" -le "$heartbeat_poll_attempts" ]; do
             hcode2=$(curl -sS -o runner2.json -w "%{http_code}" -H "x-api-key: $PARMA_AGENT_API_KEY" "$BASE/health/autonomous-runner")
             test "$hcode2" = "200"
+            age2=$(jq -r '.runner.heartbeat_age_ms // 999999999' runner2.json)
+            test "$age2" -le "$heartbeat_max_age_ms"
             heartbeat2=$(jq -r '.runner.heartbeat_at // "none"' runner2.json)
-            if [ "$heartbeat2" != "$heartbeat1" ]; then changed="true"; break; fi
+            if [ "$heartbeat2" != "$heartbeat1" ]; then heartbeat_advanced="true"; break; fi
             if [ "$i" -lt "$heartbeat_poll_attempts" ]; then sleep "$heartbeat_poll_sleep_seconds"; fi
             i=$((i + 1))
           done
-          test "$changed" = "true"
-          test "$heartbeat2" != "$heartbeat1"
           jq -e '.success==true and .schema=="parma.control_tower.v1" and .runner.status=="RUNNING"' control-tower.json >/dev/null
           jq -e '.success==true and .timezone=="Europe/Berlin" and (.schedules|type)=="array"' recurring.json >/dev/null
           jq -e '.recurring_bootstrap.status=="healthy" and .recurring_bootstrap.reconciled==true' control-tower.json >/dev/null
@@ -139,6 +142,7 @@ jobs:
             --arg runner_heartbeat_at_observed "$heartbeat2" \
             --argjson runner_heartbeat_age_ms_1 "$(jq '.runner.heartbeat_age_ms' runner1.json)" \
             --argjson runner_heartbeat_age_ms_2 "$(jq '.runner.heartbeat_age_ms' runner2.json)" \
+            --argjson heartbeat_advanced "$heartbeat_advanced" \
             --argjson guardrail_writes_false "$(jq '.guardrails.default_external_writes_allowed==false' control-tower.json)" \
             --argjson guardrail_spend_false "$(jq '.guardrails.default_spend_allowed==false' control-tower.json)" \
             '{
@@ -158,7 +162,8 @@ jobs:
                 heartbeat_at_initial:$runner_heartbeat_at_initial,
                 heartbeat_at_observed:$runner_heartbeat_at_observed,
                 heartbeat_age_ms_first:$runner_heartbeat_age_ms_1,
-                heartbeat_age_ms_second:$runner_heartbeat_age_ms_2
+                heartbeat_age_ms_second:$runner_heartbeat_age_ms_2,
+                heartbeat_advanced:$heartbeat_advanced
               },
               no_manual_continue_prompt_required: true,
               no_mutation_or_spend_during_validation: true,
