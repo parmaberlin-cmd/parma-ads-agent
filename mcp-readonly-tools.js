@@ -4,9 +4,10 @@ const { CREDENTIAL_VALUE_PATTERNS } = require('./public-output-safety');
 const DEFINITIONS = [
   ['parma_shadow_health', 'Read sanitized shadow health', {}],
   ['parma_google_test', 'Test the configured Google Ads reader without writes', {}],
-  ['parma_campaign_intelligence', 'Read search terms, keywords, devices, hours and geography', {
+  ['parma_campaign_intelligence', 'Read search terms, keywords, devices, hours, geography and campaign diagnostics', {
     campaign_id: { type: 'string', pattern: '^[0-9]{1,20}$' },
     days: { type: 'integer', minimum: 0, maximum: 90, default: 30, description: '0 means today; 1 means yesterday; 2-90 are historical windows ending yesterday' },
+    read_mode: { type: 'string', enum: ['historical', 'today_intraday'], default: 'historical', description: 'historical keeps days-window semantics; today_intraday explicitly forces today in Europe/Berlin account timezone' },
   }],
 ];
 
@@ -29,11 +30,13 @@ function failure(code) {
 function target(name, args) {
   if (!args || typeof args !== 'object' || Array.isArray(args)) return null;
   if (name === 'parma_campaign_intelligence') {
-    if (Object.keys(args).some(key => !['campaign_id', 'days'].includes(key))) return null;
+    if (Object.keys(args).some(key => !['campaign_id', 'days', 'read_mode'].includes(key))) return null;
     const days = args.days === undefined ? 30 : args.days;
+    const readMode = args.read_mode === undefined ? 'historical' : args.read_mode;
     if (typeof args.campaign_id !== 'string' || !/^\d{1,20}$/.test(args.campaign_id)) return null;
     if (!Number.isInteger(days) || days < 0 || days > 90) return null;
-    return { path: `/tools/google/campaign/${args.campaign_id}/intelligence`, query: { days } };
+    if (!['historical', 'today_intraday'].includes(readMode)) return null;
+    return { path: `/tools/google/campaign/${args.campaign_id}/intelligence`, query: { days, read_mode: readMode } };
   }
   if (Object.keys(args).length) return null;
   if (name === 'parma_shadow_health') return { path: '/health/agent-shadow-summary', query: {} };
