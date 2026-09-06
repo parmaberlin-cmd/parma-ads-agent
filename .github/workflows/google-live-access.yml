@@ -104,11 +104,11 @@ jobs:
           heartbeat1=$(jq -r '.runner.heartbeat_at // "none"' runner1.json)
           changed="false"
           for i in $(seq 1 "$heartbeat_poll_attempts"); do
-            sleep "$heartbeat_poll_sleep_seconds"
             hcode2=$(curl -sS -o runner2.json -w "%{http_code}" "$BASE/health/autonomous-runner")
             test "$hcode2" = "200"
             heartbeat2=$(jq -r '.runner.heartbeat_at // "none"' runner2.json)
             if [ "$heartbeat2" != "$heartbeat1" ]; then changed="true"; break; fi
+            sleep "$heartbeat_poll_sleep_seconds"
           done
           test "$changed" = "true"
           jq -e '.success==true and .schema=="parma.control_tower.v1" and .runner.status=="RUNNING"' control-tower.json >/dev/null
