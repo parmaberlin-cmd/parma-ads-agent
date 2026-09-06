@@ -11,7 +11,7 @@ function temp(){return path.join(fs.mkdtempSync(path.join(os.tmpdir(),'parma-rec
 
 test('initial bootstrap creates the managed recurring schedule',()=>{
   const file=temp();
-  const result=reconcileRecurringBootstrap({file,env:{AUTONOMOUS_BUSINESS_LOOP_ENABLED:'true',AUTONOMOUS_BUSINESS_LOOP_CAMPAIGN_ID:'23276824770'},now:Date.parse('2026-09-06T08:00:00.000Z')});
+  const result=reconcileRecurringBootstrap({file,env:{AUTONOMOUS_BUSINESS_LOOP_ENABLED:'true',AUTONOMOUS_BUSINESS_LOOP_CAMPAIGN_ID:'23276824770'},now:()=>Date.parse('2026-09-06T08:00:00.000Z')});
   const state=read(file);
   const schedule=state.schedules.find(x=>x.id==='autonomous-business-loop-google-cycle');
   assert.equal(result.status,'healthy');
