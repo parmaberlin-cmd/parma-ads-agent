@@ -35,10 +35,11 @@ function install(app){
         readMode,
         timezone: process.env.GOOGLE_ACCOUNT_TIMEZONE || DEFAULT_GOOGLE_TIMEZONE,
       });
+      const periodDays=(Math.floor((Date.parse(`${end}T00:00:00Z`)-Date.parse(`${start}T00:00:00Z`))/86400000)+1);
       const [search_terms,keywords,devices,hours,geography]=await Promise.all([
         collectCampaignSearchTerms({customer:c,campaignId,start,end}),collectCampaignKeywords({customer:c,campaignId,start,end}),collectCampaignDevices({customer:c,campaignId,start,end}),collectCampaignHours({customer:c,campaignId,start,end}),collectCampaignGeography({customer:c,campaignId,start,end})
       ]);
-      res.json({success:true,source:'google_ads',mode:'read_only_intelligence',campaign_id:campaignId,period_days:days,read_mode,date_range:{start,end,timezone,intraday},search_terms,keywords,devices,hours,geography,writes_allowed:false,execution_allowed:false,spend_allowed:false});
+      res.json({success:true,source:'google_ads',mode:'read_only_intelligence',campaign_id:campaignId,period_days:periodDays,requested_period_days:days,read_mode,date_range:{start,end,timezone,intraday},search_terms,keywords,devices,hours,geography,writes_allowed:false,execution_allowed:false,spend_allowed:false});
     }catch(error){ res.status(500).json({success:false,source:'google_ads',campaign_id:campaignId,error:clean(error),writes_allowed:false,execution_allowed:false,spend_allowed:false}); }
   });
 }

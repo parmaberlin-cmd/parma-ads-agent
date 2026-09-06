@@ -51,7 +51,7 @@ function installGoogleCampaignIntelligenceRoute({
       const timezone = googleTimezone();
       const dateRange = getGoogleDateRange({ days, readMode, timezone });
       const { start, end } = dateRange;
-      const effectivePeriodDays = dateRange.read_mode === "today_intraday" ? 0 : days;
+      const effectivePeriodDays = Math.floor((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000) + 1;
       const [overview, ad_groups, search_terms, keywords, devices, hours, geography, rsa_ads, conversion_actions, negative_keywords, configured_state] = await Promise.all([
         collectCampaignOverview({ customer, campaignId, start, end }),
         collectCampaignAdGroups({ customer, campaignId, start, end }),
