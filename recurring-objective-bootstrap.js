@@ -71,9 +71,14 @@ function reconcileRecurringBootstrap({env=process.env,file=filePath(env),now=Dat
   const existing=state.schedules.find(x=>x.id===desired.scheduleId)||null;
   if(!desired.enabled){
     if(!existing)return {status:'disabled',managed_schedule_id:desired.scheduleId,reconciled:true,action:'none',reason:'disabled_by_configuration',storage,evidence:{existing:false},updated_at:at};
-    if(existing.enabled===false)return {status:'disabled',managed_schedule_id:desired.scheduleId,reconciled:true,action:'preserved_disabled',reason:'disabled_by_configuration',storage,evidence:{existing:true},updated_at:at};
-    upsertSchedule({...existing,enabled:false},{file,now});
-    return {status:'disabled',managed_schedule_id:desired.scheduleId,reconciled:true,action:'updated_to_disabled',reason:'disabled_by_configuration',storage,evidence:{existing:true,previous_enabled:true},updated_at:at};
+    const current=managedShape(existing);
+    const wanted=managedShape({...desired.schedule,enabled:false,timezone:'Europe/Berlin'});
+    const driftFields=diffFields(current,wanted);
+    const nonEnabledDrift=driftFields.filter(x=>x!=='enabled');
+    if(existing.enabled===false&&!driftFields.length)return {status:'disabled',managed_schedule_id:desired.scheduleId,reconciled:true,action:'preserved_disabled',reason:'disabled_by_configuration',storage,evidence:{existing:true,drift:false},updated_at:at};
+    const reconciled={...existing,...desired.schedule,enabled:false,timezone:'Europe/Berlin',created_at:existing.created_at||desired.schedule.created_at};
+    upsertSchedule(reconciled,{file,now});
+    return {status:nonEnabledDrift.length?'drift':'disabled',managed_schedule_id:desired.scheduleId,reconciled:true,action:nonEnabledDrift.length?'updated_disabled_drift':'updated_to_disabled',reason:'disabled_by_configuration',drift_fields:driftFields,storage,evidence:{existing:true,previous_enabled:existing.enabled===true,drift:Boolean(nonEnabledDrift.length)},updated_at:at};
   }
   if(!validCampaignId(desired.campaignId)){
     return {status:'missing',managed_schedule_id:desired.scheduleId,reconciled:false,action:'none',reason:'invalid_campaign_id',storage,evidence:{campaign_id_valid:false},updated_at:at};

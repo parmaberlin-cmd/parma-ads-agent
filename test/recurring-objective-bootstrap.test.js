@@ -57,6 +57,21 @@ test('disabled configuration keeps schedule disabled and idempotent',()=>{
   assert.equal(state.schedules[0].enabled,false);
 });
 
+test('disabled reconciliation still fixes drifted managed fields',()=>{
+  const file=temp();
+  reconcileRecurringBootstrap({file,env:{AUTONOMOUS_BUSINESS_LOOP_ENABLED:'true',AUTONOMOUS_BUSINESS_LOOP_CAMPAIGN_ID:'23276824770'},now:Date.parse('2026-09-06T08:00:00.000Z')});
+  const drifted=read(file);
+  drifted.schedules[0].cadence={type:'daily',hour:4,minute:30};
+  drifted.schedules[0].enabled=false;
+  fs.writeFileSync(file,JSON.stringify(drifted),{mode:0o600});
+  const result=reconcileRecurringBootstrap({file,env:{AUTONOMOUS_BUSINESS_LOOP_ENABLED:'false',AUTONOMOUS_BUSINESS_LOOP_CAMPAIGN_ID:'23276824770'},now:Date.parse('2026-09-06T08:10:00.000Z')});
+  const state=read(file);
+  assert.equal(result.status,'drift');
+  assert.ok(result.drift_fields.includes('cadence'));
+  assert.equal(state.schedules[0].enabled,false);
+  assert.deepEqual(state.schedules[0].cadence,{type:'daily',hour:8,minute:0});
+});
+
 test('invalid campaign id reports missing and does not create schedules',()=>{
   const file=temp();
   const result=reconcileRecurringBootstrap({file,env:{AUTONOMOUS_BUSINESS_LOOP_ENABLED:'true',AUTONOMOUS_BUSINESS_LOOP_CAMPAIGN_ID:'bad-id'},now:Date.parse('2026-09-06T08:00:00.000Z')});
