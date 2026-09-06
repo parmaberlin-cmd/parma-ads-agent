@@ -133,7 +133,8 @@ jobs:
             --arg managed_schedule_last_slot "$(jq -r '.schedules[]|select(.id=="autonomous-business-loop-google-cycle")|.last_slot // "none"' recurring.json)" \
             --arg recurring_last_scan_at "$(jq -r '.last_scan_at // "none"' recurring.json)" \
             --arg runner_started_at "$(jq -r '.runner.started_at // "none"' runner1.json)" \
-            --arg runner_heartbeat_at "$(jq -r '.runner.heartbeat_at // "none"' runner1.json)" \
+            --arg runner_heartbeat_at_initial "$heartbeat1" \
+            --arg runner_heartbeat_at_observed "$heartbeat2" \
             --argjson runner_heartbeat_age_ms_1 "$(jq '.runner.heartbeat_age_ms' runner1.json)" \
             --argjson runner_heartbeat_age_ms_2 "$(jq '.runner.heartbeat_age_ms' runner2.json)" \
             --argjson guardrail_writes_false "$(jq '.guardrails.default_external_writes_allowed==false' control-tower.json)" \
@@ -152,7 +153,8 @@ jobs:
               cycle_plan_action_registered_readonly: true,
               runtime_liveness: {
                 started_at:$runner_started_at,
-                heartbeat_at:$runner_heartbeat_at,
+                heartbeat_at_initial:$runner_heartbeat_at_initial,
+                heartbeat_at_observed:$runner_heartbeat_at_observed,
                 heartbeat_age_ms_first:$runner_heartbeat_age_ms_1,
                 heartbeat_age_ms_second:$runner_heartbeat_age_ms_2
               },
