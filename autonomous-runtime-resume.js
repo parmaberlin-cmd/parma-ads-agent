@@ -12,15 +12,22 @@ function requiredActionFor(task,status,reason){
   return {type:'external_unblock',action:'restore_provider_or_capability_then_retry',task_kind:task.kind,specialist:action.specialist,reason:cleanText(reason,160),resume_options:['retry']};
 }
 function annotateTerminalBlockers(state){
+  let changed=false;
   for(const objective of state.objectives||[]){
     if(!RESUMABLE.has(objective.status))continue;
     const task=(objective.tasks||[]).find(t=>t.status===objective.status)||null;
     if(!task)continue;
     const required=requiredActionFor(task,objective.status,task.stop_reason||objective.stop_reason);
-    task.required_action=task.required_action||required;
-    objective.required_action=objective.required_action||required;
+    if(!task.required_action){task.required_action=required;changed=true;}
+    if(!objective.required_action){objective.required_action=required;changed=true;}
   }
-  return state;
+  return changed;
+}
+function persistTerminalBlockers(runtime){
+  const file=runtime?.file||statePath();
+  const result=withLockedState(file,state=>annotateTerminalBlockers(state),{leaseMs:runtime?.leaseMs||30000});
+  if(!result.locked)return false;
+  return result.value===true;
 }
 function resumeObjective(runtime,{objective_id,task_id,mode,note,actor='authorized_operator'}={}){
   const objectiveId=cleanText(objective_id,100), taskId=cleanText(task_id,80), resolution=cleanText(mode,40);
@@ -63,4 +70,4 @@ function registerAutonomousResumeRoutes(app,{authorized,runtime}={}){
     catch(error){const code=error?.code||'RESUME_FAILED';const status=code==='OBJECTIVE_NOT_FOUND'||code==='BLOCKED_TASK_NOT_FOUND'?404:code==='STATE_LOCK_BUSY'?409:400;return res.status(status).json({success:false,error:code});}
   });
 }
-module.exports={RESUMABLE,MODES,requiredActionFor,annotateTerminalBlockers,resumeObjective,registerAutonomousResumeRoutes};
+module.exports={RESUMABLE,MODES,requiredActionFor,annotateTerminalBlockers,persistTerminalBlockers,resumeObjective,registerAutonomousResumeRoutes};
