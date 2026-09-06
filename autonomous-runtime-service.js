@@ -71,11 +71,14 @@ function registerAutonomousRuntimeRoutes(app,{authorized}={}){
 }
 function startAutonomousRuntime(){
   runtime.start();
+  let bootstrapReady=true;
   try{
     scheduler.setBootstrapStatus(reconcileRecurringBootstrap({env:process.env,file:recurringFilePath(process.env),now:Date.now}));
   }catch(error){
+    bootstrapReady=false;
     scheduler.setBootstrapStatus({status:'missing',managed_schedule_id:process.env.AUTONOMOUS_BUSINESS_LOOP_SCHEDULE_ID||'autonomous-business-loop-google-cycle',reconciled:false,reason:String(error?.message||'bootstrap_reconcile_failed').slice(0,120),action:'none'});
   }
+  if(!bootstrapReady)return runtime;
   scheduler.start();
   return runtime;
 }
