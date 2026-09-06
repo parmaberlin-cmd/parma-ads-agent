@@ -26,7 +26,7 @@ function install(app){
     if(!auth(req)) return res.status(401).json({success:false,error:'Unauthorized'});
     const campaignId=validCampaign(req.params.id), days=validDays(req.query.days), readMode=parseGoogleReadMode(req.query.read_mode);
     if(!campaignId||days==null) return res.status(400).json({success:false,error:'invalid campaign id or days'});
-    if(!readMode) return res.status(400).json({success:false,error:'invalid read mode'});
+    if(!readMode) return res.status(400).json({success:false,error:'read_mode must be historical, today_intraday, today or intraday'});
     const required=['GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','GOOGLE_DEVELOPER_TOKEN','GOOGLE_REFRESH_TOKEN','GOOGLE_CUSTOMER_ID'];
     if(required.some(k=>!process.env[k])) return res.status(500).json({success:false,error:'Google Ads configuration missing'});
     try{

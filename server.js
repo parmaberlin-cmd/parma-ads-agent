@@ -547,7 +547,7 @@ function cleanGoogleError(error) {
 
 async function getGoogleCampaignMetrics(campaignId, days) {
   const customer = getGoogleCustomer();
-  const { start, end } = getGoogleDateRange({ days, timezone: googleTimezone() });
+  const { start, end } = getGoogleDateRange({ days, readMode: "historical", timezone: googleTimezone() });
 
   const rows = await customer.query(`
     SELECT
