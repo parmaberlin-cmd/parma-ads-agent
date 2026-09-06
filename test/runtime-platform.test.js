@@ -23,6 +23,14 @@ test('recurring scheduler rejects commercially invasive execution task',()=>{
  const file=temp();assert.throws(()=>upsertSchedule({...safeSchedule,id:'bad',objective_template:{objective:'bad',tasks:[{id:'x',kind:'google_ads.execute_authorized',input:{mode:'live'}}]}},{file}),/invalid_recurring_schedule/);
 });
 
+test('recurring snapshot carries bootstrap observability state',()=>{
+ const file=temp();const submitted=[];const runtime={submit:o=>{submitted.push(o);return o;}};const scheduler=new RecurringObjectiveScheduler({runtime,file,now:()=>Date.parse('2026-09-04T21:01:00Z'),maxRecoveryMinutes:10});
+ scheduler.setBootstrapStatus({status:'disabled',managed_schedule_id:'autonomous-business-loop-google-cycle',reconciled:true,reason:'disabled_by_configuration'});
+ const snap=scheduler.snapshot();
+ assert.equal(snap.bootstrap.status,'disabled');
+ assert.equal(snap.bootstrap.managed_schedule_id,'autonomous-business-loop-google-cycle');
+});
+
 test('Orderbird specialist is declared but provider access is not fabricated',()=>{const s=getSpecialist('orderbird');assert.equal(s.status,'AWAITING_OFFICIAL_PROVIDER_PATH');assert.equal(s.read,false);assert.equal(s.write,false);});
 
 test('economic ground truth contract is separate from marketing attribution',()=>{
