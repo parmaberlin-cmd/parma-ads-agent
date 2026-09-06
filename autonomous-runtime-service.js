@@ -74,7 +74,7 @@ function startAutonomousRuntime(){
   try{
     scheduler.setBootstrapStatus(reconcileRecurringBootstrap({env:process.env,file:recurringFilePath(process.env),now:Date.now}));
   }catch(error){
-    scheduler.setBootstrapStatus({status:'missing',managed_schedule_id:process.env.AUTONOMOUS_BUSINESS_LOOP_SCHEDULE_ID||'autonomous-business-loop-google-cycle',reconciled:false,reason:String(error?.message||'bootstrap_reconcile_failed').slice(0,120),action:'none'});
+    scheduler.setBootstrapStatus({status:'missing',managed_schedule_id:process.env.AUTONOMOUS_BUSINESS_LOOP_SCHEDULE_ID||'autonomous-business-loop-google-cycle',reconciled:false,reason:'bootstrap_reconcile_failed',action:'none',evidence:{error:String(error?.message||'bootstrap_reconcile_failed').slice(0,120)}});
   }
   scheduler.start();
   return runtime;

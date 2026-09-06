@@ -71,6 +71,8 @@ test('corrupted recurring state does not crash startup and remains observable as
     assert.equal(service.runtime.snapshot().runner.status,'RUNNING');
     assert.equal(snap.bootstrap.status,'missing');
     assert.equal(snap.bootstrap.reconciled,false);
+    assert.equal(snap.bootstrap.reason,'bootstrap_reconcile_failed');
+    assert.equal(typeof snap.bootstrap.evidence?.error,'string');
     assert.equal(typeof snap.state_error,'string');
     assert.ok(service.scheduler.timer);
     const tower=require('../control-tower').buildControlTower({
