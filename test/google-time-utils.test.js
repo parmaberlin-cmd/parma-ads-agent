@@ -44,11 +44,11 @@ test('schedule evaluation reports active, inactive and no-schedule states', () =
   assert.deepEqual(evaluateScheduleActiveNow([], { timezone: 'Europe/Berlin' }), { scheduled_to_run_now: true, reason: 'no_ad_schedule_configured' });
 });
 
-test('read mode parser accepts today aliases and rejects unknown modes', () => {
+test('read mode parser accepts canonical modes and rejects unknown modes', () => {
   assert.equal(parseGoogleReadMode(undefined), 'historical');
-  assert.equal(parseGoogleReadMode('today'), 'today_intraday');
-  assert.equal(parseGoogleReadMode('intraday'), 'today_intraday');
   assert.equal(parseGoogleReadMode('today_intraday'), 'today_intraday');
   assert.equal(parseGoogleReadMode('historical'), 'historical');
+  assert.equal(parseGoogleReadMode('today'), null);
+  assert.equal(parseGoogleReadMode('intraday'), null);
   assert.equal(parseGoogleReadMode('future'), null);
 });

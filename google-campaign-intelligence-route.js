@@ -44,7 +44,7 @@ function installGoogleCampaignIntelligenceRoute({
     const readMode = parseGoogleReadMode(req.query.read_mode);
     if (!campaignId) return res.status(400).json({ success:false, source:"google_ads", error:"campaign id must contain 1 to 20 digits" });
     if (days == null) return res.status(400).json({ success:false, source:"google_ads", campaign_id:campaignId, error:"days must be an integer between 0 and 90; 0 means today" });
-    if (!readMode) return res.status(400).json({ success:false, source:"google_ads", campaign_id:campaignId, error:"read_mode must be historical, today_intraday, today or intraday" });
+    if (!readMode) return res.status(400).json({ success:false, source:"google_ads", campaign_id:campaignId, error:"read_mode must be historical or today_intraday" });
 
     try {
       const customer = getGoogleCustomer();

@@ -152,7 +152,7 @@ paths:
     get:
       operationId: getGoogleCampaignIntelligence
       summary: Get complete read-only Google Ads campaign diagnostics
-      description: Returns configured and observed read-only Google Ads campaign diagnostics including schedule, targeting criteria, budget sharing, bidding strategy, status reasons, policy signals, negative keywords and RSA analysis. days=0 reads today; days=1 reads yesterday; read_mode=today_intraday (also accepted aliases: today, intraday) explicitly reads today in account timezone.
+      description: Returns configured and observed read-only Google Ads campaign diagnostics including schedule, targeting criteria, budget sharing, bidding strategy, status reasons, policy signals, negative keywords and RSA analysis. days=0 reads today; days=1 reads yesterday; read_mode=today_intraday explicitly reads today in account timezone.
       security:
         - ApiKeyAuth: []
       parameters:
@@ -172,7 +172,6 @@ paths:
         - name: read_mode
           in: query
           required: false
-          description: Canonical values are historical and today_intraday. The server also accepts today and intraday as aliases for today_intraday.
           schema:
             type: string
             enum: [historical, today_intraday]

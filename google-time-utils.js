@@ -8,7 +8,7 @@ function parseGoogleReadMode(value) {
   if (value == null || value === '') return 'historical';
   const normalized = String(value).trim().toLowerCase();
   if (normalized === 'historical') return 'historical';
-  if (normalized === 'today' || normalized === 'intraday' || normalized === 'today_intraday') return 'today_intraday';
+  if (normalized === 'today_intraday') return 'today_intraday';
   return null;
 }
 
@@ -52,7 +52,7 @@ function getGoogleDateRange({ days, readMode = 'historical', timezone = DEFAULT_
       start: today,
       end: today,
       timezone,
-      read_mode: 'historical',
+      read_mode: 'today_intraday',
       intraday: true,
       partial_data_possible: true,
     };
