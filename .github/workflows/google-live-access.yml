@@ -93,9 +93,9 @@ jobs:
           set -euo pipefail
           BASE="https://supportive-stillness-production-ec37.up.railway.app"
           if [ -z "${PARMA_AGENT_API_KEY:-}" ]; then echo "control_tower=blocked; reason=github_secret_missing"; exit 1; fi
-          ccode=$(curl -sS -o control-tower.json -w "%{http_code}" -H "x-api-key: $PARMA_AGENT_API_KEY" "$BASE/tools/agent/control-tower"); test $? -eq 0
-          rcode=$(curl -sS -o recurring.json -w "%{http_code}" -H "x-api-key: $PARMA_AGENT_API_KEY" "$BASE/tools/agent/recurring"); test $? -eq 0
-          hcode=$(curl -sS -o runner1.json -w "%{http_code}" "$BASE/health/autonomous-runner"); test $? -eq 0
+          ccode=$(curl -sS -o control-tower.json -w "%{http_code}" -H "x-api-key: $PARMA_AGENT_API_KEY" "$BASE/tools/agent/control-tower")
+          rcode=$(curl -sS -o recurring.json -w "%{http_code}" -H "x-api-key: $PARMA_AGENT_API_KEY" "$BASE/tools/agent/recurring")
+          hcode=$(curl -sS -o runner1.json -w "%{http_code}" "$BASE/health/autonomous-runner")
           test "$ccode" = "200"
           test "$rcode" = "200"
           test "$hcode" = "200"
@@ -105,7 +105,7 @@ jobs:
           heartbeat2="$heartbeat1"
           changed="false"
           for i in $(seq 1 "$heartbeat_poll_attempts"); do
-            hcode2=$(curl -sS -o runner2.json -w "%{http_code}" "$BASE/health/autonomous-runner"); test $? -eq 0
+            hcode2=$(curl -sS -o runner2.json -w "%{http_code}" "$BASE/health/autonomous-runner")
             test "$hcode2" = "200"
             heartbeat2=$(jq -r '.runner.heartbeat_at // "none"' runner2.json)
             if [ "$heartbeat2" != "$heartbeat1" ]; then changed="true"; break; fi
