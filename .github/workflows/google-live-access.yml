@@ -164,4 +164,12 @@ jobs:
                 default_external_writes_allowed_false:$guardrail_writes_false,
                 default_spend_allowed_false:$guardrail_spend_false
               }
-            }'
+            }' > control-tower-validation.json
+          cat control-tower-validation.json
+          {
+            echo '### Control Tower recurring validation'
+            echo
+            echo '```json'
+            cat control-tower-validation.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
