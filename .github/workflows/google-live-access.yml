@@ -104,12 +104,14 @@ jobs:
           heartbeat1=$(jq -r '.runner.heartbeat_at // "none"' runner1.json)
           heartbeat2="$heartbeat1"
           changed="false"
-          for i in $(seq 1 "$heartbeat_poll_attempts"); do
+          i=1
+          while [ "$i" -le "$heartbeat_poll_attempts" ]; do
             hcode2=$(curl -sS -o runner2.json -w "%{http_code}" "$BASE/health/autonomous-runner")
             test "$hcode2" = "200"
             heartbeat2=$(jq -r '.runner.heartbeat_at // "none"' runner2.json)
             if [ "$heartbeat2" != "$heartbeat1" ]; then changed="true"; break; fi
             if [ "$i" -lt "$heartbeat_poll_attempts" ]; then sleep "$heartbeat_poll_sleep_seconds"; fi
+            i=$((i + 1))
           done
           test "$changed" = "true"
           test "$heartbeat2" != "$heartbeat1"
