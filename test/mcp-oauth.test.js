@@ -185,6 +185,30 @@ test('local reader enforces destination, method, parameter and response boundari
   }
 });
 
+test('local reader forwards today_intraday and preserves configured diagnostics', async () => {
+  let captured;
+  const reader = createLocalReader(configuration(environment()), { get: async (...args) => {
+    captured = args; return { data: {
+      success: true,
+      campaign_id: '1',
+      read_mode: 'today_intraday',
+      configured_state: { ad_schedule: [] },
+      inferred_diagnosis: { campaign_scheduled_to_run_now: true },
+      debug: 'not exposed',
+    } };
+  } });
+  const result = await reader({ method: 'GET', path: '/tools/google/campaign/1/intelligence', query: { days: 0, read_mode: 'today_intraday' } });
+  assert.equal(captured[1].params.read_mode, 'today_intraday');
+  assert.deepEqual(result, {
+    success: true,
+    campaign_id: '1',
+    read_mode: 'today_intraday',
+    configured_state: { ad_schedule: [] },
+    inferred_diagnosis: { campaign_scheduled_to_run_now: true },
+  });
+  await assert.rejects(() => reader({ method: 'GET', path: '/tools/google/campaign/1/intelligence', query: { days: 0, read_mode: 'tomorrow' } }));
+});
+
 test('concurrent store handles cannot overwrite a newer token rotation', t => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'parma-mcp-race-'));
   t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
