@@ -103,7 +103,7 @@ function getLocalClock(now = Date.now(), timezone = DEFAULT_GOOGLE_TIMEZONE) {
 }
 
 function evaluateScheduleActiveNow(rows, { timezone = DEFAULT_GOOGLE_TIMEZONE, now = Date.now() } = {}) {
-  const activeRows = (rows || []).filter((row) => String(row?.status || '').toUpperCase() !== 'REMOVED');
+  const activeRows = (rows || []).filter((row) => String(row?.status || '').toUpperCase() === 'ENABLED');
   if (activeRows.length === 0) {
     return { scheduled_to_run_now: true, reason: 'no_ad_schedule_configured' };
   }

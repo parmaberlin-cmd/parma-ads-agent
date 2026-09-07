@@ -44,6 +44,24 @@ test('schedule evaluation reports active, inactive and no-schedule states', () =
   assert.deepEqual(evaluateScheduleActiveNow([], { timezone: 'Europe/Berlin' }), { scheduled_to_run_now: true, reason: 'no_ad_schedule_configured' });
 });
 
+test('paused ad schedules are not treated as active delivery restrictions', () => {
+  const paused = evaluateScheduleActiveNow([{ day_of_week: 'MONDAY', start_hour: 9, start_minute: 'ZERO', end_hour: 22, end_minute: 'ZERO', status: 'PAUSED' }], {
+    timezone: 'Europe/Berlin',
+    now: Date.parse('2026-09-07T10:00:00Z'),
+  });
+  assert.equal(paused.scheduled_to_run_now, true);
+  assert.equal(paused.reason, 'no_ad_schedule_configured');
+
+  const enabledOutsideWindow = evaluateScheduleActiveNow([
+    { day_of_week: 'MONDAY', start_hour: 9, start_minute: 'ZERO', end_hour: 11, end_minute: 'ZERO', status: 'PAUSED' },
+    { day_of_week: 'MONDAY', start_hour: 9, start_minute: 'ZERO', end_hour: 10, end_minute: 'ZERO', status: 'ENABLED' },
+  ], {
+    timezone: 'Europe/Berlin',
+    now: Date.parse('2026-09-07T12:00:00Z'),
+  });
+  assert.equal(enabledOutsideWindow.scheduled_to_run_now, false);
+});
+
 test('read mode parser accepts canonical modes and rejects unknown modes', () => {
   assert.equal(parseGoogleReadMode(undefined), 'historical');
   assert.equal(parseGoogleReadMode('today_intraday'), 'today_intraday');
