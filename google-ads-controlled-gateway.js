@@ -3,6 +3,7 @@
 const crypto=require('node:crypto');
 const {resolveStandingAuthorization}=require('./standing-delegation-policy');
 const {runControlledNegativeJob}=require('./google-controlled-negative');
+const {createGoogleAdsMutationGateway,POLICY_CLASSES}=require('./google-ads-mutation-gateway');
 
 const NON_MUTATING_ACTIONS=new Set(['protect_high_intent_local_terms']);
 function stable(v){return crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');}
@@ -38,4 +39,4 @@ async function executeAuthorized({preflight,mode='verify_only',env=process.env,k
   const mutations=executed.reduce((n,x)=>n+Number(x.mutations_executed||0),0);
   return {validated:true,evidence:{schema:'google_ads.controlled_execution.v1',mode,status:needsHuman.length?'PARTIAL_NEEDS_HUMAN':'DONE',preflight_execution_key:preflight.execution_key,executed,needs_human:needsHuman,rejected,counts:{executed:executed.length,needs_human:needsHuman.length,rejected:rejected.length},mutations_executed:mutations,writes_allowed:mode==='live',standing_delegation_enforced:true,kill_switch_checked:true}};
 }
-module.exports={NON_MUTATING_ACTIONS,executeKey,executeAuthorized};
+module.exports={NON_MUTATING_ACTIONS,executeKey,executeAuthorized,createGoogleAdsMutationGateway,POLICY_CLASSES};
