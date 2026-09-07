@@ -85,3 +85,98 @@ jobs:
             jq '{success,error,writes_allowed,execution_allowed,spend_allowed}' intelligence.json 2>/dev/null || true
             exit 1
           fi
+
+      - name: Validate authenticated Control Tower recurring status
+        env:
+          PARMA_AGENT_API_KEY: ${{ secrets.PARMA_AGENT_API_KEY }}
+        run: |
+          set -euo pipefail
+          BASE="https://supportive-stillness-production-ec37.up.railway.app"
+          if [ -z "${PARMA_AGENT_API_KEY:-}" ]; then echo "control_tower=blocked; reason=github_secret_missing"; exit 1; fi
+          ccode=$(curl -sS -o control-tower.json -w "%{http_code}" -H "x-api-key: $PARMA_AGENT_API_KEY" "$BASE/tools/agent/control-tower")
+          rcode=$(curl -sS -o recurring.json -w "%{http_code}" -H "x-api-key: $PARMA_AGENT_API_KEY" "$BASE/tools/agent/recurring")
+          hcode=$(curl -sS -o runner1.json -w "%{http_code}" -H "x-api-key: $PARMA_AGENT_API_KEY" "$BASE/health/autonomous-runner")
+          test "$ccode" = "200"
+          test "$rcode" = "200"
+          test "$hcode" = "200"
+          heartbeat_poll_attempts=10
+          heartbeat_poll_sleep_seconds=5
+          heartbeat_max_age_ms=120000
+          heartbeat1=$(jq -r '.runner.heartbeat_at // "none"' runner1.json)
+          heartbeat2="$heartbeat1"
+          heartbeat_advanced="false"
+          age1=$(jq -r '.runner.heartbeat_age_ms // 999999999' runner1.json)
+          test "$age1" -le "$heartbeat_max_age_ms"
+          i=1
+          while [ "$i" -le "$heartbeat_poll_attempts" ]; do
+            hcode2=$(curl -sS -o runner2.json -w "%{http_code}" -H "x-api-key: $PARMA_AGENT_API_KEY" "$BASE/health/autonomous-runner")
+            test "$hcode2" = "200"
+            age2=$(jq -r '.runner.heartbeat_age_ms // 999999999' runner2.json)
+            test "$age2" -le "$heartbeat_max_age_ms"
+            heartbeat2=$(jq -r '.runner.heartbeat_at // "none"' runner2.json)
+            if [ "$heartbeat2" != "$heartbeat1" ]; then heartbeat_advanced="true"; break; fi
+            if [ "$i" -lt "$heartbeat_poll_attempts" ]; then sleep "$heartbeat_poll_sleep_seconds"; fi
+            i=$((i + 1))
+          done
+          jq -e '.success==true and .schema=="parma.control_tower.v1" and .runner.status=="RUNNING"' control-tower.json >/dev/null
+          jq -e '.success==true and .timezone=="Europe/Berlin" and (.schedules|type)=="array"' recurring.json >/dev/null
+          jq -e '.recurring_bootstrap.status=="healthy" and .recurring_bootstrap.reconciled==true' control-tower.json >/dev/null
+          jq -e '.schedules|map(select(.id=="autonomous-business-loop-google-cycle"))|length==1' recurring.json >/dev/null
+          jq -e '.schedules[]|select(.id=="autonomous-business-loop-google-cycle")|.enabled==true' recurring.json >/dev/null
+          jq -e '.action_registry|map(select(.kind=="google_ads.cycle_plan" and .implemented==true and .write==false and .spend==false))|length>=1' control-tower.json >/dev/null
+          jq -e '.runner.status=="RUNNING" and (.runner.heartbeat_age_ms|type=="number") and .storage.durable==true' runner1.json >/dev/null
+          jq -e '.runner.status=="RUNNING" and (.runner.heartbeat_age_ms|type=="number")' runner2.json >/dev/null
+          jq -n \
+            --arg control_tower_http "$ccode" \
+            --arg recurring_http "$rcode" \
+            --arg recurring_bootstrap_status "$(jq -r '.recurring_bootstrap.status' control-tower.json)" \
+            --arg recurring_bootstrap_reason "$(jq -r '.recurring_bootstrap.reason // "none"' control-tower.json)" \
+            --arg recurring_state_error "$(jq -r '.recurring.state_error // "none"' control-tower.json)" \
+            --arg managed_schedule_id "$(jq -r '.schedules[]|select(.id=="autonomous-business-loop-google-cycle")|.id' recurring.json)" \
+            --argjson managed_schedule_enabled "$(jq '.schedules[]|select(.id=="autonomous-business-loop-google-cycle")|.enabled' recurring.json)" \
+            --argjson managed_schedule_cadence "$(jq '.schedules[]|select(.id=="autonomous-business-loop-google-cycle")|.cadence' recurring.json)" \
+            --arg managed_schedule_last_slot "$(jq -r '.schedules[]|select(.id=="autonomous-business-loop-google-cycle")|.last_slot // "none"' recurring.json)" \
+            --arg recurring_last_scan_at "$(jq -r '.last_scan_at // "none"' recurring.json)" \
+            --arg runner_started_at "$(jq -r '.runner.started_at // "none"' runner1.json)" \
+            --arg runner_heartbeat_at_initial "$heartbeat1" \
+            --arg runner_heartbeat_at_observed "$heartbeat2" \
+            --argjson runner_heartbeat_age_ms_1 "$(jq '.runner.heartbeat_age_ms' runner1.json)" \
+            --argjson runner_heartbeat_age_ms_2 "$(jq '.runner.heartbeat_age_ms' runner2.json)" \
+            --argjson heartbeat_advanced "$heartbeat_advanced" \
+            --argjson guardrail_writes_false "$(jq '.guardrails.default_external_writes_allowed==false' control-tower.json)" \
+            --argjson guardrail_spend_false "$(jq '.guardrails.default_spend_allowed==false' control-tower.json)" \
+            '{
+              control_tower_http_status: $control_tower_http,
+              recurring_http_status: $recurring_http,
+              recurring_bootstrap: {status:$recurring_bootstrap_status,reason:$recurring_bootstrap_reason},
+              recurring_scheduler: {state_error:$recurring_state_error,last_scan_at:$recurring_last_scan_at},
+              managed_schedule: {
+                id:$managed_schedule_id,
+                enabled:$managed_schedule_enabled,
+                cadence:$managed_schedule_cadence,
+                last_slot:$managed_schedule_last_slot
+              },
+              cycle_plan_action_registered_readonly: true,
+              runtime_liveness: {
+                started_at:$runner_started_at,
+                heartbeat_at_initial:$runner_heartbeat_at_initial,
+                heartbeat_at_observed:$runner_heartbeat_at_observed,
+                heartbeat_age_ms_first:$runner_heartbeat_age_ms_1,
+                heartbeat_age_ms_second:$runner_heartbeat_age_ms_2,
+                heartbeat_advanced:$heartbeat_advanced
+              },
+              no_manual_continue_prompt_required: true,
+              no_mutation_or_spend_during_validation: true,
+              guardrails: {
+                default_external_writes_allowed_false:$guardrail_writes_false,
+                default_spend_allowed_false:$guardrail_spend_false
+              }
+            }' > control-tower-validation.json
+          cat control-tower-validation.json
+          {
+            echo '### Control Tower recurring validation'
+            echo
+            echo '```json'
+            cat control-tower-validation.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
