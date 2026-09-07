@@ -25,6 +25,7 @@ const DEVICE = {0:"UNSPECIFIED",1:"UNKNOWN",2:"MOBILE",3:"TABLET",4:"DESKTOP",5:
 const DAY = {0:"UNSPECIFIED",1:"UNKNOWN",2:"MONDAY",3:"TUESDAY",4:"WEDNESDAY",5:"THURSDAY",6:"FRIDAY",7:"SATURDAY",8:"SUNDAY"};
 const GEO_TYPE = {0:"UNSPECIFIED",1:"UNKNOWN",2:"AREA_OF_INTEREST",3:"LOCATION_OF_PRESENCE"};
 const CRITERION_TYPE = {0:"UNSPECIFIED",1:"UNKNOWN",2:"KEYWORD",3:"PLACEMENT",4:"MOBILE_APP_CATEGORY",5:"MOBILE_APPLICATION",6:"BRAND",7:"LOCATION",8:"DEVICE",9:"AD_SCHEDULE",10:"AGE_RANGE",11:"GENDER",12:"INCOME_RANGE",13:"PARENTAL_STATUS",14:"YOUTUBE_VIDEO",15:"YOUTUBE_CHANNEL",16:"USER_LIST",17:"PROXIMITY",18:"TOPIC",19:"LISTING_SCOPE",20:"LANGUAGE"};
+const APPROVAL_STATUS = {0:"UNSPECIFIED",1:"UNKNOWN",2:"APPROVED",3:"DISAPPROVED",4:"PENDING_REVIEW",5:"UNDER_REVIEW"};
 
 function validateInput({ customer, campaignId, start, end }) {
   if (!customer || typeof customer.query !== "function") throw new TypeError("customer.query is required");
@@ -42,18 +43,6 @@ function metricFields(row) {
     conversions: Number(row.metrics?.conversions || 0),
     conversion_value: Number(row.metrics?.conversions_value || 0),
   };
-}
-
-function normalizePolicyTopicEntries(entries) {
-  return (entries || []).map((entry) => ({
-    topic: entry?.topic || null,
-    type: entry?.type || null,
-    evidences: (entry?.evidences || []).map((evidence) => ({
-      text_list: evidence?.text_list || null,
-      website_list: evidence?.website_list || null,
-      destination_text_list: evidence?.destination_text_list || null,
-    })),
-  }));
 }
 
 async function collectCampaignSearchTerms({ customer, campaignId, start, end }) {
@@ -310,9 +299,7 @@ async function collectCampaignConfiguredDiagnostics({ customer, campaignId }) {
         ad_group_criterion.primary_status_reasons,
         ad_group_criterion.system_serving_status,
         ad_group_criterion.approval_status,
-        ad_group_criterion.policy_summary.approval_status,
-        ad_group_criterion.policy_summary.review_status,
-        ad_group_criterion.policy_summary.policy_topic_entries,
+        ad_group_criterion.disapproval_reasons,
         ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type,
         ad_group_criterion.negative
       FROM ad_group_criterion
@@ -347,11 +334,10 @@ async function collectCampaignConfiguredDiagnostics({ customer, campaignId }) {
     primary_status: enumName(row.ad_group_criterion?.primary_status, PRIMARY_STATUS),
     primary_status_reasons: row.ad_group_criterion?.primary_status_reasons || [],
     serving_status: row.ad_group_criterion?.system_serving_status || null,
-    approval_status: row.ad_group_criterion?.approval_status || null,
+    approval_status: enumName(row.ad_group_criterion?.approval_status, APPROVAL_STATUS),
     policy: {
-      approval_status: row.ad_group_criterion?.policy_summary?.approval_status || null,
-      review_status: row.ad_group_criterion?.policy_summary?.review_status || null,
-      topics: normalizePolicyTopicEntries(row.ad_group_criterion?.policy_summary?.policy_topic_entries),
+      approval_status: enumName(row.ad_group_criterion?.approval_status, APPROVAL_STATUS),
+      disapproval_reasons: row.ad_group_criterion?.disapproval_reasons || [],
     },
   }));
   const positiveKeywordIndex = new Set(keywordDiagnostics.filter((entry) => !entry.negative && entry.keyword).map((entry) => String(entry.keyword).trim().toLowerCase()));

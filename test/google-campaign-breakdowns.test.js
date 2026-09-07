@@ -128,7 +128,7 @@ test('configured diagnostics expose schedule, targeting, bidding, budget, status
           primary_status_reasons: [],
           system_serving_status: 'ELIGIBLE',
           approval_status: 'APPROVED',
-          policy_summary: { approval_status: 'APPROVED', review_status: 'REVIEWED', policy_topic_entries: [] },
+          disapproval_reasons: [],
           keyword: { text: 'pizza berlin', match_type: 'PHRASE' },
           negative: false,
         } }];
@@ -143,6 +143,7 @@ test('configured diagnostics expose schedule, targeting, bidding, budget, status
   assert.equal(result.location_targeting[0].geo_target_constant, 'geoTargetConstants/2276');
   assert.equal(result.language_targeting[0].language_constant, 'languageConstants/1000');
   assert.equal(result.keyword_diagnostics[0].policy.approval_status, 'APPROVED');
+  assert.deepEqual(result.keyword_diagnostics[0].policy.disapproval_reasons, []);
   assert.equal(result.ad_group_statuses[0].primary_status, 'ELIGIBLE');
 });
 
