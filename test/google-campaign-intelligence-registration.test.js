@@ -17,17 +17,17 @@ test("Google campaign intelligence route is registered before the 404 fallback",
 test("Google campaign intelligence route reuses the protected read-only dependencies", () => {
   assert.match(
     server,
-    /installGoogleCampaignIntelligenceRoute\(\{[\s\S]*?app,[\s\S]*?requireApiKey,[\s\S]*?checkGoogleConfig,[\s\S]*?getGoogleCustomer,[\s\S]*?cleanGoogleError,[\s\S]*?\}\);/
+    /installGoogleCampaignIntelligenceRoute\(\{[\s\S]*?app,[\s\S]*?requireApiKey,[\s\S]*?checkGoogleConfig,[\s\S]*?parseGoogleReadMode,[\s\S]*?googleTimezone,[\s\S]*?getGoogleCustomer,[\s\S]*?cleanGoogleError,[\s\S]*?\}\);/
   );
 });
 
 test("Google campaign intelligence response includes the complete reader diagnostics", () => {
   const route = fs.readFileSync(path.join(__dirname, "..", "google-campaign-intelligence-route.js"), "utf8");
-  for (const field of ["overview", "ad_groups", "search_terms", "keywords", "devices", "hours", "geography", "rsa_ads", "rsa_analysis", "conversion_actions", "negative_keywords", "exact_date_range"]) {
+  for (const field of ["overview", "ad_groups", "search_terms", "keywords", "devices", "hours", "geography", "rsa_ads", "rsa_analysis", "conversion_actions", "negative_keywords", "exact_date_range", "configured_state", "observed_performance", "inferred_diagnosis", "campaign_scheduled_to_run_now"]) {
     assert.ok(route.includes(field), `${field} missing from intelligence route`);
   }
   assert.ok(route.includes("writes_allowed:false"));
   assert.ok(route.includes("execution_allowed:false"));
   assert.ok(route.includes("spend_allowed:false"));
-  assert.ok(route.includes("reader_version:4"));
+  assert.ok(route.includes("reader_version:5"));
 });

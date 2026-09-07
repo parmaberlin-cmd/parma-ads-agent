@@ -179,7 +179,11 @@ function installMcp(app, { env = process.env, store, google, read, now } = {}) {
     const server = new McpServer({ name: 'parma-readonly', version: '0.1.0' });
     for (const definition of listTools()) {
       const inputSchema = definition.name === 'parma_campaign_intelligence'
-        ? z.object({ campaign_id: z.string().regex(/^\d{1,20}$/), days: z.number().int().min(0).max(90).optional() }).strict()
+        ? z.object({
+          campaign_id: z.string().regex(/^\d{1,20}$/),
+          days: z.number().int().min(0).max(90).optional(),
+          read_mode: z.enum(['historical', 'today_intraday']).optional(),
+        }).strict()
         : z.object({}).strict();
       server.registerTool(definition.name, { description: definition.description, annotations: definition.annotations, inputSchema },
         async args => tools.callTool(definition.name, args, req.auth));

@@ -7,6 +7,11 @@ const { GoogleAdsApi } = require("google-ads-api");
 const {
   installGoogleCampaignIntelligenceRoute,
 } = require("./google-campaign-intelligence-route");
+const {
+  DEFAULT_GOOGLE_TIMEZONE,
+  getGoogleDateRange,
+  parseGoogleReadMode,
+} = require("./google-time-utils");
 const { buildGoogleReadiness, buildMetaOverview } = require("./reporting");
 const { buildMetaDinnerProposal } = require("./proposals");
 const { auditInstagramContentCapability, auditInstagramLoginCapability } = require("./instagram-content-publishing");
@@ -477,22 +482,8 @@ function parseGoogleDays(value) {
   return Number.isInteger(days) && days >= 0 && days <= 90 ? days : null;
 }
 
-function formatGoogleDate(date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function getGoogleDateRange(days) {
-  const end = new Date();
-  end.setUTCHours(0, 0, 0, 0);
-  if (days > 0) end.setUTCDate(end.getUTCDate() - 1);
-
-  const start = new Date(end);
-  if (days > 0) start.setUTCDate(start.getUTCDate() - (days - 1));
-
-  return {
-    start: formatGoogleDate(start),
-    end: formatGoogleDate(end),
-  };
+function googleTimezone() {
+  return process.env.GOOGLE_ACCOUNT_TIMEZONE || DEFAULT_GOOGLE_TIMEZONE;
 }
 
 function checkGoogleConfig(res) {
@@ -556,7 +547,7 @@ function cleanGoogleError(error) {
 
 async function getGoogleCampaignMetrics(campaignId, days) {
   const customer = getGoogleCustomer();
-  const { start, end } = getGoogleDateRange(days);
+  const { start, end } = getGoogleDateRange({ days, readMode: "historical", timezone: googleTimezone() });
 
   const rows = await customer.query(`
     SELECT
@@ -1877,12 +1868,12 @@ async function handleGoogleCampaignMetrics(req, res) {
     });
   }
 
-  if (!days) {
+  if (days == null) {
     return res.status(400).json({
       success: false,
       source: "google_ads",
       campaign_id: campaignId,
-      error: "days must be an integer between 1 and 90",
+      error: "days must be an integer between 0 and 90; 0 means today",
     });
   }
 
@@ -1922,7 +1913,9 @@ installGoogleCampaignIntelligenceRoute({
   checkGoogleConfig,
   parseGoogleCampaignId,
   parseGoogleDays,
+  parseGoogleReadMode,
   getGoogleDateRange,
+  googleTimezone,
   getGoogleCustomer,
   cleanGoogleError,
 });

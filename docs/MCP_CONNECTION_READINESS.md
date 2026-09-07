@@ -38,7 +38,7 @@ labels; enabled:true is NOT a live connection acceptance test.
 | --- | --- |
 | parma_shadow_health | /health/agent-shadow-summary |
 | parma_google_test | /tools/google/test |
-| parma_campaign_intelligence | /tools/google/campaign/{digits}/intelligence?days=1..90 |
+| parma_campaign_intelligence | /tools/google/campaign/{digits}/intelligence?days=0..90&read_mode=historical\|today_intraday |
 
 Fixed loopback destination; no redirects/proxy/arbitrary URLs or methods; 30-second
 reader timeout; 2 MiB output; 32 KiB MCP request; 4 concurrent requests; 120/min global

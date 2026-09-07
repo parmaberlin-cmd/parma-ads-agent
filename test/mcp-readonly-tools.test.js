@@ -28,15 +28,21 @@ test('missing trusted adapters fail closed', () => {
 test('maps intelligence to a fixed GET route, preserving campaign IDs and diagnostics', async () => {
   const f = fixture();
   const result = await f.callTool('parma_campaign_intelligence', { campaign_id: '23276824770' });
-  assert.deepEqual(f.calls, [{ method: 'GET', path: '/tools/google/campaign/23276824770/intelligence', query: { days: 30 } }]);
+  assert.deepEqual(f.calls, [{ method: 'GET', path: '/tools/google/campaign/23276824770/intelligence', query: { days: 30, read_mode: 'historical' } }]);
   assert.equal(result.structuredContent.data.clicks, 17);
   assert.equal(result.structuredContent.writes_allowed, false);
 });
 
 test('maps days zero to an explicitly read-only today request', async () => {
   const f = fixture();
-  await f.callTool('parma_campaign_intelligence', { campaign_id: '23276824770', days: 0 });
-  assert.deepEqual(f.calls, [{ method: 'GET', path: '/tools/google/campaign/23276824770/intelligence', query: { days: 0 } }]);
+  await f.callTool('parma_campaign_intelligence', { campaign_id: '23276824770', read_mode: 'today_intraday' });
+  assert.deepEqual(f.calls, [{ method: 'GET', path: '/tools/google/campaign/23276824770/intelligence', query: { days: 30, read_mode: 'today_intraday' } }]);
+});
+
+test('preserves historical days=1 routing semantics', async () => {
+  const f = fixture();
+  await f.callTool('parma_campaign_intelligence', { campaign_id: '23276824770', days: 1 });
+  assert.deepEqual(f.calls, [{ method: 'GET', path: '/tools/google/campaign/23276824770/intelligence', query: { days: 1, read_mode: 'historical' } }]);
 });
 
 test('fixed health and Google test routes accept no arbitrary destinations', async () => {
@@ -54,6 +60,7 @@ for (const [name, args] of [
   ['parma_campaign_intelligence', { campaign_id: '1', days: -1 }],
   ['parma_campaign_intelligence', { campaign_id: '1', days: 91 }],
   ['parma_campaign_intelligence', { campaign_id: '1', days: '30' }],
+  ['parma_campaign_intelligence', { campaign_id: '1', read_mode: 'tomorrow' }],
 ]) {
   test(`rejects unsupported input: ${name} ${JSON.stringify(args)}`, async () => {
     const f = fixture();
