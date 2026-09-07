@@ -145,6 +145,13 @@ paths:
             minimum: 1
             maximum: 90
             default: 30
+        - name: read_mode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [historical, today_intraday]
+            default: historical
       responses:
         "200":
           description: OK
@@ -205,6 +212,13 @@ paths:
             minimum: 0
             maximum: 90
             default: 30
+        - name: read_mode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [historical, today_intraday]
+            default: historical
       responses:
         "200":
           description: OK

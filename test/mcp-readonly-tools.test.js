@@ -20,6 +20,23 @@ test('MCP preparation has only three explicitly read-only tools and fresh schema
   assert.equal(listTools()[0].inputSchema.properties.injection, undefined);
 });
 
+test('MCP campaign intelligence schema explicitly accepts today_intraday', () => {
+  const tool = listTools().find(t => t.name === 'parma_campaign_intelligence');
+  assert.deepEqual(tool.inputSchema.properties.read_mode, {
+    type: 'string',
+    enum: ['historical', 'today_intraday'],
+    default: 'historical',
+    description: 'historical keeps days-window semantics; today_intraday explicitly forces today in Europe/Berlin account timezone',
+  });
+  assert.deepEqual(tool.inputSchema.properties.days, {
+    type: 'integer',
+    minimum: 0,
+    maximum: 90,
+    default: 30,
+    description: '0 means today; 1 means yesterday; 2-90 are historical windows ending yesterday',
+  });
+});
+
 test('missing trusted adapters fail closed', () => {
   assert.throws(() => createReadOnlyTools());
   assert.throws(() => createReadOnlyTools({ authorize: () => true }));

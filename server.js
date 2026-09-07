@@ -545,9 +545,9 @@ function cleanGoogleError(error) {
   };
 }
 
-async function getGoogleCampaignMetrics(campaignId, days) {
+async function getGoogleCampaignMetrics(campaignId, days, readMode = "historical") {
   const customer = getGoogleCustomer();
-  const { start, end } = getGoogleDateRange({ days, readMode: "historical", timezone: googleTimezone() });
+  const { start, end } = getGoogleDateRange({ days, readMode, timezone: googleTimezone() });
 
   const rows = await customer.query(`
     SELECT
@@ -1859,6 +1859,7 @@ async function handleGoogleCampaignMetrics(req, res) {
 
   const campaignId = parseGoogleCampaignId(req.params.id);
   const days = parseGoogleDays(req.query.days);
+  const readMode = parseGoogleReadMode(req.query.read_mode);
 
   if (!campaignId) {
     return res.status(400).json({
@@ -1877,8 +1878,17 @@ async function handleGoogleCampaignMetrics(req, res) {
     });
   }
 
+  if (!readMode) {
+    return res.status(400).json({
+      success: false,
+      source: "google_ads",
+      campaign_id: campaignId,
+      error: "read_mode must be historical or today_intraday",
+    });
+  }
+
   try {
-    const metrics = await getGoogleCampaignMetrics(campaignId, days);
+    const metrics = await getGoogleCampaignMetrics(campaignId, days, readMode);
 
     res.json({
       success: true,

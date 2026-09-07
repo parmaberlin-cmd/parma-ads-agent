@@ -37,6 +37,24 @@ test("Google campaign metric routes are declared in OpenAPI and implemented by t
   assert.ok(server.includes("handleGoogleCampaignMetrics"), "shared Google campaign metric handler is missing");
 });
 
+test("Google campaign metrics endpoints expose read_mode with today_intraday", () => {
+  const operationBlocks = [
+    operationBlock(openapi, "operationId: getGoogleCampaignMetrics"),
+    operationBlock(openapi, "operationId: getCampaignMetrics"),
+  ];
+  for (const block of operationBlocks) {
+    assert.ok(block.includes("name: read_mode"), "metrics endpoint is missing read_mode parameter");
+    assert.ok(block.includes("enum: [historical, today_intraday]"), "metrics read_mode does not allow today_intraday");
+    assert.ok(block.includes("default: historical"), "metrics read_mode has no historical default");
+  }
+});
+
+test("Google metrics handler forwards read_mode into the reader date range", () => {
+  assert.ok(server.includes("const readMode = parseGoogleReadMode(req.query.read_mode)"));
+  assert.ok(server.includes("getGoogleCampaignMetrics(campaignId, days, readMode)"));
+  assert.match(server, /getGoogleDateRange\(\{ days, readMode, timezone: googleTimezone\(\) \}\)/);
+});
+
 test("complete Google campaign intelligence is declared as a protected read-only endpoint", () => {
   assert.ok(openapi.includes("/tools/google/campaign/{id}/intelligence:"));
   assert.ok(openapi.includes("operationId: getGoogleCampaignIntelligence"));
@@ -82,3 +100,10 @@ test("OpenAPI is served by the application", () => {
   assert.ok(server.includes('app.get("/openapi.yaml"'));
   assert.ok(server.includes('res.sendFile(path.join(__dirname, "openapi.yaml"))'));
 });
+
+function operationBlock(openapiText, operationId) {
+  const start = openapiText.indexOf(operationId);
+  assert.ok(start !== -1, `${operationId} missing`);
+  const nextPath = openapiText.indexOf("\n  /", start);
+  return openapiText.slice(start, nextPath === -1 ? openapiText.length : nextPath);
+}
