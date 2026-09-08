@@ -538,6 +538,10 @@ test('execute canary reuses the canonical audit store when caller omits auditSto
   assert.equal(result.status, 'INSTAGRAM_PUBLISH_VERIFIED');
   assert.equal(publishCalls, 1);
   assert.ok(result.context_fingerprint);
+  const serialized = JSON.stringify(result);
+  assert.equal(serialized.includes('audit_store'), false);
+  assert.equal(serialized.includes('Buffer'), false);
+  assert.equal(serialized.includes(AUDIT_KEY), false);
 });
 
 test('execute canary blocks before write when approved read path does not match', async t => {

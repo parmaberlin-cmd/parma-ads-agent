@@ -229,7 +229,7 @@ async function resolveInstagramOrganicExecutionContext({
     at: clockIso(now),
   });
 
-  return {
+  const result = {
     status: INSTAGRAM_CANARY_STATUSES.READY,
     username: resolvedUsername,
     media_type: mediaType,
@@ -238,7 +238,9 @@ async function resolveInstagramOrganicExecutionContext({
     content_hash: hash,
     authorization_id: auth?.authorization_id || null,
     capability,
-    audit_store: store,
+    audit_available: true,
+    audit_path: store.directory,
+    integrity_key_available: true,
     context_fingerprint: executionContextFingerprint({
       username: resolvedUsername,
       mediaUrl: httpsUrl(mediaUrl),
@@ -250,6 +252,8 @@ async function resolveInstagramOrganicExecutionContext({
     writes_executed: 0,
     real_instagram_publication_attempted: false,
   };
+  Object.defineProperty(result, '_audit_store', { value: store, enumerable: false });
+  return result;
 }
 
 async function validateOnlyInstagramCanary(options = {}) {
@@ -310,7 +314,7 @@ async function executeInstagramCanary({
     requireDurableMount,
   });
   if (prepared.status !== INSTAGRAM_CANARY_STATUSES.READY) return prepared;
-  const resolvedAuditStore = auditStore || prepared.audit_store;
+  const resolvedAuditStore = auditStore || prepared._audit_store;
   if (!resolvedAuditStore) return buildBlockedResult(['audit_storage_unavailable'], { real_instagram_publication_attempted: false });
 
   const mediaType = prepared.media_type;
