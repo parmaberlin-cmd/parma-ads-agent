@@ -489,6 +489,57 @@ test('execute canary reuses the approved Instagram Login context and never calls
   assert.equal(result.capability.resolved_read_path, 'instagram_login');
 });
 
+test('execute canary reuses the canonical audit store when caller omits auditStore', async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'instagram-canonical-audit-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  let publishCalls = 0;
+  const loginTransport = {
+    async get(endpoint) {
+      if (endpoint === '/me') return { id: '123', user_id: '123', username: 'parma.divinibenedetti', account_type: 'BUSINESS', media_count: 25 };
+      if (endpoint === '/me/media') return { data: [] };
+      if (endpoint === '/me/insights') return { data: [] };
+      if (endpoint === '/111') return { id: '111', status_code: 'FINISHED', status: 'FINISHED' };
+      if (endpoint === '/222') {
+        return {
+          id: '222',
+          media_type: 'REELS',
+          media_product_type: 'REELS',
+          permalink: 'https://www.instagram.com/p/parma-canary/',
+          timestamp: new Date(now()).toISOString(),
+          username: 'parma.divinibenedetti',
+        };
+      }
+      if (endpoint === '/222/insights') return { data: [] };
+      throw new Error(`unexpected get ${endpoint}`);
+    },
+    async post(endpoint) {
+      if (endpoint === '/123/media') return { id: '111' };
+      if (endpoint === '/123/media_publish') { publishCalls += 1; return { id: '222' }; }
+      throw new Error(`unexpected post ${endpoint}`);
+    },
+  };
+
+  const result = await executeInstagramCanary({
+    env: instagramEnv({
+      INSTAGRAM_ORGANIC_AUDIT_INTEGRITY_KEY: AUDIT_KEY,
+      INSTAGRAM_ORGANIC_AUDIT_PATH: directory,
+    }),
+    now,
+    transport: loginTransport,
+    loginTransport,
+    preferredReadPath: 'instagram_login',
+    requireDurableMount: false,
+    adAccountId: 'act_123',
+    instagramUserId: '123',
+    mediaAsset: { media_type: 'REELS', video_url: 'https://cdn.example.com/video.mp4', caption: 'Parma fresh pasta' },
+    authorization: instagramAuth(),
+  });
+
+  assert.equal(result.status, 'INSTAGRAM_PUBLISH_VERIFIED');
+  assert.equal(publishCalls, 1);
+  assert.ok(result.context_fingerprint);
+});
+
 test('execute canary blocks before write when approved read path does not match', async t => {
   const store = makeStore(t);
   let publishCalls = 0;

@@ -52,6 +52,17 @@ function contentHash(mediaUrl, caption, mediaType) {
   return sha256({ media_url: mediaUrl, caption: caption || '', media_type: mediaType });
 }
 
+function executionContextFingerprint({ username, mediaUrl, mediaType, caption, hash, resolvedReadPath }) {
+  return sha256({
+    username,
+    media_url: mediaUrl,
+    media_type: mediaType,
+    caption: caption || '',
+    content_hash: hash,
+    resolved_read_path: resolvedReadPath,
+  });
+}
+
 function contentPolicyPreflight({ mediaType, caption, videoUrl }) {
   const blockers = [];
   const type = validateMediaType(mediaType);
@@ -123,6 +134,7 @@ async function resolveInstagramOrganicExecutionContext({
   existingMediaIds = null,
   loginTransport = null,
   preferredReadPath = null,
+  requireDurableMount = true,
 } = {}) {
   const state = canaryEnvState(env);
   const resolvedUsername = String(username || state.username || 'parma.divinibenedetti').toLowerCase();
@@ -150,7 +162,7 @@ async function resolveInstagramOrganicExecutionContext({
   let store = auditStore;
   if (!store) {
     try {
-      store = createInstagramOrganicAuditStore({ env, now, requireDurableMount: true });
+      store = createInstagramOrganicAuditStore({ env, now, requireDurableMount });
     } catch {
       blockers.push('audit_storage_unavailable');
     }
@@ -226,6 +238,15 @@ async function resolveInstagramOrganicExecutionContext({
     content_hash: hash,
     authorization_id: auth?.authorization_id || null,
     capability,
+    audit_store: store,
+    context_fingerprint: executionContextFingerprint({
+      username: resolvedUsername,
+      mediaUrl: httpsUrl(mediaUrl),
+      mediaType,
+      caption,
+      hash,
+      resolvedReadPath: capability.resolved_read_path,
+    }),
     writes_executed: 0,
     real_instagram_publication_attempted: false,
   };
@@ -270,6 +291,7 @@ async function executeInstagramCanary({
   readPublishedHashes,
   loginTransport,
   preferredReadPath,
+  requireDurableMount = true,
   instagramUserId,
   polling = {},
 } = {}) {
@@ -285,9 +307,11 @@ async function executeInstagramCanary({
     readPublishedHashes,
     loginTransport,
     preferredReadPath,
+    requireDurableMount,
   });
   if (prepared.status !== INSTAGRAM_CANARY_STATUSES.READY) return prepared;
-  if (!auditStore) return buildBlockedResult(['audit_storage_unavailable'], { real_instagram_publication_attempted: false });
+  const resolvedAuditStore = auditStore || prepared.audit_store;
+  if (!resolvedAuditStore) return buildBlockedResult(['audit_storage_unavailable'], { real_instagram_publication_attempted: false });
 
   const mediaType = prepared.media_type;
   const caption = prepared.caption;
@@ -300,7 +324,7 @@ async function executeInstagramCanary({
     return buildBlockedResult(['instagram_execution_transport_required'], { real_instagram_publication_attempted: false });
   }
 
-  auditStore.append('audit', {
+  resolvedAuditStore.append('audit', {
     phase: 'instagram_canary_authorized',
     authorization_id: prepared.authorization_id,
     at: clockIso(now),
@@ -314,7 +338,7 @@ async function executeInstagramCanary({
     if (!container) throw new Error('media_container_id_missing');
     await pollContainerUntilFinished({ transport: executionTransport, containerId: container, now, ...polling });
   } catch (error) {
-    auditStore.append('audit', {
+    resolvedAuditStore.append('audit', {
       phase: 'instagram_container_failed',
       error: error.message,
       at: clockIso(now),
@@ -337,13 +361,13 @@ async function executeInstagramCanary({
   const publishResponse = await publishMedia({ transport: executionTransport, instagramUserId: userId, containerId });
   const mediaId = publishResponse?.id || publishResponse?.media_id;
   if (!mediaId) {
-    auditStore.append('audit', { phase: 'instagram_publish_id_missing', at: clockIso(now) });
+    resolvedAuditStore.append('audit', { phase: 'instagram_publish_id_missing', at: clockIso(now) });
     return buildBlockedResult(['instagram_publish_id_missing'], { real_instagram_publication_attempted: true });
   }
 
   const verification = await verifyPublishedMedia({ transport: executionTransport, mediaId });
   if (!verification.published || !verification.media?.permalink) {
-    auditStore.append('audit', { phase: 'instagram_verification_failed', verification, at: clockIso(now) });
+    resolvedAuditStore.append('audit', { phase: 'instagram_verification_failed', verification, at: clockIso(now) });
     return buildBlockedResult(['instagram_publication_not_verified'], { verification, real_instagram_publication_attempted: true });
   }
 
@@ -354,7 +378,7 @@ async function executeInstagramCanary({
     insights = null;
   }
 
-  auditStore.append('state', {
+  resolvedAuditStore.append('state', {
     phase: 'instagram_canary_verified',
     username: prepared.username,
     media_type: mediaType,
@@ -383,6 +407,7 @@ async function executeInstagramCanary({
       verification_result: verification.published,
       insights_available: Boolean(insights),
       capability: prepared.capability,
+      context_fingerprint: prepared.context_fingerprint,
       writes_executed: 1,
     real_instagram_publication_attempted: true,
   };
