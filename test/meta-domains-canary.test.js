@@ -674,6 +674,9 @@ test('Instagram canary handles container ERROR, EXPIRED, and polling timeout', a
     });
     assert.equal(result.status, status === 'ERROR' ? 'CONTAINER_FAILED' : 'CONTAINER_EXPIRED');
     assert.equal(result.real_instagram_publication_attempted, false);
+    assert.equal(result.container_id, '111');
+    assert.equal(result.create_media_container_calls, 1);
+    assert.equal(result.media_publish_calls, 0);
   }
 
   const f = instagramFixture(t);
@@ -689,6 +692,9 @@ test('Instagram canary handles container ERROR, EXPIRED, and polling timeout', a
     polling: { timeoutMs: 0, intervalMs: 1 },
   });
   assert.equal(timeout.status, 'POLLING_TIMEOUT');
+  assert.equal(timeout.container_id, '111');
+  assert.equal(timeout.create_media_container_calls, 1);
+  assert.equal(timeout.media_publish_calls, 0);
 });
 
 test('Instagram duplicate prevention and missing media asset fail before publish', async t => {

@@ -345,9 +345,12 @@ async function executeInstagramCanary({
   });
 
   let container;
+  let createMediaContainerCalls = 0;
+  let mediaPublishCalls = 0;
   try {
     const payload = buildContainerPayload({ mediaType, videoUrl: mediaUrl, caption, shareToFeed: true });
     const response = await createMediaContainer({ transport: executionTransport, instagramUserId: userId, mediaType, videoUrl: mediaUrl, caption, shareToFeed: true });
+    createMediaContainerCalls += 1;
     container = response?.id || response?.container_id;
     if (!container) throw new Error('media_container_id_missing');
     await pollContainerUntilFinished({ transport: executionTransport, containerId: container, now, ...polling });
@@ -355,6 +358,7 @@ async function executeInstagramCanary({
     resolvedAuditStore.append('audit', {
       phase: 'instagram_container_failed',
       error: error.message,
+      container_id: container ? String(container) : null,
       at: clockIso(now),
     });
     return {
@@ -366,6 +370,11 @@ async function executeInstagramCanary({
             ? INSTAGRAM_CANARY_STATUSES.CONTAINER_FAILED
             : 'CONTAINER_FAILED',
       error: error.message,
+      container_id: container ? String(container) : null,
+      execution_path: prepared.capability?.resolved_read_path || null,
+      context_fingerprint: prepared.context_fingerprint || null,
+      create_media_container_calls: createMediaContainerCalls,
+      media_publish_calls: mediaPublishCalls,
       writes_executed: 0,
       real_instagram_publication_attempted: false,
     };
@@ -373,6 +382,7 @@ async function executeInstagramCanary({
 
   const containerId = String(container);
   const publishResponse = await publishMedia({ transport: executionTransport, instagramUserId: userId, containerId });
+  mediaPublishCalls += 1;
   const mediaId = publishResponse?.id || publishResponse?.media_id;
   if (!mediaId) {
     resolvedAuditStore.append('audit', { phase: 'instagram_publish_id_missing', at: clockIso(now) });
