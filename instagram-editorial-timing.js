@@ -175,6 +175,7 @@ class InstagramEditorialScheduler {
       account: pkg.account,
       content_fingerprint: pkg.content_fingerprint,
       package_fingerprint: pkg.package_fingerprint || null,
+      serialized_package: Buffer.from(JSON.stringify(pkg)).toString('base64'),
       schedule_fingerprint: fingerprint,
       earliest_publish_at: pkg.earliest_publish_at,
       preferred_publish_at: pkg.preferred_publish_at || null,
@@ -219,17 +220,19 @@ class InstagramEditorialScheduler {
     );
     const results = [];
     for (const record of due) {
-      const pkg = {
-        publication_id: record.payload.publication_id,
-        account: record.payload.account,
-        content_fingerprint: record.payload.content_fingerprint,
-        package_fingerprint: record.payload.package_fingerprint,
-        timezone: record.payload.timezone,
-        earliest_publish_at: record.payload.earliest_publish_at,
-        preferred_publish_at: record.payload.preferred_publish_at,
-        latest_publish_at: record.payload.latest_publish_at,
-        authorization_expires_at: record.payload.window_expires_at,
-      };
+      const pkg = record.payload.serialized_package
+        ? JSON.parse(Buffer.from(record.payload.serialized_package, 'base64').toString('utf8'))
+        : {
+            publication_id: record.payload.publication_id,
+            account: record.payload.account,
+            content_fingerprint: record.payload.content_fingerprint,
+            package_fingerprint: record.payload.package_fingerprint,
+            timezone: record.payload.timezone,
+            earliest_publish_at: record.payload.earliest_publish_at,
+            preferred_publish_at: record.payload.preferred_publish_at,
+            latest_publish_at: record.payload.latest_publish_at,
+            authorization_expires_at: record.payload.window_expires_at,
+          };
       const timing = evaluateEditorialTiming({
         package: pkg,
         technical_ready,
