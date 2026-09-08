@@ -199,7 +199,10 @@ async function validateOnlyInstagramCanary({
     username: resolvedUsername,
   });
   if (!capability.capabilities.publish) blockers.push('publishing_permission_not_verified');
-  if (!capability.checks.instagram_account_discovered || capability.username !== resolvedUsername) blockers.push('instagram_username_not_verified');
+  const usernameVerified = capability.resolved_read_path === 'instagram_login'
+    ? capability.checks.account_read === true && capability.checks.username_match === true
+    : capability.checks.instagram_account_discovered === true && capability.username === resolvedUsername;
+  if (!usernameVerified) blockers.push('instagram_username_not_verified');
   if (capability.blockers.length) blockers.push(...capability.blockers);
   if (blockers.length) return buildBlockedResult(blockers, { capability, real_instagram_publication_attempted: false });
 
