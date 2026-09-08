@@ -165,3 +165,26 @@ test('missing technical readiness blocks with zero provider writes', () => {
   assert.equal(result.status, EDITORIAL_READINESS_STATUS.BLOCKED);
   assert.equal(result.provider_writes_allowed, false);
 });
+
+test('active scheduler wakes automatically and executes at most once', async t => {
+  const store = makeStore(t);
+  const scheduler = new InstagramEditorialScheduler({ store, now });
+  const pkg = packageFixture();
+  scheduler.schedule(pkg);
+  current = Date.parse('2026-09-08T12:00:00.000Z');
+  let executions = 0;
+  const execute = async () => {
+    executions += 1;
+    return { status: 'INSTAGRAM_PUBLISH_VERIFIED', provider_writes: 1 };
+  };
+  scheduler.start({
+    technical_ready: true,
+    editorial_ready: true,
+    execute,
+    intervalMs: 10,
+  });
+  await new Promise(resolve => setTimeout(resolve, 45));
+  scheduler.stop();
+  assert.equal(executions, 1);
+  assert.equal(scheduler.hasExecutionIntent(pkg), true);
+});

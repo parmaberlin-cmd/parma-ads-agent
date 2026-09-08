@@ -16,6 +16,7 @@ const { buildGoogleReadiness, buildMetaOverview } = require("./reporting");
 const { buildMetaDinnerProposal } = require("./proposals");
 const { auditInstagramContentCapability, auditInstagramLoginCapability } = require("./instagram-content-publishing");
 const { registerInstagramMediaHost } = require("./instagram-media-host");
+const { startInstagramEditorialRuntime } = require("./instagram-editorial-runtime");
 const {
   APPROVAL_TOKEN: META_PAUSED_DRAFT_APPROVAL_TOKEN,
   ONE_SHOT_TRIGGER: META_PAUSED_DRAFT_ONE_SHOT_TRIGGER,
@@ -2222,4 +2223,12 @@ app.use((error, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`Parma Growth Operator running on port ${PORT}`);
   setImmediate(runMetaPausedDraftOneShot);
+  try {
+    startInstagramEditorialRuntime({ env: process.env });
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: "instagram_editorial_runtime_start_failed",
+      error: error.message,
+    }));
+  }
 });

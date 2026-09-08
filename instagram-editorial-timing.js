@@ -180,7 +180,7 @@ class InstagramEditorialScheduler {
       preferred_publish_at: pkg.preferred_publish_at || null,
       latest_publish_at: pkg.latest_publish_at,
       timezone: pkg.timezone || DEFAULT_TIMEZONE,
-      authorization_expires_at: pkg.authorization_expires_at || null,
+      window_expires_at: pkg.authorization_expires_at || null,
       at: new Date(this.now()).toISOString(),
     });
     return { status: 'SCHEDULED', publication_id: pkg.publication_id, fingerprint };
@@ -228,7 +228,7 @@ class InstagramEditorialScheduler {
         earliest_publish_at: record.payload.earliest_publish_at,
         preferred_publish_at: record.payload.preferred_publish_at,
         latest_publish_at: record.payload.latest_publish_at,
-        authorization_expires_at: record.payload.authorization_expires_at,
+        authorization_expires_at: record.payload.window_expires_at,
       };
       const timing = evaluateEditorialTiming({
         package: pkg,
@@ -253,6 +253,28 @@ class InstagramEditorialScheduler {
       }
     }
     return results;
+  }
+
+  start({ technical_ready = false, editorial_ready = false, execute, intervalMs = 60000 } = {}) {
+    if (typeof execute !== 'function') throw new Error('execute_callback_required');
+    if (this.timer) return this;
+    const run = async () => {
+      try {
+        await this.tick({ technical_ready, editorial_ready, execute });
+      } catch {
+        // No blind retry inside the same tick. Next interval may evaluate again
+        // only if no durable execution intent exists.
+      }
+    };
+    this.timer = setInterval(run, intervalMs);
+    this.timer.unref?.();
+    return this;
+  }
+
+  stop() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    return this;
   }
 }
 
