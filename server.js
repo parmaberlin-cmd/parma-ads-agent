@@ -15,6 +15,7 @@ const {
 const { buildGoogleReadiness, buildMetaOverview } = require("./reporting");
 const { buildMetaDinnerProposal } = require("./proposals");
 const { auditInstagramContentCapability, auditInstagramLoginCapability } = require("./instagram-content-publishing");
+const { registerInstagramMediaHost } = require("./instagram-media-host");
 const {
   APPROVAL_TOKEN: META_PAUSED_DRAFT_APPROVAL_TOKEN,
   ONE_SHOT_TRIGGER: META_PAUSED_DRAFT_ONE_SHOT_TRIGGER,
@@ -2172,6 +2173,8 @@ app.get(disabledGoogleSetupRoutes, (req, res) => {
 app.get("/openapi.yaml", (req, res) => {
   res.sendFile(path.join(__dirname, "openapi.yaml"));
 });
+
+registerInstagramMediaHost(app);
 
 app.use((req, res) => {
   res.status(404).json({
