@@ -477,7 +477,6 @@ test('execute canary reuses the approved Instagram Login context and never calls
     loginTransport,
     preferredReadPath: 'instagram_login',
     adAccountId: 'act_123',
-    instagramUserId: '123',
     mediaAsset: { media_type: 'REELS', video_url: 'https://cdn.example.com/video.mp4', caption: 'Parma fresh pasta' },
     auditStore: store,
     authorization: instagramAuth(),
@@ -487,6 +486,43 @@ test('execute canary reuses the approved Instagram Login context and never calls
   assert.equal(facebookCalls, 0);
   assert.equal(publishCalls, 1);
   assert.equal(result.capability.resolved_read_path, 'instagram_login');
+});
+
+test('explicit Instagram user ID mismatch blocks execute before provider write', async t => {
+  const store = makeStore(t);
+  let publishCalls = 0;
+  const loginTransport = {
+    async get(endpoint) {
+      if (endpoint === '/me') return { id: '123', user_id: '123', username: 'parma.divinibenedetti', account_type: 'BUSINESS', media_count: 25 };
+      if (endpoint === '/me/media') return { data: [] };
+      if (endpoint === '/me/insights') return { data: [] };
+      throw new Error('unexpected');
+    },
+    async post() {
+      publishCalls += 1;
+      return { id: '222' };
+    },
+  };
+
+  const result = await executeInstagramCanary({
+    env: instagramEnv(),
+    now,
+    transport: loginTransport,
+    loginTransport,
+    preferredReadPath: 'instagram_login',
+    requireDurableMount: false,
+    adAccountId: 'act_123',
+    instagramUserId: '999',
+    mediaAsset: { media_type: 'REELS', video_url: 'https://cdn.example.com/video.mp4', caption: 'Parma fresh pasta' },
+    auditStore: store,
+    authorization: instagramAuth(),
+  });
+
+  assert.equal(result.status, 'BLOCKED');
+  assert.ok(result.blockers.includes('instagram_user_id_mismatch'));
+  assert.equal(publishCalls, 0);
+  assert.equal(result.writes_executed, 0);
+  assert.equal(result.real_instagram_publication_attempted, false);
 });
 
 test('execute canary reuses the canonical audit store when caller omits auditStore', async t => {

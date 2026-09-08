@@ -40,11 +40,12 @@ async function main() {
     adAccountId: env.META_AD_ACCOUNT_ID,
     username: env.INSTAGRAM_CANARY_USERNAME,
     mediaAsset,
+    instagramUserId: env.INSTAGRAM_CANARY_IG_USER_ID,
   };
 
   const result = mode === 'VALIDATE_ONLY'
     ? await validateOnlyInstagramCanary(common)
-    : await executeInstagramCanary({ ...common, instagramUserId: env.INSTAGRAM_CANARY_IG_USER_ID });
+    : await executeInstagramCanary(common);
   console.log(JSON.stringify(result));
 }
 

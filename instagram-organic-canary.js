@@ -135,6 +135,7 @@ async function resolveInstagramOrganicExecutionContext({
   loginTransport = null,
   preferredReadPath = null,
   requireDurableMount = true,
+  instagramUserId = null,
 } = {}) {
   const state = canaryEnvState(env);
   const resolvedUsername = String(username || state.username || 'parma.divinibenedetti').toLowerCase();
@@ -212,6 +213,13 @@ async function resolveInstagramOrganicExecutionContext({
     username: resolvedUsername,
     preferredReadPath,
   });
+  const canonicalInstagramUserId = capability.account?.user_id || capability.account?.id || capability.instagram_user_id || null;
+  if (instagramUserId) {
+    if (!canonicalInstagramUserId || String(instagramUserId) !== String(canonicalInstagramUserId)) {
+      blockers.push('instagram_user_id_mismatch');
+    }
+  }
+  if (!canonicalInstagramUserId) blockers.push('instagram_user_id_required');
   if (!capability.capabilities.publish) blockers.push('publishing_permission_not_verified');
   const usernameVerified = capability.resolved_read_path === 'instagram_login'
     ? capability.checks.account_read === true && capability.checks.username_match === true
@@ -238,6 +246,7 @@ async function resolveInstagramOrganicExecutionContext({
     content_hash: hash,
     authorization_id: auth?.authorization_id || null,
     capability,
+    instagram_user_id: canonicalInstagramUserId,
     audit_available: true,
     audit_path: store.directory,
     integrity_key_available: true,
@@ -312,6 +321,7 @@ async function executeInstagramCanary({
     loginTransport,
     preferredReadPath,
     requireDurableMount,
+    instagramUserId,
   });
   if (prepared.status !== INSTAGRAM_CANARY_STATUSES.READY) return prepared;
   const resolvedAuditStore = auditStore || prepared._audit_store;
@@ -321,7 +331,7 @@ async function executeInstagramCanary({
   const caption = prepared.caption;
   const mediaUrl = prepared.media_url;
   const hash = prepared.content_hash;
-  const userId = instagramUserId;
+  const userId = instagramUserId || prepared.instagram_user_id;
   if (!userId) return buildBlockedResult(['instagram_user_id_required'], { real_instagram_publication_attempted: false });
   const executionTransport = prepared.capability?.resolved_read_path === 'instagram_login' ? loginTransport : transport;
   if (!executionTransport || typeof executionTransport.get !== 'function' || typeof executionTransport.post !== 'function') {
