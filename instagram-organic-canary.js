@@ -110,7 +110,7 @@ function buildInstagramCanaryAuthorization({
   };
 }
 
-async function validateOnlyInstagramCanary({
+async function resolveInstagramOrganicExecutionContext({
   env = process.env,
   now = Date.now,
   transport,
@@ -122,6 +122,7 @@ async function validateOnlyInstagramCanary({
   readPublishedHashes = null,
   existingMediaIds = null,
   loginTransport = null,
+  preferredReadPath = null,
 } = {}) {
   const state = canaryEnvState(env);
   const resolvedUsername = String(username || state.username || 'parma.divinibenedetti').toLowerCase();
@@ -197,6 +198,7 @@ async function validateOnlyInstagramCanary({
     loginTransport,
     adAccountId,
     username: resolvedUsername,
+    preferredReadPath,
   });
   if (!capability.capabilities.publish) blockers.push('publishing_permission_not_verified');
   const usernameVerified = capability.resolved_read_path === 'instagram_login'
@@ -227,6 +229,10 @@ async function validateOnlyInstagramCanary({
     writes_executed: 0,
     real_instagram_publication_attempted: false,
   };
+}
+
+async function validateOnlyInstagramCanary(options = {}) {
+  return resolveInstagramOrganicExecutionContext(options);
 }
 
 async function pollContainerUntilFinished({
@@ -262,10 +268,12 @@ async function executeInstagramCanary({
   authorization,
   auditStore,
   readPublishedHashes,
+  loginTransport,
+  preferredReadPath,
   instagramUserId,
   polling = {},
 } = {}) {
-  const prepared = await validateOnlyInstagramCanary({
+  const prepared = await resolveInstagramOrganicExecutionContext({
     env,
     now,
     transport,
@@ -275,6 +283,8 @@ async function executeInstagramCanary({
     authorization,
     auditStore,
     readPublishedHashes,
+    loginTransport,
+    preferredReadPath,
   });
   if (prepared.status !== INSTAGRAM_CANARY_STATUSES.READY) return prepared;
   if (!auditStore) return buildBlockedResult(['audit_storage_unavailable'], { real_instagram_publication_attempted: false });
@@ -285,6 +295,10 @@ async function executeInstagramCanary({
   const hash = prepared.content_hash;
   const userId = instagramUserId;
   if (!userId) return buildBlockedResult(['instagram_user_id_required'], { real_instagram_publication_attempted: false });
+  const executionTransport = prepared.capability?.resolved_read_path === 'instagram_login' ? loginTransport : transport;
+  if (!executionTransport || typeof executionTransport.get !== 'function' || typeof executionTransport.post !== 'function') {
+    return buildBlockedResult(['instagram_execution_transport_required'], { real_instagram_publication_attempted: false });
+  }
 
   auditStore.append('audit', {
     phase: 'instagram_canary_authorized',
@@ -295,10 +309,10 @@ async function executeInstagramCanary({
   let container;
   try {
     const payload = buildContainerPayload({ mediaType, videoUrl: mediaUrl, caption, shareToFeed: true });
-    const response = await createMediaContainer({ transport, instagramUserId: userId, mediaType, videoUrl: mediaUrl, caption, shareToFeed: true });
+    const response = await createMediaContainer({ transport: executionTransport, instagramUserId: userId, mediaType, videoUrl: mediaUrl, caption, shareToFeed: true });
     container = response?.id || response?.container_id;
     if (!container) throw new Error('media_container_id_missing');
-    await pollContainerUntilFinished({ transport, containerId: container, now, ...polling });
+    await pollContainerUntilFinished({ transport: executionTransport, containerId: container, now, ...polling });
   } catch (error) {
     auditStore.append('audit', {
       phase: 'instagram_container_failed',
@@ -320,14 +334,14 @@ async function executeInstagramCanary({
   }
 
   const containerId = String(container);
-  const publishResponse = await publishMedia({ transport, instagramUserId: userId, containerId });
+  const publishResponse = await publishMedia({ transport: executionTransport, instagramUserId: userId, containerId });
   const mediaId = publishResponse?.id || publishResponse?.media_id;
   if (!mediaId) {
     auditStore.append('audit', { phase: 'instagram_publish_id_missing', at: clockIso(now) });
     return buildBlockedResult(['instagram_publish_id_missing'], { real_instagram_publication_attempted: true });
   }
 
-  const verification = await verifyPublishedMedia({ transport, mediaId });
+  const verification = await verifyPublishedMedia({ transport: executionTransport, mediaId });
   if (!verification.published || !verification.media?.permalink) {
     auditStore.append('audit', { phase: 'instagram_verification_failed', verification, at: clockIso(now) });
     return buildBlockedResult(['instagram_publication_not_verified'], { verification, real_instagram_publication_attempted: true });
@@ -335,7 +349,7 @@ async function executeInstagramCanary({
 
   let insights = null;
   try {
-    insights = await readMediaInsights({ transport, mediaId });
+    insights = await readMediaInsights({ transport: executionTransport, mediaId });
   } catch {
     insights = null;
   }
@@ -366,9 +380,10 @@ async function executeInstagramCanary({
     container_id: containerId,
     publish_timestamp: clockIso(now),
     permalink: verification.media.permalink,
-    verification_result: verification.published,
-    insights_available: Boolean(insights),
-    writes_executed: 1,
+      verification_result: verification.published,
+      insights_available: Boolean(insights),
+      capability: prepared.capability,
+      writes_executed: 1,
     real_instagram_publication_attempted: true,
   };
 }
@@ -378,6 +393,7 @@ module.exports = {
   contentHash,
   contentPolicyPreflight,
   buildInstagramCanaryAuthorization,
+  resolveInstagramOrganicExecutionContext,
   validateOnlyInstagramCanary,
   pollContainerUntilFinished,
   executeInstagramCanary,

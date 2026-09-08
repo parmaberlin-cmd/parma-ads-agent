@@ -36,6 +36,7 @@ const {
 } = require('../meta-ads-experiment-engine');
 const {
   buildInstagramCanaryAuthorization,
+  resolveInstagramOrganicExecutionContext,
   validateOnlyInstagramCanary,
   executeInstagramCanary,
   contentPolicyPreflight,
@@ -429,6 +430,105 @@ test('Instagram canary prefers the verified Page-linked Instagram Business read 
   assert.equal(result.status, 'READY_FOR_INSTAGRAM_CANARY');
   assert.equal(loginCalls, 0);
   assert.equal(result.capability.resolved_read_path, 'facebook_page_linked_instagram_business');
+});
+
+test('execute canary reuses the approved Instagram Login context and never calls Facebook discovery', async t => {
+  const store = makeStore(t);
+  let facebookCalls = 0;
+  let publishCalls = 0;
+  const facebookTransport = {
+    async get() {
+      facebookCalls += 1;
+      throw new Error('facebook_path_should_not_be_called');
+    },
+  };
+  const loginTransport = {
+    async get(endpoint) {
+      if (endpoint === '/me') {
+        return { id: '123', user_id: '123', username: 'parma.divinibenedetti', account_type: 'BUSINESS', media_count: 25 };
+      }
+      if (endpoint === '/me/media') return { data: [] };
+      if (endpoint === '/me/insights') return { data: [] };
+      if (endpoint === '/111') return { id: '111', status_code: 'FINISHED', status: 'FINISHED' };
+      if (endpoint === '/222') {
+        return {
+          id: '222',
+          media_type: 'REELS',
+          media_product_type: 'REELS',
+          permalink: 'https://www.instagram.com/p/parma-canary/',
+          timestamp: new Date(now()).toISOString(),
+          username: 'parma.divinibenedetti',
+        };
+      }
+      if (endpoint === '/222/insights') return { data: [] };
+      throw new Error(`unexpected get ${endpoint}`);
+    },
+    async post(endpoint) {
+      if (endpoint === '/123/media') return { id: '111' };
+      if (endpoint === '/123/media_publish') { publishCalls += 1; return { id: '222' }; }
+      throw new Error(`unexpected post ${endpoint}`);
+    },
+  };
+
+  const result = await executeInstagramCanary({
+    env: instagramEnv(),
+    now,
+    transport: facebookTransport,
+    loginTransport,
+    preferredReadPath: 'instagram_login',
+    adAccountId: 'act_123',
+    instagramUserId: '123',
+    mediaAsset: { media_type: 'REELS', video_url: 'https://cdn.example.com/video.mp4', caption: 'Parma fresh pasta' },
+    auditStore: store,
+    authorization: instagramAuth(),
+  });
+
+  assert.equal(result.status, 'INSTAGRAM_PUBLISH_VERIFIED');
+  assert.equal(facebookCalls, 0);
+  assert.equal(publishCalls, 1);
+  assert.equal(result.capability.resolved_read_path, 'instagram_login');
+});
+
+test('execute canary blocks before write when approved read path does not match', async t => {
+  const store = makeStore(t);
+  let publishCalls = 0;
+  const facebookTransport = {
+    async get(endpoint) {
+      if (endpoint === '/me/permissions') throw new Error('denied');
+      if (endpoint === '/me/accounts') throw new Error('denied');
+      throw new Error('unexpected');
+    },
+  };
+  const loginTransport = {
+    async get(endpoint) {
+      if (endpoint === '/me') return { id: '123', user_id: '123', username: 'parma.divinibenedetti', account_type: 'BUSINESS', media_count: 25 };
+      if (endpoint === '/me/media') return { data: [] };
+      if (endpoint === '/me/insights') return { data: [] };
+      throw new Error('unexpected');
+    },
+    async post() {
+      publishCalls += 1;
+      return { id: '222' };
+    },
+  };
+
+  const result = await executeInstagramCanary({
+    env: instagramEnv(),
+    now,
+    transport: facebookTransport,
+    loginTransport,
+    preferredReadPath: 'facebook_page_linked_instagram_business',
+    adAccountId: 'act_123',
+    instagramUserId: '123',
+    mediaAsset: { media_type: 'REELS', video_url: 'https://cdn.example.com/video.mp4', caption: 'Parma fresh pasta' },
+    auditStore: store,
+    authorization: instagramAuth(),
+  });
+
+  assert.equal(result.status, 'BLOCKED');
+  assert.equal(publishCalls, 0);
+  assert.equal(result.writes_executed, 0);
+  assert.equal(result.real_instagram_publication_attempted, false);
 });
 
 test('Instagram canary blocks permission failure and username mismatch', async t => {

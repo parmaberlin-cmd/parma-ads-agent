@@ -3,7 +3,7 @@
 
 const {
   facebookGraphReadTransport,
-  instagramLoginReadTransport,
+  instagramLoginWriteTransport,
 } = require('../instagram-organic-read-path');
 const {
   validateOnlyInstagramCanary,
@@ -29,13 +29,14 @@ async function main() {
     ? facebookGraphReadTransport({ accessToken: env.META_ACCESS_TOKEN })
     : null;
   const loginTransport = env.META_ACCESS_TOKEN
-    ? instagramLoginReadTransport({ accessToken: env.META_ACCESS_TOKEN })
+    ? instagramLoginWriteTransport({ accessToken: env.META_ACCESS_TOKEN })
     : null;
 
   const common = {
     env,
     transport: facebookTransport,
     loginTransport,
+    preferredReadPath: env.INSTAGRAM_ORGANIC_CANARY_READ_PATH || 'instagram_login',
     adAccountId: env.META_AD_ACCOUNT_ID,
     username: env.INSTAGRAM_CANARY_USERNAME,
     mediaAsset,
