@@ -54,7 +54,7 @@ async function discoverStories({ transport } = {}) {
   };
 }
 
-function buildStoryPublicationPackage(input = {}) {
+function buildStoryPublicationPackage(input = {}, { now = Date.now } = {}) {
   const blockers = [];
   if (!input || typeof input !== 'object') return { ok: false, blockers: ['story_package_required'] };
   if (String(input.media_type || '').toUpperCase() !== 'STORIES') blockers.push('story_media_type_required');
@@ -64,7 +64,7 @@ function buildStoryPublicationPackage(input = {}) {
     const urlCheck = validateStableVideoUrl(input.media_url);
     if (!urlCheck.ok) blockers.push(...urlCheck.blockers);
   }
-  const packageCheck = validatePublicationPackage({ ...input, media_type: 'STORIES', caption: '' });
+  const packageCheck = validatePublicationPackage({ ...input, media_type: 'STORIES', caption: '' }, { now });
   if (!packageCheck.ok) blockers.push(...packageCheck.blockers);
   return {
     ok: blockers.length === 0,
@@ -74,7 +74,7 @@ function buildStoryPublicationPackage(input = {}) {
 }
 
 function validateStoryPublication(options = {}) {
-  const built = buildStoryPublicationPackage(options.publicationPackage);
+  const built = buildStoryPublicationPackage(options.publicationPackage, { now: options.now });
   if (!built.ok) {
     return {
       status: 'BLOCKED',
@@ -93,7 +93,7 @@ function validateStoryPublication(options = {}) {
 }
 
 function executeStoryPublication(options = {}) {
-  const built = buildStoryPublicationPackage(options.publicationPackage);
+  const built = buildStoryPublicationPackage(options.publicationPackage, { now: options.now });
   if (!built.ok) {
     return Promise.resolve({
       status: 'BLOCKED',

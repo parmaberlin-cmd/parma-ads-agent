@@ -85,10 +85,10 @@ test('official read path reports no currently discoverable Stories', async () =>
 });
 
 test('Story package rejects Reel package, caption, unsupported media, and signed URL', () => {
-  assert.equal(buildStoryPublicationPackage(storyPackage()).ok, true);
-  assert.equal(buildStoryPublicationPackage(storyPackage({ media_type: 'REELS' })).ok, false);
-  assert.equal(buildStoryPublicationPackage(storyPackage({ caption: 'not allowed' })).ok, false);
-  assert.equal(buildStoryPublicationPackage(storyPackage({ media_url: 'https://cdn.instagram.com/video.mp4?oh=signed' })).ok, false);
+  assert.equal(buildStoryPublicationPackage(storyPackage(), { now }).ok, true);
+  assert.equal(buildStoryPublicationPackage(storyPackage({ media_type: 'REELS' }), { now }).ok, false);
+  assert.equal(buildStoryPublicationPackage(storyPackage({ caption: 'not allowed' }), { now }).ok, false);
+  assert.equal(buildStoryPublicationPackage(storyPackage({ media_url: 'https://cdn.instagram.com/video.mp4?oh=signed' }), { now }).ok, false);
 });
 
 test('Story publication validates and executes through the existing controlled path exactly once', async t => {
@@ -153,5 +153,5 @@ test('Story and Reel domains remain isolated in package validation', () => {
   const story = storyPackage();
   assert.equal(story.media_type, 'STORIES');
   const reel = { ...story, media_type: 'REELS' };
-  assert.equal(buildStoryPublicationPackage(reel).ok, false);
+  assert.equal(buildStoryPublicationPackage(reel, { now }).ok, false);
 });

@@ -68,11 +68,11 @@ function loginTransport() {
 }
 
 test('publication package rejects temporary or signed Instagram CDN URLs', () => {
-  assert.equal(validatePublicationPackage(packageFixture()).ok, true);
-  const signed = validatePublicationPackage(packageFixture({ media_url: 'https://scontent-ber1-1.cdninstagram.com/video.mp4?oh=signed' }));
+  assert.equal(validatePublicationPackage(packageFixture(), { now }).ok, true);
+  const signed = validatePublicationPackage(packageFixture({ media_url: 'https://scontent-ber1-1.cdninstagram.com/video.mp4?oh=signed' }), { now });
   assert.equal(signed.ok, false);
   assert.ok(signed.blockers.includes('stable_video_url_must_not_be_signed'));
-  const missingAuth = validatePublicationPackage(packageFixture({ authorization: null }));
+  const missingAuth = validatePublicationPackage(packageFixture({ authorization: null }), { now });
   assert.equal(missingAuth.ok, false);
 });
 
