@@ -13,6 +13,15 @@ const PUBLICATION_INTERFACES = Object.freeze({
   EXECUTE: 'EXECUTE_PUBLICATION',
 });
 
+// Scheduling and execution-intent records are written by the editorial
+// scheduler before the publication path runs. They must never be mistaken for
+// a completed or in-flight publication attempt, otherwise the first real
+// publication after a durable schedule/intent is blocked as a duplicate.
+const NON_PUBLICATION_CHANGE_EVENTS = Object.freeze(new Set([
+  'instagram_editorial_schedule_created',
+  'instagram_editorial_execution_intent',
+]));
+
 function validatePublicationPackage(pkg, { now = Date.now } = {}) {
   const blockers = [];
   if (!pkg || typeof pkg !== 'object') return { ok: false, blockers: ['publication_package_required'] };
@@ -40,7 +49,10 @@ function validatePublicationPackage(pkg, { now = Date.now } = {}) {
 }
 
 function publicationRecordExists(store, publicationId) {
-  return store.list('change').some(record => record.payload?.publication_id === publicationId);
+  return store.list('change').some(record =>
+    record.payload?.publication_id === publicationId &&
+    !NON_PUBLICATION_CHANGE_EVENTS.has(record.payload?.kind_event)
+  );
 }
 
 function successfulAuthorizationAlreadyUsed(store, authorizationId) {

@@ -13,6 +13,7 @@ const {
   validateInstagramPublication,
   executeInstagramPublication,
 } = require('../instagram-organic-publication');
+const { InstagramEditorialScheduler } = require('../instagram-editorial-timing');
 
 const FIXED_NOW = Date.parse('2026-09-08T12:00:00.000Z');
 const now = () => FIXED_NOW;
@@ -170,4 +171,60 @@ test('publication idempotency survives a fresh durable store instance', async t 
   });
   assert.equal(duplicate.status, 'BLOCKED');
   assert.ok(duplicate.blockers.includes('duplicate_publication_blocked'));
+});
+
+test('editorial schedule and execution intent do not block the first real publication', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'publication-scheduled-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const store = makeStore(t, root);
+  const f = loginTransport();
+  const pkg = packageFixture();
+  const scheduler = new InstagramEditorialScheduler({ store, now });
+
+  // Same publication_id as the publication package, but carrying only the
+  // editorial scheduling fields written before any provider write happens.
+  const schedulePkg = {
+    publication_id: pkg.publication_id,
+    account: pkg.username,
+    content_fingerprint: '71b1b93840ccd3207bcbc91bf07b9d30f31058d001de8c93be2b9e6eff423a68',
+    timezone: 'Europe/Berlin',
+    earliest_publish_at: '2026-09-08T14:00:00+02:00',
+    preferred_publish_at: '2026-09-08T14:15:00+02:00',
+    latest_publish_at: '2026-09-08T15:00:00+02:00',
+    authorization_expires_at: '2026-09-08T15:30:00+02:00',
+  };
+
+  const scheduled = scheduler.schedule(schedulePkg);
+  assert.equal(scheduled.status, 'SCHEDULED');
+  scheduler.recordExecutionIntent(schedulePkg, 'EXECUTING');
+
+  const env = {
+    INSTAGRAM_ORGANIC_CANARY_ENABLED: 'true',
+    INSTAGRAM_ORGANIC_KILL_SWITCH: 'false',
+    INSTAGRAM_ORGANIC_AUDIT_INTEGRITY_KEY: '0123456789abcdef0123456789abcdef',
+    INSTAGRAM_ORGANIC_AUDIT_PATH: root,
+  };
+
+  const validated = await validateInstagramPublication({
+    publicationPackage: pkg,
+    env,
+    store,
+    transport: f.transport,
+    loginTransport: f.transport,
+    now,
+    requireDurableMount: false,
+  });
+  assert.equal(validated.status, 'READY_FOR_PUBLICATION');
+
+  const executed = await executeInstagramPublication({
+    publicationPackage: pkg,
+    env,
+    store,
+    transport: f.transport,
+    loginTransport: f.transport,
+    now,
+    requireDurableMount: false,
+  });
+  assert.equal(executed.status, 'INSTAGRAM_PUBLISH_VERIFIED');
+  assert.equal(f.getPublishCalls(), 1);
 });
