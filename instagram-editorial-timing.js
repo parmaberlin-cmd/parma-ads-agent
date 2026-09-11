@@ -229,7 +229,7 @@ class InstagramEditorialScheduler {
     });
   }
 
-  async tick({ technical_ready, editorial_ready, execute, reconcile = null }) {
+  async tick({ technical_ready, editorial_ready, execute, reconcile = null, execution_enabled = true }) {
     const due = this.store.list('change').filter(record =>
       record.payload?.kind_event === 'instagram_editorial_schedule_created' &&
       !hasScheduleExecuted(this.store, record.payload.schedule_fingerprint)
@@ -316,6 +316,19 @@ class InstagramEditorialScheduler {
           now: this.now,
         });
         results.push({ publication_id: pkg.publication_id, status: currentState.status, provider_writes: 0 });
+        continue;
+      }
+
+      if (execution_enabled !== true) {
+        if (!currentState || currentState.status !== PUBLICATION_STATES.SCHEDULED || currentState.reason !== 'provider_writes_frozen') {
+          markPublicationState(this.store, {
+            publicationId: pkg.publication_id,
+            status: PUBLICATION_STATES.SCHEDULED,
+            reason: 'provider_writes_frozen',
+            now: this.now,
+          });
+        }
+        results.push({ publication_id: pkg.publication_id, status: 'PROVIDER_WRITES_FROZEN', provider_writes: 0 });
         continue;
       }
 
@@ -420,12 +433,12 @@ class InstagramEditorialScheduler {
     return results;
   }
 
-  start({ technical_ready = false, editorial_ready = false, execute, reconcile = null, intervalMs = 60000 } = {}) {
+  start({ technical_ready = false, editorial_ready = false, execute, reconcile = null, execution_enabled = true, intervalMs = 60000 } = {}) {
     if (typeof execute !== 'function') throw new Error('execute_callback_required');
     if (this.timer) return this;
     const run = async () => {
       try {
-        await this.tick({ technical_ready, editorial_ready, execute, reconcile });
+        await this.tick({ technical_ready, editorial_ready, execute, reconcile, execution_enabled });
       } catch {
         // No blind retry inside the same tick. Next interval may evaluate again
         // only if no durable execution intent exists.

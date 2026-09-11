@@ -177,6 +177,32 @@ test('retryable preflight failure can dispatch again after a durable intent', as
   assert.equal(executions, 2);
 });
 
+test('provider write freeze pauses without closing the schedule', async t => {
+  const store = makeStore(t);
+  const scheduler = new InstagramEditorialScheduler({ store, now });
+  const pkg = packageFixture();
+  scheduler.schedule(pkg);
+  current = Date.parse('2026-09-08T12:00:00.000Z');
+  let executions = 0;
+  const first = await scheduler.tick({
+    technical_ready: true,
+    editorial_ready: true,
+    execute: async () => { executions += 1; return { status: 'INSTAGRAM_PUBLISH_VERIFIED', provider_writes: 1 }; },
+    execution_enabled: false,
+  });
+  assert.equal(first[0].status, 'PROVIDER_WRITES_FROZEN');
+  assert.equal(executions, 0);
+  assert.equal(latestPublicationState(store, pkg.publication_id).status, 'SCHEDULED');
+  const second = await scheduler.tick({
+    technical_ready: true,
+    editorial_ready: true,
+    execute: async () => { executions += 1; return { status: 'INSTAGRAM_PUBLISH_VERIFIED', provider_writes: 1 }; },
+    execution_enabled: false,
+  });
+  assert.equal(second[0].status, 'PROVIDER_WRITES_FROZEN');
+  assert.equal(executions, 0);
+});
+
 test('Europe/Berlin wall-clock and DST offset are deterministic', () => {
   const winter = berlinParts('2026-01-15T12:00:00.000Z');
   const summer = berlinParts('2026-07-15T12:00:00.000Z');
