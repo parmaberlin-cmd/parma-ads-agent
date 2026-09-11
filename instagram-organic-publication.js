@@ -20,6 +20,7 @@ const PUBLICATION_INTERFACES = Object.freeze({
 const NON_PUBLICATION_CHANGE_EVENTS = Object.freeze(new Set([
   'instagram_editorial_schedule_created',
   'instagram_editorial_execution_intent',
+  'instagram_editorial_schedule_executed',
 ]));
 
 function validatePublicationPackage(pkg, { now = Date.now } = {}) {
