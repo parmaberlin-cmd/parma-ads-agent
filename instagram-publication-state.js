@@ -31,7 +31,6 @@ const NON_RETRYABLE_FAILURE_REASONS = Object.freeze(new Set([
   'authorization_already_used',
   'authorization_expired',
   'publication_window_expired',
-  'provider_writes_frozen',
   'content_fingerprint_required',
   'account_required',
 ]));
