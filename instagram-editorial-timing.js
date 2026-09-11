@@ -268,7 +268,8 @@ class InstagramEditorialScheduler {
           results.push({ publication_id: pkg.publication_id, status: currentState.status, provider_writes: 0 });
           continue;
         }
-        const nextStatus = timing.status === EDITORIAL_READINESS_STATUS.PUBLICATION_WINDOW_EXPIRED
+        const pastLatest = pkg.latest_publish_at && this.now() > Date.parse(pkg.latest_publish_at);
+        const nextStatus = timing.status === EDITORIAL_READINESS_STATUS.PUBLICATION_WINDOW_EXPIRED || pastLatest
           ? PUBLICATION_STATES.HELD
           : PUBLICATION_STATES.SCHEDULED;
         markPublicationState(this.store, {

@@ -97,6 +97,28 @@ test('expired scheduled publication is held and never executes', async t => {
   assert.equal(latestPublicationState(store, pkg.publication_id).status, 'HELD');
 });
 
+test('authorization-expired but past window is still held and never executes', async t => {
+  const store = makeStore(t);
+  const scheduler = new InstagramEditorialScheduler({ store, now });
+  current = Date.parse('2026-09-08T09:00:00.000Z');
+  const pkg = packageFixture({
+    earliest_publish_at: '2026-09-08T10:00:00.000Z',
+    latest_publish_at: '2026-09-08T12:00:00.000Z',
+    authorization_expires_at: '2026-09-08T11:00:00.000Z',
+  });
+  scheduler.schedule(pkg);
+  current = Date.parse('2026-09-08T13:00:00.000Z');
+  let executions = 0;
+  const result = await scheduler.tick({
+    technical_ready: true,
+    editorial_ready: true,
+    execute: async () => { executions += 1; return { status: 'INSTAGRAM_PUBLISH_VERIFIED', provider_writes: 1 }; },
+  });
+  assert.equal(result[0].provider_writes, 0);
+  assert.equal(executions, 0);
+  assert.equal(latestPublicationState(store, pkg.publication_id).status, 'HELD');
+});
+
 test('ambiguous state is reconciled read-only and terminal verification stops execution', async t => {
   const store = makeStore(t);
   const scheduler = new InstagramEditorialScheduler({ store, now });
