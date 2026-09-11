@@ -7,6 +7,11 @@ const {
 } = require('./instagram-organic-read-path');
 const { InstagramEditorialScheduler } = require('./instagram-editorial-timing');
 const { executeInstagramPublication } = require('./instagram-organic-publication');
+const {
+  providerWritesAllowed,
+  frozenProviderResult,
+} = require('./instagram-publication-state');
+const { createProductionReconcileCallback } = require('./instagram-publication-reconcile');
 
 function createProductionExecutionCallback({ env, store, now = Date.now } = {}) {
   const facebookTransport = env.META_ACCESS_TOKEN
@@ -15,15 +20,18 @@ function createProductionExecutionCallback({ env, store, now = Date.now } = {}) 
   const loginTransport = env.META_ACCESS_TOKEN
     ? instagramLoginWriteTransport({ accessToken: env.META_ACCESS_TOKEN })
     : null;
-  return async publicationPackage => executeInstagramPublication({
-    publicationPackage,
-    env,
-    store,
-    transport: facebookTransport,
-    loginTransport,
-    now,
-    requireDurableMount: true,
-  });
+  return async publicationPackage => {
+    if (!providerWritesAllowed(env)) return frozenProviderResult(publicationPackage);
+    return executeInstagramPublication({
+      publicationPackage,
+      env,
+      store,
+      transport: facebookTransport,
+      loginTransport,
+      now,
+      requireDurableMount: true,
+    });
+  };
 }
 
 function startInstagramEditorialRuntime({
@@ -48,11 +56,17 @@ function startInstagramEditorialRuntime({
     store: resolvedStore,
     now,
   });
+  const reconcile = createProductionReconcileCallback({
+    env,
+    store: resolvedStore,
+    now,
+  });
 
   resolvedScheduler.start({
     technical_ready: true,
     editorial_ready: true,
     execute: callback,
+    reconcile,
     intervalMs,
   });
 
@@ -60,10 +74,12 @@ function startInstagramEditorialRuntime({
     scheduler: resolvedScheduler,
     store: resolvedStore,
     stop: () => resolvedScheduler.stop(),
+    reconcile,
     wakeNow: () => resolvedScheduler.tick({
       technical_ready: true,
       editorial_ready: true,
       execute: callback,
+      reconcile,
     }),
   };
 }

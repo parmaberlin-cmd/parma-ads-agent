@@ -1,6 +1,16 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const {
+  PUBLICATION_STATES,
+  currentPublicationState,
+  hasScheduleExecuted,
+  markScheduleExecuted,
+  markPublicationState,
+  isTerminalPublicationState,
+  derivePublicationState,
+  canRetryPublicationState,
+} = require('./instagram-publication-state');
 
 const EDITORIAL_READINESS_STATUS = Object.freeze({
   TECHNICAL_READY: 'TECHNICAL_READY',
@@ -184,6 +194,12 @@ class InstagramEditorialScheduler {
       window_expires_at: pkg.authorization_expires_at || null,
       at: new Date(this.now()).toISOString(),
     });
+    markPublicationState(this.store, {
+      publicationId: pkg.publication_id,
+      status: PUBLICATION_STATES.SCHEDULED,
+      reason: 'editorial_schedule_created',
+      now: this.now,
+    });
     return { status: 'SCHEDULED', publication_id: pkg.publication_id, fingerprint };
   }
 
@@ -213,10 +229,10 @@ class InstagramEditorialScheduler {
     });
   }
 
-  async tick({ technical_ready, editorial_ready, execute }) {
+  async tick({ technical_ready, editorial_ready, execute, reconcile = null }) {
     const due = this.store.list('change').filter(record =>
       record.payload?.kind_event === 'instagram_editorial_schedule_created' &&
-      !record.payload?.executed
+      !hasScheduleExecuted(this.store, record.payload.schedule_fingerprint)
     );
     const results = [];
     for (const record of due) {
@@ -233,6 +249,8 @@ class InstagramEditorialScheduler {
             latest_publish_at: record.payload.latest_publish_at,
             authorization_expires_at: record.payload.window_expires_at,
           };
+      const fingerprint = packageFingerprint(pkg);
+      const currentState = currentPublicationState(this.store, pkg.publication_id);
       const timing = evaluateEditorialTiming({
         package: pkg,
         technical_ready,
@@ -240,17 +258,158 @@ class InstagramEditorialScheduler {
         now: this.now,
       });
       if (timing.status !== EDITORIAL_READINESS_STATUS.TIMING_READY) {
+        if (currentState && isTerminalPublicationState(currentState.status)) {
+          markScheduleExecuted(this.store, {
+            publicationId: pkg.publication_id,
+            scheduleFingerprint: fingerprint,
+            reason: currentState.reason || currentState.status,
+            now: this.now,
+          });
+          results.push({ publication_id: pkg.publication_id, status: currentState.status, provider_writes: 0 });
+          continue;
+        }
+        const nextStatus = timing.status === EDITORIAL_READINESS_STATUS.PUBLICATION_WINDOW_EXPIRED
+          ? PUBLICATION_STATES.HELD
+          : PUBLICATION_STATES.SCHEDULED;
+        markPublicationState(this.store, {
+          publicationId: pkg.publication_id,
+          status: nextStatus,
+          reason: timing.blockers[0] || timing.status,
+          now: this.now,
+        });
+        if (nextStatus === PUBLICATION_STATES.HELD) {
+          markScheduleExecuted(this.store, {
+            publicationId: pkg.publication_id,
+            scheduleFingerprint: fingerprint,
+            reason: 'held_expired_unpublished',
+            now: this.now,
+          });
+        }
         results.push({ publication_id: pkg.publication_id, status: timing.status, provider_writes: 0 });
         continue;
       }
-      if (this.hasExecutionIntent(pkg) || !this.acquireExecutionLock(pkg.publication_id)) {
+
+      if (currentState?.status === PUBLICATION_STATES.HELD) {
+        markScheduleExecuted(this.store, {
+          publicationId: pkg.publication_id,
+          scheduleFingerprint: fingerprint,
+          reason: 'held',
+          now: this.now,
+        });
+        results.push({ publication_id: pkg.publication_id, status: 'HELD', provider_writes: 0 });
+        continue;
+      }
+
+      const currentStateClosed = currentState && (
+        currentState.status === PUBLICATION_STATES.VERIFIED_LIVE ||
+        currentState.status === PUBLICATION_STATES.HELD ||
+        (currentState.status === PUBLICATION_STATES.FAILED && !canRetryPublicationState(currentState, this.now))
+      );
+      if (currentStateClosed) {
+        markScheduleExecuted(this.store, {
+          publicationId: pkg.publication_id,
+          scheduleFingerprint: fingerprint,
+          reason: currentState.reason || currentState.status,
+          now: this.now,
+        });
+        results.push({ publication_id: pkg.publication_id, status: currentState.status, provider_writes: 0 });
+        continue;
+      }
+
+      if (currentState?.status === PUBLICATION_STATES.AMBIGUOUS ||
+          currentState?.status === PUBLICATION_STATES.DISPATCHED ||
+          currentState?.status === PUBLICATION_STATES.CONTAINER_CREATED ||
+          currentState?.status === PUBLICATION_STATES.PUBLISHED) {
+        if (typeof reconcile !== 'function') {
+          results.push({ publication_id: pkg.publication_id, status: currentState.status, provider_writes: 0, reconciliation: 'not_configured' });
+        } else {
+          const reconciliation = await reconcile(pkg, currentState);
+          const nextState = derivePublicationState({
+            status: reconciliation.status,
+            real_instagram_publication_attempted: reconciliation.status === PUBLICATION_STATES.VERIFIED_LIVE,
+          });
+          markPublicationState(this.store, {
+            publicationId: pkg.publication_id,
+            status: nextState,
+            reason: reconciliation.reason || reconciliation.status || nextState,
+            evidence: reconciliation,
+            now: this.now,
+          });
+          const stateAfterReconcile = currentPublicationState(this.store, pkg.publication_id);
+          const closeAfterReconcile = nextState === PUBLICATION_STATES.VERIFIED_LIVE ||
+            nextState === PUBLICATION_STATES.HELD ||
+            (nextState === PUBLICATION_STATES.FAILED && !canRetryPublicationState(stateAfterReconcile, this.now));
+          if (closeAfterReconcile) {
+            markScheduleExecuted(this.store, {
+              publicationId: pkg.publication_id,
+              scheduleFingerprint: fingerprint,
+              reason: nextState,
+              now: this.now,
+            });
+          }
+          results.push({
+            publication_id: pkg.publication_id,
+            status: nextState,
+            provider_writes: reconciliation.provider_writes || 0,
+            reconciliation,
+          });
+        }
+        continue;
+      }
+
+      if (currentState && !canRetryPublicationState(currentState, this.now)) {
+        results.push({ publication_id: pkg.publication_id, status: currentState.status, provider_writes: 0 });
+        continue;
+      }
+
+      const retryable = currentState ? canRetryPublicationState(currentState, this.now) : true;
+      if ((this.hasExecutionIntent(pkg) && !retryable) || !this.acquireExecutionLock(pkg.publication_id)) {
         results.push({ publication_id: pkg.publication_id, status: 'DUPLICATE_EXECUTION_BLOCKED', provider_writes: 0 });
         continue;
       }
       try {
+        markPublicationState(this.store, {
+          publicationId: pkg.publication_id,
+          status: PUBLICATION_STATES.DISPATCHED,
+          reason: 'editorial_execution_dispatch',
+          now: this.now,
+        });
         this.recordExecutionIntent(pkg, 'EXECUTING');
         const execution = await execute(pkg);
+        const nextState = derivePublicationState(execution);
+        const nextStateRecord = markPublicationState(this.store, {
+          publicationId: pkg.publication_id,
+          status: nextState,
+          reason: execution.blockers?.[0] || execution.error || execution.status || nextState,
+          evidence: execution,
+          now: this.now,
+        });
+        const closeAfterExecution = nextState === PUBLICATION_STATES.VERIFIED_LIVE ||
+          nextState === PUBLICATION_STATES.HELD ||
+          (nextState === PUBLICATION_STATES.FAILED && !canRetryPublicationState(nextStateRecord, this.now));
+        if (closeAfterExecution) {
+          markScheduleExecuted(this.store, {
+            publicationId: pkg.publication_id,
+            scheduleFingerprint: fingerprint,
+            reason: nextState,
+            now: this.now,
+          });
+        }
         results.push({ publication_id: pkg.publication_id, status: execution.status, provider_writes: execution.provider_writes || 0, execution });
+      } catch (error) {
+        markPublicationState(this.store, {
+          publicationId: pkg.publication_id,
+          status: PUBLICATION_STATES.AMBIGUOUS,
+          reason: 'editorial_execution_error',
+          evidence: { error: String(error?.message || error).slice(0, 240) },
+          now: this.now,
+        });
+        results.push({
+          publication_id: pkg.publication_id,
+          status: PUBLICATION_STATES.AMBIGUOUS,
+          provider_writes: 0,
+          error: String(error?.message || error).slice(0, 240),
+        });
       } finally {
         this.releaseExecutionLock(pkg.publication_id);
       }
@@ -258,12 +417,12 @@ class InstagramEditorialScheduler {
     return results;
   }
 
-  start({ technical_ready = false, editorial_ready = false, execute, intervalMs = 60000 } = {}) {
+  start({ technical_ready = false, editorial_ready = false, execute, reconcile = null, intervalMs = 60000 } = {}) {
     if (typeof execute !== 'function') throw new Error('execute_callback_required');
     if (this.timer) return this;
     const run = async () => {
       try {
-        await this.tick({ technical_ready, editorial_ready, execute });
+        await this.tick({ technical_ready, editorial_ready, execute, reconcile });
       } catch {
         // No blind retry inside the same tick. Next interval may evaluate again
         // only if no durable execution intent exists.
