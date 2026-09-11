@@ -15,6 +15,7 @@ const {
   packageFingerprint,
   InstagramEditorialScheduler,
 } = require('../instagram-editorial-timing');
+const { latestPublicationState } = require('../instagram-publication-state');
 
 let current = Date.parse('2026-09-08T10:00:00.000Z');
 const now = () => current;
@@ -78,6 +79,82 @@ test('after latest publish time returns expired with zero writes', () => {
   assert.equal(result.provider_writes_allowed, false);
 });
 
+test('expired scheduled publication is held and never executes', async t => {
+  const store = makeStore(t);
+  const scheduler = new InstagramEditorialScheduler({ store, now });
+  const pkg = packageFixture();
+  scheduler.schedule(pkg);
+  current = Date.parse('2026-09-08T13:00:01.000Z');
+  let executions = 0;
+  const result = await scheduler.tick({
+    technical_ready: true,
+    editorial_ready: true,
+    execute: async () => { executions += 1; return { status: 'INSTAGRAM_PUBLISH_VERIFIED', provider_writes: 1 }; },
+  });
+  assert.equal(result[0].status, EDITORIAL_READINESS_STATUS.PUBLICATION_WINDOW_EXPIRED);
+  assert.equal(result[0].provider_writes, 0);
+  assert.equal(executions, 0);
+  assert.equal(latestPublicationState(store, pkg.publication_id).status, 'HELD');
+});
+
+test('ambiguous state is reconciled read-only and terminal verification stops execution', async t => {
+  const store = makeStore(t);
+  const scheduler = new InstagramEditorialScheduler({ store, now });
+  const pkg = packageFixture();
+  scheduler.schedule(pkg);
+  current = Date.parse('2026-09-08T12:00:00.000Z');
+  let executions = 0;
+  const first = await scheduler.tick({
+    technical_ready: true,
+    editorial_ready: true,
+    execute: async () => {
+      executions += 1;
+      return { status: 'RECONCILIATION_REQUIRED', provider_writes: 1 };
+    },
+  });
+  assert.equal(first[0].status, 'RECONCILIATION_REQUIRED');
+  assert.equal(executions, 1);
+
+  const second = await scheduler.tick({
+    technical_ready: true,
+    editorial_ready: true,
+    execute: async () => { executions += 1; return { status: 'INSTAGRAM_PUBLISH_VERIFIED', provider_writes: 1 }; },
+    reconcile: async () => ({ status: 'INSTAGRAM_PUBLISH_VERIFIED', provider_writes: 0, instagram_media_id: '123', permalink: 'https://www.instagram.com/stories/parma.divinibenedetti/1' }),
+  });
+  assert.equal(second[0].status, 'VERIFIED_LIVE');
+  assert.equal(executions, 1);
+});
+
+test('retryable preflight failure can dispatch again after a durable intent', async t => {
+  const store = makeStore(t);
+  const scheduler = new InstagramEditorialScheduler({ store, now });
+  const pkg = packageFixture();
+  scheduler.schedule(pkg);
+  current = Date.parse('2026-09-08T12:00:00.000Z');
+  let executions = 0;
+  const first = await scheduler.tick({
+    technical_ready: true,
+    editorial_ready: true,
+    execute: async () => {
+      executions += 1;
+      return { status: 'BLOCKED', blockers: ['transient_graph_error'], provider_writes: 0, real_instagram_publication_attempted: false };
+    },
+  });
+  assert.equal(first[0].status, 'BLOCKED');
+  assert.equal(executions, 1);
+
+  const second = await scheduler.tick({
+    technical_ready: true,
+    editorial_ready: true,
+    execute: async () => {
+      executions += 1;
+      return { status: 'INSTAGRAM_PUBLISH_VERIFIED', provider_writes: 1 };
+    },
+  });
+  assert.equal(second[0].status, 'INSTAGRAM_PUBLISH_VERIFIED');
+  assert.equal(executions, 2);
+});
+
 test('Europe/Berlin wall-clock and DST offset are deterministic', () => {
   const winter = berlinParts('2026-01-15T12:00:00.000Z');
   const summer = berlinParts('2026-07-15T12:00:00.000Z');
@@ -127,12 +204,12 @@ test('duplicate and concurrent scheduler ticks cannot publish twice', async t =>
   assert.equal(executions, 1);
 
   const second = await scheduler.tick({ technical_ready: true, editorial_ready: true, execute });
-  assert.equal(second[0].status, 'DUPLICATE_EXECUTION_BLOCKED');
+  assert.equal(second.length, 0);
   assert.equal(executions, 1);
 
   const concurrent = new InstagramEditorialScheduler({ store, now });
   const third = await concurrent.tick({ technical_ready: true, editorial_ready: true, execute });
-  assert.equal(third[0].status, 'DUPLICATE_EXECUTION_BLOCKED');
+  assert.equal(third.length, 0);
   assert.equal(executions, 1);
 });
 
@@ -150,7 +227,7 @@ test('ambiguous provider result records reconciliation intent and never blind re
   const first = await scheduler.tick({ technical_ready: true, editorial_ready: true, execute });
   assert.equal(first[0].status, 'RECONCILIATION_REQUIRED');
   const second = await scheduler.tick({ technical_ready: true, editorial_ready: true, execute });
-  assert.equal(second[0].status, 'DUPLICATE_EXECUTION_BLOCKED');
+  assert.equal(second[0].status, 'AMBIGUOUS');
   assert.equal(executions, 1);
 });
 
