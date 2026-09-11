@@ -61,12 +61,14 @@ function startInstagramEditorialRuntime({
     store: resolvedStore,
     now,
   });
+  const executionEnabled = providerWritesAllowed(env);
 
   resolvedScheduler.start({
     technical_ready: true,
     editorial_ready: true,
     execute: callback,
     reconcile,
+    execution_enabled: executionEnabled,
     intervalMs,
   });
 
@@ -80,6 +82,7 @@ function startInstagramEditorialRuntime({
       editorial_ready: true,
       execute: callback,
       reconcile,
+      execution_enabled: executionEnabled,
     }),
   };
 }
