@@ -272,12 +272,14 @@ class InstagramEditorialScheduler {
         const nextStatus = timing.status === EDITORIAL_READINESS_STATUS.PUBLICATION_WINDOW_EXPIRED || pastLatest
           ? PUBLICATION_STATES.HELD
           : PUBLICATION_STATES.SCHEDULED;
-        markPublicationState(this.store, {
-          publicationId: pkg.publication_id,
-          status: nextStatus,
-          reason: timing.blockers[0] || timing.status,
-          now: this.now,
-        });
+        if (!currentState || currentState.status !== nextStatus) {
+          markPublicationState(this.store, {
+            publicationId: pkg.publication_id,
+            status: nextStatus,
+            reason: timing.blockers[0] || timing.status,
+            now: this.now,
+          });
+        }
         if (nextStatus === PUBLICATION_STATES.HELD) {
           markScheduleExecuted(this.store, {
             publicationId: pkg.publication_id,
