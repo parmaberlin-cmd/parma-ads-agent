@@ -1,0 +1,6 @@
+'use strict';
+const store=require('./control-tower-state');
+function code(v){return v==null?null:String(v).replace(/[^A-Za-z0-9_.:-]/g,'_').slice(0,100)}
+function buildControlTowerView(state){if(!state)return{available:false,status:'UNINITIALIZED',goal_present:false};return{available:true,status:code(state.status)||'UNKNOWN',goal_present:Boolean(state.goal),current_task_id:code(state.current_task_id),next_task_id:code(state.next_task_id),revision:Number(state.revision||0),tasks:{total:state.tasks.length,pending:state.tasks.filter(t=>t.status==='pending').length,running:state.tasks.filter(t=>t.status==='running').length,done:state.tasks.filter(t=>t.status==='done').length},blockers:(state.blockers||[]).slice(-10).map(b=>({task_id:code(b.task_id),type:code(b.type)})),updated_at:state.updated_at||null,writes_allowed:false,secrets_included:false};}
+function readControlTowerView(file=store.statePath()){const loaded=store.load(file);if(!loaded.exists)return buildControlTowerView(null);if(!loaded.healthy)return{available:false,status:'BLOCKED_EXTERNAL',reason:'state_corrupt',writes_allowed:false,secrets_included:false};return buildControlTowerView(loaded.state);}
+module.exports={code,buildControlTowerView,readControlTowerView};
