@@ -1,5 +1,6 @@
 const { buildShadowDecisions, assertShadowSafe } = require("./shadow-decision-engine");
 const { evaluateShadowDataQuality, assertQualityFailClosed } = require("./shadow-data-quality");
+const { assessDirectOrders } = require("./direct-order-readiness");
 
 function n(value) {
   const parsed = Number(value);
@@ -80,6 +81,12 @@ function buildDailyShadowReport(snapshot = {}) {
       verification_status: "not_applicable",
     })),
   };
+
+  // Optional separate business objective: never relabel channel bookings as orders.
+  // No evidence collector is implied; callers must explicitly supply page observations.
+  if (snapshot.direct_orders !== undefined) {
+    report.direct_orders = assessDirectOrders(snapshot.direct_orders, { now: shadow.generated_at });
+  }
 
   if (report.writes_allowed !== false || report.spend_changed !== false) {
     throw new Error("daily shadow report violated no-write contract");
