@@ -38,6 +38,7 @@ function canaryEnv(overrides = {}) {
     GOOGLE_ADS_CANARY_ENABLED: 'true',
     GOOGLE_ADS_WRITE_KILL_SWITCH: 'false',
     GOOGLE_ADS_CANARY_KILL_SWITCH: 'false',
+    GOOGLE_ADS_CANARY_EXECUTION_AUTHORIZED: 'true',
     GOOGLE_ADS_CANARY_EXPIRES_AT: FUTURE,
     ...overrides,
   };
@@ -256,8 +257,30 @@ test('validate-only returns READY_FOR_CANARY without a real provider write', asy
   assert.equal(result.status, 'READY_FOR_CANARY');
   assert.equal(result.writes_executed, 0);
   assert.equal(result.real_google_ads_mutation_attempted, false);
+  assert.equal(result.execution_authorized, false);
+  assert.equal(result.spend_allowed, false);
+  assert.equal(result.activation_authorized, false);
   assert.equal(f.calls.length, 0);
   assert.equal(store.verify().ok, true);
+});
+
+test('real canary requires a separate explicit execution authorization gate', async t => {
+  const f = makeCustomer(t, { present: false });
+  const result = await executeCanary({
+    env: canaryEnv({ GOOGLE_ADS_CANARY_EXECUTION_AUTHORIZED: 'false' }),
+    now,
+    customer: f.customer,
+    http: f.http,
+    auditStore: makeStore(t),
+    authorization: issueCanaryAuthorization({ now, expiresAt: FUTURE }),
+  });
+  assert.equal(result.status, 'BLOCKED');
+  assert.ok(result.blockers.includes('execution_not_authorized'));
+  assert.equal(result.provider_write, false);
+  assert.equal(result.real_google_ads_mutation_attempted, false);
+  assert.equal(result.spend_allowed, false);
+  assert.equal(result.activation_authorized, false);
+  assert.equal(f.calls.length, 0);
 });
 
 test('full canary execution adds, verifies, rolls back and leaves no synthetic negative', async t => {

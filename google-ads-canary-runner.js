@@ -466,9 +466,25 @@ async function runCanary(mode, deps = {}) {
       provider_write: false,
       mutations_executed: 0,
       financial_exposure_eur: 0,
+      writes_allowed: true,
+      execution_authorized: false,
+      spend_allowed: false,
+      activation_authorized: false,
       automatic_rollback_required: true,
       real_google_ads_mutation_attempted: false,
     };
+  }
+
+  if (context.env.GOOGLE_ADS_CANARY_EXECUTION_AUTHORIZED !== 'true') {
+    return blockedResult(['execution_not_authorized'], {
+      mode,
+      snapshot_id: preflight.snapshot_id,
+      writes_allowed: true,
+      execution_authorized: false,
+      spend_allowed: false,
+      activation_authorized: false,
+      real_google_ads_mutation_attempted: false,
+    });
   }
 
   let addAuth;
