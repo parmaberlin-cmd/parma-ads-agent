@@ -178,3 +178,15 @@ test('schemas reject serving creates, cross-customer resources and budget mutati
   assert.throws(() => compileOperation({ type: 'campaign_create', campaign_id: '0', resource_name: 'customers/9/campaigns/-1', name: 'x', campaign_budget: 'customers/7376153998/campaignBudgets/1', advertising_channel_type: 'SEARCH', status: 'PAUSED' }));
   assert.throws(() => compileOperation({ type: 'budget_update', campaign_id: '23276824770', amount_micros: 1 }));
 });
+
+test('trusted provider customer binding blocks a foreign operation before transport', async t => {
+  let calls = 0;
+  const action = { type: 'ad_group_update', campaign_id: '23276824770', resource_name: A, status: 'PAUSED' };
+  const control = createOperationalGoogleAdsControl({
+    store: store(t), customer: { customerId: '9999999999', mutateResources: async () => { calls += 1; } }, readState: async () => ({ version: 'before' }),
+    gates: { writes_allowed: true, execution_authorized: true }, now,
+  });
+  const result = await control.execute(input(action));
+  assert.deepEqual(result.blockers, ['mutation_customer_mismatch']);
+  assert.equal(calls, 0);
+});
