@@ -16,6 +16,10 @@ const {
 } = require('./google-ads-canary-core');
 
 const VALID_MODES = new Set(['VALIDATE_ONLY', 'EXECUTE_CANARY']);
+const READ_BACK_ATTEMPTS = 5;
+const READ_BACK_DELAY_MS = 500;
+
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function blockedResult(blockers, extra = {}) {
   return {
@@ -45,6 +49,9 @@ function buildCanaryContext({
   mutationAdapter = null,
   http = null,
   requireDurableMount = null,
+  sleep = wait,
+  readBackAttempts = READ_BACK_ATTEMPTS,
+  readBackDelayMs = READ_BACK_DELAY_MS,
 } = {}) {
   const blockers = [];
   const writeEnabled = env.GOOGLE_ADS_CANARY_ENABLED === 'true';
@@ -132,11 +139,30 @@ function buildCanaryContext({
   let lastCreatedResourceName = null;
   let rollbackOwnership = null;
 
+  if (!Number.isSafeInteger(readBackAttempts) || readBackAttempts < 1 || readBackAttempts > 10) {
+    blockers.push('invalid_read_back_attempts');
+  }
+  if (!Number.isSafeInteger(readBackDelayMs) || readBackDelayMs < 0 || readBackDelayMs > 5000 || typeof sleep !== 'function') {
+    blockers.push('invalid_read_back_delay');
+  }
+  if (blockers.length) return { ok: false, blockers: [...new Set(blockers)], context: null };
+
   async function readCanaryState() {
     return activeReadAdapter.readState({
       campaign_id: CANARY.campaign_id,
       keyword: CANARY.keyword,
     });
+  }
+
+  async function readAfterCanaryMutation(mutation) {
+    const expectedPresent = mutation?.proposed_after_state?.canary_exact_negative_present === true;
+    let state = null;
+    for (let attempt = 1; attempt <= readBackAttempts; attempt += 1) {
+      state = await readCanaryState();
+      if (state.canary_exact_negative_present === expectedPresent) return state;
+      if (attempt < readBackAttempts) await sleep(readBackDelayMs * attempt);
+    }
+    return state;
   }
 
   async function applyMutation(mutation, options = {}) {
@@ -175,7 +201,7 @@ function buildCanaryContext({
     now,
     writesEnabled: true,
     readBefore: readCanaryState,
-    readAfter: readCanaryState,
+    readAfter: readAfterCanaryMutation,
     applyMutation,
   });
 

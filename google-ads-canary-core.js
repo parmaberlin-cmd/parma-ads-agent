@@ -110,6 +110,11 @@ function validateExactNegativeKeyword(value) {
   return typeof value === 'string' && value === CANARY.keyword && value === value.trim() && value.length > 0 && value.length <= 80;
 }
 
+function normalizeKeywordMatchType(value) {
+  if (value === 2 || value === '2') return 'EXACT';
+  return typeof value === 'string' ? value.trim().toUpperCase() : '';
+}
+
 class CanaryAuthorization {
   constructor({
     authorization_id,
@@ -234,7 +239,7 @@ function createCanaryReadAdapter(customer) {
       .map(row => ({
         resource_name: String(row?.campaign_criterion?.resource_name || ''),
         keyword: String(row?.campaign_criterion?.keyword?.text || ''),
-        match_type: String(row?.campaign_criterion?.keyword?.match_type || ''),
+        match_type: normalizeKeywordMatchType(row?.campaign_criterion?.keyword?.match_type),
       }))
       .filter(row => row.keyword === CANARY.keyword && row.match_type === 'EXACT')
       .sort((a, b) => a.resource_name.localeCompare(b.resource_name));
@@ -374,6 +379,7 @@ module.exports = {
   assertCanaryTarget,
   validateCanaryCustomer,
   validateExactNegativeKeyword,
+  normalizeKeywordMatchType,
   CanaryAuthorization,
   issueCanaryAuthorization,
   createCanaryReadAdapter,
