@@ -15,6 +15,7 @@ const {
   createCanaryMutationAdapter,
   buildCanaryMutationOperation,
   buildCanaryMutationRequest,
+  normalizeKeywordMatchType,
 } = require('../google-ads-canary-core');
 const { ControlledAdsStore } = require('../ads-controlled-execution-core');
 const { validateOnlyCanary, executeCanary } = require('../google-ads-canary-runner');
@@ -224,6 +225,22 @@ test('read-after-write verifies exact campaign negative presence and absence', a
   assert.equal((await readerPresent.readState()).canary_exact_negative_present, true);
 });
 
+test('read adapter accepts the numeric EXACT enum returned by google-ads-api', async () => {
+  const customer = {
+    credentials: { customer_id: CANARY.customer_id },
+    query: async () => [{
+      campaign_criterion: {
+        resource_name: RESOURCE,
+        keyword: { text: CANARY.keyword, match_type: 2 },
+      },
+    }],
+  };
+  const rows = await createCanaryReadAdapter(customer).readExactNegative({});
+  assert.equal(normalizeKeywordMatchType(2), 'EXACT');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].match_type, 'EXACT');
+});
+
 test('validate-only returns READY_FOR_CANARY without a real provider write', async t => {
   const f = makeCustomer(t, { present: false });
   const store = makeStore(t);
@@ -267,6 +284,48 @@ test('full canary execution adds, verifies, rolls back and leaves no synthetic n
   assert.ok(phases.includes('final_verified_state'));
 });
 
+test('live read-back retries bounded eventual-consistency lag for add and rollback', async t => {
+  const f = makeCustomer(t, { present: false });
+  const store = makeStore(t);
+  let visiblePresent = false;
+  let actualPresent = false;
+  let readsSinceMutation = 0;
+  let sleeps = 0;
+  const mutationAdapter = {
+    mutate: async (input, options) => {
+      if (options.validate_only !== true) {
+        actualPresent = input.mutation_type === CANARY.add_mutation_type;
+        readsSinceMutation = 0;
+      }
+      return input.mutation_type === CANARY.add_mutation_type
+        ? { results: [{ resourceName: RESOURCE }] }
+        : { results: [] };
+    },
+  };
+  const readAdapter = {
+    readState: async () => {
+      readsSinceMutation += 1;
+      if (readsSinceMutation >= 3) visiblePresent = actualPresent;
+      return { campaign_id: CANARY.campaign_id, canary_exact_negative_present: visiblePresent };
+    },
+    readExactNegative: async () => visiblePresent ? [{ resource_name: RESOURCE }] : [],
+  };
+  const result = await executeCanary({
+    env: canaryEnv(),
+    now,
+    customer: f.customer,
+    auditStore: store,
+    authorization: issueCanaryAuthorization({ now, expiresAt: FUTURE }),
+    readAdapter,
+    mutationAdapter,
+    sleep: async () => { sleeps += 1; },
+    readBackDelayMs: 0,
+  });
+  assert.equal(result.status, 'CANARY_VERIFIED');
+  assert.equal(visiblePresent, false);
+  assert.ok(sleeps >= 4);
+});
+
 test('kill switch explicitly blocks canary even with writes enabled', async t => {
   const f = makeCustomer(t, { present: false });
   const store = makeStore(t);
@@ -294,7 +353,6 @@ test('emergency rollback runs when add verification fails and verifies absence',
   };
 
   let actualPresent = false;
-  let readCalls = 0;
   const mutationAdapter = {
     mutate: async (input, options) => {
       if (input.mutation_type === CANARY.add_mutation_type) {
@@ -310,11 +368,7 @@ test('emergency rollback runs when add verification fails and verifies absence',
   };
   const readAdapter = {
     readExactNegative: async () => actualPresent ? [{ resource_name: RESOURCE }] : [],
-    readState: async () => {
-      const call = readCalls++;
-      if (call <= 3) return { campaign_id: CANARY.campaign_id, canary_exact_negative_present: false };
-      return { campaign_id: CANARY.campaign_id, canary_exact_negative_present: actualPresent };
-    },
+    readState: async () => ({ campaign_id: CANARY.campaign_id, canary_exact_negative_present: false }),
   };
 
   const result = await executeCanary({
@@ -325,6 +379,7 @@ test('emergency rollback runs when add verification fails and verifies absence',
     authorization: auth,
     readAdapter,
     mutationAdapter,
+    sleep: async () => {},
   });
 
   assert.equal(result.status, 'CANARY_ROLLED_BACK_AFTER_ADD_VERIFICATION_FAILURE');
@@ -375,6 +430,7 @@ test('failed rollback verification returns CRITICAL_ROLLBACK_FAILURE and stops w
     authorization: auth,
     readAdapter,
     mutationAdapter,
+    sleep: async () => {},
   });
 
   assert.equal(result.status, 'CRITICAL_ROLLBACK_FAILURE');
