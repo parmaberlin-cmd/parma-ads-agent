@@ -36,6 +36,7 @@ const OUTCOME_HIERARCHY = Object.freeze({
 
 const LOW_RISK_MUTATION_TYPES = Object.freeze([
   'add_exact_negative_keyword',
+  'add_negative_keyword',
   'remove_agent_created_negative_keyword',
   'pause_keyword',
   'enable_agent_paused_keyword',
@@ -43,6 +44,27 @@ const LOW_RISK_MUTATION_TYPES = Object.freeze([
   'create_pause_rsa_variant',
   'adjust_ad_schedule_within_business_hours',
   'bounded_geographic_exclusion',
+  'create_keyword',
+  'update_keyword',
+  'remove_agent_created_keyword',
+  'create_paused_rsa',
+  'update_rsa',
+  'pause_rsa',
+  'enable_rsa',
+  'remove_agent_created_rsa',
+  'create_ad_schedule',
+  'update_ad_schedule',
+  'remove_ad_schedule',
+  'create_paused_ad_group',
+  'update_ad_group',
+  'pause_ad_group',
+  'enable_ad_group',
+  'remove_agent_created_ad_group',
+  'pause_campaign',
+  'add_geo_target',
+  'remove_geo_target',
+  'add_language_target',
+  'remove_language_target',
 ]);
 
 const HIGHER_RISK_MUTATION_TYPES = Object.freeze([
@@ -52,6 +74,11 @@ const HIGHER_RISK_MUTATION_TYPES = Object.freeze([
   'budget_change',
   'campaign_creation',
   'campaign_pause_or_reactivate_material',
+  'campaign_budget_creation',
+  'update_campaign',
+  'enable_campaign',
+  'remove_agent_created_campaign',
+  'remove_agent_created_campaign_budget',
 ]);
 
 const PROTECTED_MUTATION_TYPES = Object.freeze([
@@ -261,6 +288,7 @@ function buildInverseMutation(mutation, { reason = 'rollback_inverse_mutation' }
   const after = structuredClone(mutation.proposed_after_state || {});
   const inverseType = {
     add_exact_negative_keyword: 'remove_agent_created_negative_keyword',
+    add_negative_keyword: 'remove_agent_created_negative_keyword',
     remove_agent_created_negative_keyword: 'add_exact_negative_keyword',
     pause_keyword: 'enable_agent_paused_keyword',
     enable_agent_paused_keyword: 'pause_keyword',
@@ -273,7 +301,33 @@ function buildInverseMutation(mutation, { reason = 'rollback_inverse_mutation' }
     major_targeting_change: 'major_targeting_change',
     bidding_strategy_change: 'bidding_strategy_change',
     campaign_pause_or_reactivate_material: 'campaign_pause_or_reactivate_material',
-    campaign_creation: 'remove_agent_created_negative_keyword',
+    create_keyword: 'remove_agent_created_keyword',
+    remove_agent_created_keyword: 'create_keyword',
+    update_keyword: 'update_keyword',
+    create_paused_rsa: 'remove_agent_created_rsa',
+    remove_agent_created_rsa: 'create_paused_rsa',
+    update_rsa: 'update_rsa',
+    pause_rsa: 'enable_rsa',
+    enable_rsa: 'pause_rsa',
+    create_ad_schedule: 'remove_ad_schedule',
+    remove_ad_schedule: 'create_ad_schedule',
+    update_ad_schedule: 'update_ad_schedule',
+    create_paused_ad_group: 'remove_agent_created_ad_group',
+    remove_agent_created_ad_group: 'create_paused_ad_group',
+    update_ad_group: 'update_ad_group',
+    pause_ad_group: 'enable_ad_group',
+    enable_ad_group: 'pause_ad_group',
+    pause_campaign: 'enable_campaign',
+    enable_campaign: 'pause_campaign',
+    update_campaign: 'update_campaign',
+    campaign_creation: 'remove_agent_created_campaign',
+    remove_agent_created_campaign: 'campaign_creation',
+    campaign_budget_creation: 'remove_agent_created_campaign_budget',
+    remove_agent_created_campaign_budget: 'campaign_budget_creation',
+    add_geo_target: 'remove_geo_target',
+    remove_geo_target: 'add_geo_target',
+    add_language_target: 'remove_language_target',
+    remove_language_target: 'add_language_target',
   }[mutation.mutation_type];
   if (!inverseType) return null;
   return {
