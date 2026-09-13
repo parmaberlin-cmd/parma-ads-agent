@@ -60,6 +60,12 @@ function parseAction(input) {
   return action;
 }
 
+function actionCustomerIds(action) {
+  return [...new Set(Object.entries(action).filter(([key, value]) =>
+    (key === 'resource_name' || key.endsWith('_resource_name') || key === 'campaign_budget') && typeof value === 'string')
+    .map(([, value]) => value.match(/^customers\/(\d+)/)?.[1]).filter(Boolean))];
+}
+
 function entityFromResourceName(name) {
   if (name.includes('/campaignCriteria/')) return 'campaign_criterion';
   if (name.includes('/campaignBudgets/')) return 'campaign_budget';
@@ -138,13 +144,15 @@ function createOperationalGoogleAdsControl({ store, customer, readState, gates =
     if (!trustedGates.writes_allowed) return 'writes_disabled_by_default';
     if (!trustedGates.execution_authorized) return 'execution_authorization_required';
     if (action.status === 'ENABLED' && !trustedGates.activation_authorized) return 'activation_authorization_required';
-    if (action.type.startsWith('campaign_budget_') && (!trustedGates.spend_allowed || !trustedGates.economic_authorized)) return 'spend_authorization_required';
+    if (action.type === 'campaign_budget_create' && (!trustedGates.spend_allowed || !trustedGates.economic_authorized)) return 'spend_authorization_required';
     return null;
   }
   async function prepare(input) { return gateway.preflight(buildMutationRequest(input)); }
   async function dryRun(input, options) { return gateway.simulate(buildMutationRequest(input), options); }
   async function execute(input) {
     const action = parseAction(input.action);
+    const providerCustomer = String(customer?.credentials?.customer_id || customer?.customerId || '').replace(/\D/g, '');
+    if (providerCustomer && actionCustomerIds(action).some(idValue => idValue !== providerCustomer)) return { accepted: false, status: 'BLOCKED', blockers: ['mutation_customer_mismatch'], writes_executed: 0, provider_write: false };
     const blocker = safetyBlock(action);
     if (blocker) return { accepted: false, status: 'BLOCKED', blockers: [blocker], writes_executed: 0, provider_write: false };
     if (pendingActions.has(input.change_id)) return { accepted: false, status: 'BLOCKED', blockers: ['change_already_executing'], writes_executed: 0, provider_write: false };
