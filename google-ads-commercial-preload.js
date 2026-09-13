@@ -12,6 +12,7 @@ function sanitizedCommercialResult(result = {}) {
     blockers: Array.isArray(result.blockers) ? result.blockers : [],
     plan_id: result.plan_id || null,
     plan_digest: result.plan_digest || null,
+    replay_state: result.replay_state || null,
     customer_id: result.customer_id || null,
     action_count: result.action_count || 0,
     writes_executed: result.writes_executed || 0,

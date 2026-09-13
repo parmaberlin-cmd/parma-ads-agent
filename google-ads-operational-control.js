@@ -108,8 +108,8 @@ function buildMutationRequest({ action: rawAction, before_state, proposed_after_
   };
 }
 
-function createOperationalGoogleAdsControl({ store, customer, readState, gates = {}, killSwitch = new AdsKillSwitch(), now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), readBackAttempts = 5, readBackDelayMs = 500 } = {}) {
-  if (!customer || typeof customer.mutateResources !== 'function' || typeof readState !== 'function') throw new Error('operational_google_ads_dependencies_required');
+function createOperationalGoogleAdsControl({ store, customer, readState, gates = {}, killSwitch = new AdsKillSwitch(), beforeProviderMutation = async () => {}, now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), readBackAttempts = 5, readBackDelayMs = 500 } = {}) {
+  if (!customer || typeof customer.mutateResources !== 'function' || typeof readState !== 'function' || typeof beforeProviderMutation !== 'function') throw new Error('operational_google_ads_dependencies_required');
   if (!Number.isInteger(readBackAttempts) || readBackAttempts < 1 || readBackAttempts > 10 || !Number.isInteger(readBackDelayMs) || readBackDelayMs < 0 || readBackDelayMs > 5000 || typeof sleep !== 'function') throw new Error('invalid_operational_read_back_policy');
   const trustedGates = Object.freeze({
     writes_allowed: gates.writes_allowed === true,
@@ -136,6 +136,7 @@ function createOperationalGoogleAdsControl({ store, customer, readState, gates =
       if (!action) throw new Error('operational_action_context_missing');
       const operation = compileOperation(action);
       await customer.mutateResources([operation], { validate_only: true, partial_failure: false });
+      await beforeProviderMutation(mutation);
       return customer.mutateResources([operation], { validate_only: false, partial_failure: false });
     },
   });

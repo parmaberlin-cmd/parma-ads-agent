@@ -146,15 +146,41 @@ function createCommercialReadState(customer, item) {
   };
 }
 
-function alreadyConsumed(store, digest) {
-  return store.list('audit').some(record => record.payload?.event === 'commercial_plan_execution_started' && record.payload?.plan_digest === digest);
+function planReplayState(store, digest, changeIds = []) {
+  const records = store.list();
+  const completed = records.some(record => record.payload?.event === 'commercial_plan_execution_completed' && record.payload?.plan_digest === digest);
+  const providerStarted = records.some(record => record.payload?.event === 'commercial_plan_provider_started' && record.payload?.plan_digest === digest);
+  const providerWrite = records.some(record => record.kind === 'change' && changeIds.includes(record.payload?.change_id) && (record.payload?.provider_write === true || Number(record.payload?.writes_executed || 0) > 0));
+  if (completed) return { replayable: false, reason: 'commercial_plan_completed' };
+  if (providerStarted || providerWrite) return { replayable: false, reason: 'commercial_plan_provider_state_ambiguous' };
+
+  const reservations = records.map((record, index) => ({ record, index })).filter(({ record }) =>
+    ['commercial_plan_execution_reserved', 'commercial_plan_execution_started'].includes(record.payload?.event) && record.payload?.plan_digest === digest);
+  if (!reservations.length) return { replayable: true, reason: 'commercial_plan_new' };
+  const latest = reservations.at(-1);
+  if (latest.record.payload.event === 'commercial_plan_execution_reserved') return { replayable: true, reason: 'commercial_plan_reserved_zero_provider_write' };
+
+  const legacyInterval = records.slice(latest.index + 1);
+  const nextPlanBoundary = legacyInterval.findIndex(record =>
+    ['commercial_plan_execution_reserved', 'commercial_plan_execution_started'].includes(record.payload?.event) && record.payload?.plan_digest !== digest);
+  const legacyRecords = nextPlanBoundary < 0 ? legacyInterval : legacyInterval.slice(0, nextPlanBoundary);
+  const progressedPastReservation = legacyRecords.some(record => record.kind === 'state' || record.kind === 'change');
+  return progressedPastReservation
+    ? { replayable: false, reason: 'commercial_plan_legacy_state_ambiguous' }
+    : { replayable: true, reason: 'commercial_plan_legacy_zero_provider_write' };
 }
 
 async function runCommercialOneShot({ env = process.env, mode = env.GOOGLE_ADS_COMMERCIAL_STARTUP_MODE, customer = null, store = null, controlFactory = createOperationalGoogleAdsControl, readStateFactory = createCommercialReadState, now = Date.now } = {}) {
   const base = { mode, customer_id: CUSTOMER_ID, writes_executed: 0, provider_write: false, spend_allowed: false, commercial_mutations: 0 };
+  let activeStore = null;
+  let activePlan = null;
+  let activeDigest = null;
+  let providerBoundaryStarted = false;
   try {
     if (!MODES.has(mode)) return { ...base, status: 'DISABLED', blockers: ['commercial_startup_mode_disabled'] };
     const { plan, digest } = parseAuthorizedPlan(env);
+    activePlan = plan;
+    activeDigest = digest;
     const envCustomer = String(env.GOOGLE_CUSTOMER_ID || '').replace(/\D/g, '');
     if (envCustomer !== CUSTOMER_ID || plan.customer_id !== envCustomer) throw new Error('commercial_customer_mismatch');
     if (env.GOOGLE_ADS_SPEND_ALLOWED === 'true') throw new Error('spend_gate_must_remain_closed');
@@ -165,9 +191,12 @@ async function runCommercialOneShot({ env = process.env, mode = env.GOOGLE_ADS_C
     if (!activeCustomer || typeof activeCustomer.query !== 'function' || typeof activeCustomer.mutateResources !== 'function') throw new Error('google_provider_credentials_unavailable');
     const providerCustomer = String(activeCustomer?.credentials?.customer_id || activeCustomer?.customerId || '').replace(/\D/g, '');
     if (providerCustomer && providerCustomer !== CUSTOMER_ID) throw new Error('commercial_customer_mismatch');
-    const activeStore = store || commercialAuditStore({ env, now });
-    if (mode === 'EXECUTE_APPROVED_PLAN' && alreadyConsumed(activeStore, digest)) throw new Error('commercial_plan_replay_blocked');
-    if (mode === 'EXECUTE_APPROVED_PLAN') activeStore.append('audit', { event: 'commercial_plan_execution_started', plan_id: plan.plan_id, plan_digest: digest, customer_id: CUSTOMER_ID, spend_allowed: false });
+    activeStore = store || commercialAuditStore({ env, now });
+    const replay = planReplayState(activeStore, digest, plan.actions.map(item => item.change_id));
+    if (mode === 'EXECUTE_APPROVED_PLAN') {
+      if (!replay.replayable) throw new Error(`commercial_plan_replay_blocked:${replay.reason}`);
+      activeStore.append('audit', { event: 'commercial_plan_execution_reserved', plan_id: plan.plan_id, plan_digest: digest, customer_id: CUSTOMER_ID, replay_reason: replay.reason, spend_allowed: false });
+    }
     const results = [];
     for (const item of plan.actions) {
       const control = controlFactory({
@@ -181,6 +210,10 @@ async function runCommercialOneShot({ env = process.env, mode = env.GOOGLE_ADS_C
           economic_authorized: false,
           activation_authorized: mode === 'EXECUTE_APPROVED_PLAN' && env.GOOGLE_ADS_COMMERCIAL_ACTIVATION_AUTHORIZED === 'true',
         },
+        beforeProviderMutation: async mutation => {
+          activeStore.append('audit', { event: 'commercial_plan_provider_started', plan_id: plan.plan_id, plan_digest: digest, change_id: mutation.change_id, customer_id: CUSTOMER_ID, spend_allowed: false });
+          providerBoundaryStarted = true;
+        },
         now,
       });
       const result = mode === 'DRY_RUN' ? await control.dryRun(item) : await control.execute(item);
@@ -189,10 +222,19 @@ async function runCommercialOneShot({ env = process.env, mode = env.GOOGLE_ADS_C
     }
     const writes = results.reduce((sum, result) => sum + result.writes_executed, 0);
     activeStore.append('audit', { event: mode === 'DRY_RUN' ? 'commercial_plan_dry_run_completed' : 'commercial_plan_execution_completed', plan_id: plan.plan_id, plan_digest: digest, customer_id: CUSTOMER_ID, result_count: results.length, writes_executed: writes, spend_allowed: false });
-    return { ...base, status: mode === 'DRY_RUN' ? 'DRY_RUN_VERIFIED' : 'VERIFIED', plan_id: plan.plan_id, plan_digest: digest, action_count: results.length, results, provider_credentials_internal: true, writes_executed: writes, provider_write: results.some(result => result.provider_write), commercial_mutations: writes };
+    return { ...base, status: mode === 'DRY_RUN' ? 'DRY_RUN_VERIFIED' : 'VERIFIED', plan_id: plan.plan_id, plan_digest: digest, replay_state: replay, action_count: results.length, results, provider_credentials_internal: true, writes_executed: writes, provider_write: results.some(result => result.provider_write), commercial_mutations: writes };
   } catch (error) {
+    if (mode === 'EXECUTE_APPROVED_PLAN' && activeStore && activePlan && activeDigest && !String(error?.message || '').startsWith('commercial_plan_replay_blocked:')) {
+      const changeIds = activePlan.actions.map(item => item.change_id);
+      const providerWrite = activeStore.list('change').some(record => changeIds.includes(record.payload?.change_id) && (record.payload?.provider_write === true || Number(record.payload?.writes_executed || 0) > 0));
+      activeStore.append('audit', {
+        event: providerBoundaryStarted || providerWrite ? 'commercial_plan_failed_ambiguous' : 'commercial_plan_failed_zero_write',
+        plan_id: activePlan.plan_id, plan_digest: activeDigest, customer_id: CUSTOMER_ID,
+        provider_boundary_started: providerBoundaryStarted, provider_write: providerWrite, spend_allowed: false,
+      });
+    }
     return { ...base, status: 'BLOCKED', blockers: [String(error?.message || 'commercial_runner_failed').split('\n')[0]] };
   }
 }
 
-module.exports = { CUSTOMER_ID, MODES, planSchema, planDigest, parseAuthorizedPlan, commercialAuditStore, createCommercialReadState, runCommercialOneShot };
+module.exports = { CUSTOMER_ID, MODES, planSchema, planDigest, parseAuthorizedPlan, commercialAuditStore, createCommercialReadState, planReplayState, runCommercialOneShot };
