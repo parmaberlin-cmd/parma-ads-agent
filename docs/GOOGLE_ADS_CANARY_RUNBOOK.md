@@ -17,6 +17,7 @@ All values are names only; never commit secret values.
 - `GOOGLE_ADS_CANARY_ENABLED=true`
 - `GOOGLE_ADS_WRITE_KILL_SWITCH=false`
 - `GOOGLE_ADS_CANARY_KILL_SWITCH=false`
+- `GOOGLE_ADS_CANARY_EXECUTION_AUTHORIZED=false` during validation; set to `true` only after the required human approval
 - `GOOGLE_ADS_CANARY_EXPIRES_AT=<future ISO-8601 timestamp>`
 - `ADS_AUDIT_INTEGRITY_KEY=<at least 32 UTF-8 bytes>`
 - `ADS_AUDIT_PATH=<absolute owner-writable durable path>` or `RAILWAY_VOLUME_MOUNT_PATH=<durable mount>`
@@ -24,6 +25,9 @@ All values are names only; never commit secret values.
 
 The runner also refuses to start when `ADS_AUDIT_INTEGRITY_KEY` is missing, the audit path is not
 absolute/owner-writable, or the durable mount cannot be verified.
+
+`EXECUTE_CANARY` additionally fails closed unless `GOOGLE_ADS_CANARY_EXECUTION_AUTHORIZED=true`.
+Keep this gate false for `VALIDATE_ONLY` and restore it to false immediately after the approved canary.
 
 ## Runtime actions
 
