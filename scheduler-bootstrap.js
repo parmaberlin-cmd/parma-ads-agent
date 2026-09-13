@@ -38,6 +38,7 @@ function startReadonlyShadowScheduler({ env = process.env, client = axios } = {}
 require('./operational-live-pulse-preload');
 require('./google-campaign-intelligence-preload');
 require('./google-write-validation-preload');
+require('./google-ads-canary-preload');
 require('./autonomous-runtime-preload');
 require('./bootstrap');
 startReadonlyShadowScheduler();

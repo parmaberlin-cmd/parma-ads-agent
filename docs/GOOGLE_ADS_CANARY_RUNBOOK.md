@@ -49,3 +49,8 @@ failure it attempts one emergency rollback. On rollback verification failure it 
 `CRITICAL_ROLLBACK_FAILURE` and stops further writes.
 
 The canary runner is an internal CLI only. It does not expose a public endpoint.
+
+Railway can invoke the same internal runner once at process start with
+`GOOGLE_ADS_CANARY_STARTUP_MODE=VALIDATE_ONLY|EXECUTE_CANARY`. The value is cleared in process
+memory before execution to prevent a duplicate invocation in the same process. Reset the Railway
+variable after collecting the result; `EXECUTE_CANARY` still requires the separate execution gate.
