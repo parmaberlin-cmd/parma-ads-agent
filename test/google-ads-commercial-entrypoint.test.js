@@ -5,6 +5,8 @@ const assert = require('node:assert/strict');
 const { planDigest, runCommercialOneShot } = require('../google-ads-commercial-runner');
 
 const CUSTOMER_ID = '7376153998';
+const CAMPAIGN_ID = '23276824770';
+const CAMPAIGN_RESOURCE = `customers/${CUSTOMER_ID}/campaigns/${CAMPAIGN_ID}`;
 
 function plan(overrides = {}) {
   return {
@@ -13,7 +15,7 @@ function plan(overrides = {}) {
     customer_id: CUSTOMER_ID,
     spend_allowed: false,
     actions: [{
-      action: { type: 'negative_add', campaign_id: '23276824770', text: 'synthetic intent', match_type: 'PHRASE' },
+      action: { type: 'negative_add', campaign_id: CAMPAIGN_ID, campaign_resource_name: CAMPAIGN_RESOURCE, text: 'synthetic intent', match_type: 'PHRASE' },
       readback: { kind: 'CAMPAIGN_NEGATIVE', text: 'synthetic intent', match_type: 'PHRASE' },
       before_state: { present: false, count: 0, text: 'synthetic intent', match_type: 'PHRASE' },
       proposed_after_state: { present: true, count: 1, text: 'synthetic intent', match_type: 'PHRASE' },
@@ -234,4 +236,71 @@ test('completed plan remains non-replayable and cannot execute twice', async () 
   const second = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store });
   assert.deepEqual(second.blockers, ['commercial_plan_replay_blocked:commercial_plan_completed']);
   assert.equal(writes, 1);
+});
+
+// Regression: campaign 23276824770 belongs to customer 7376153998. The compiled
+// operation previously reused the campaign id as the customer id, producing
+// customers/23276824770/campaigns/23276824770.
+test('executed commercial plan targets the explicit customer-scoped campaign resource', async () => {
+  const value = plan();
+  value.actions.push({
+    action: { type: 'schedule_create', campaign_id: CAMPAIGN_ID, campaign_resource_name: CAMPAIGN_RESOURCE, day_of_week: 'MONDAY', start_hour: 8, start_minute: 'ZERO', end_hour: 12, end_minute: 'ZERO' },
+    readback: { kind: 'AD_SCHEDULE', day_of_week: 'MONDAY', start_hour: 8, start_minute: 'ZERO', end_hour: 12, end_minute: 'ZERO' },
+    before_state: { present: false, count: 0 },
+    proposed_after_state: { present: true, count: 1, day_of_week: 'MONDAY', start_hour: 8, start_minute: 'ZERO', end_hour: 12, end_minute: 'ZERO' },
+    change_id: 'commercial-change-2', objective_id: 'approved-commercial-plan',
+    reason: 'Operator-approved bounded commercial change.',
+    evidence: [{ type: 'operator_approval', reference: 'approved-plan-20260913' }], confidence: 1,
+  });
+  const calls = [];
+  let negativeWritten = false;
+  let scheduleWritten = false;
+  const provider = customer({
+    query: async sql => {
+      if (sql.includes('ad_schedule')) {
+        return scheduleWritten ? [{ campaign_criterion: { ad_schedule: { day_of_week: 'MONDAY', start_hour: 8, start_minute: 'ZERO', end_hour: 12, end_minute: 'ZERO' } } }] : [];
+      }
+      return negativeWritten ? [{ campaign_criterion: { keyword: { text: 'synthetic intent', match_type: 'PHRASE' } } }] : [];
+    },
+    mutateResources: async (operations, options) => {
+      calls.push({ campaign: operations[0].resource.campaign, validate_only: options.validate_only });
+      if (!options.validate_only) {
+        if (operations[0].resource.ad_schedule) scheduleWritten = true;
+        else negativeWritten = true;
+      }
+      return { results: [] };
+    },
+  });
+  const result = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store: memoryStore() });
+  assert.equal(result.status, 'VERIFIED');
+  assert.equal(result.writes_executed, 2);
+  assert.deepEqual(calls, [
+    { campaign: CAMPAIGN_RESOURCE, validate_only: true },
+    { campaign: CAMPAIGN_RESOURCE, validate_only: false },
+    { campaign: CAMPAIGN_RESOURCE, validate_only: true },
+    { campaign: CAMPAIGN_RESOURCE, validate_only: false },
+  ]);
+  assert.ok(!JSON.stringify(calls).includes(`customers/${CAMPAIGN_ID}/campaigns/`));
+});
+
+test('commercial plans fail closed on missing, foreign or mismatched campaign resources', async () => {
+  const missing = plan();
+  delete missing.actions[0].action.campaign_resource_name;
+  const missingResult = await runCommercialOneShot({ mode: 'DRY_RUN', env: envFor(missing), customer: customer(), store: memoryStore() });
+  assert.deepEqual(missingResult.blockers, ['malformed_commercial_plan']);
+
+  const foreignCampaign = plan();
+  foreignCampaign.actions[0].action.campaign_resource_name = `customers/${CAMPAIGN_ID}/campaigns/${CAMPAIGN_ID}`;
+  const foreignResult = await runCommercialOneShot({ mode: 'DRY_RUN', env: envFor(foreignCampaign), customer: customer(), store: memoryStore() });
+  assert.deepEqual(foreignResult.blockers, ['plan_customer_mismatch']);
+
+  const mismatchedCampaign = plan();
+  mismatchedCampaign.actions[0].action.campaign_resource_name = `customers/${CUSTOMER_ID}/campaigns/99999999999`;
+  const mismatchedResult = await runCommercialOneShot({ mode: 'DRY_RUN', env: envFor(mismatchedCampaign), customer: customer(), store: memoryStore() });
+  assert.deepEqual(mismatchedResult.blockers, ['invalid_campaign_binding']);
+
+  const wrongEntity = plan();
+  wrongEntity.actions[0].action.campaign_resource_name = `customers/${CUSTOMER_ID}/adGroups/100`;
+  const wrongEntityResult = await runCommercialOneShot({ mode: 'DRY_RUN', env: envFor(wrongEntity), customer: customer(), store: memoryStore() });
+  assert.deepEqual(wrongEntityResult.blockers, ['malformed_commercial_plan']);
 });

@@ -65,6 +65,14 @@ function assertPlanBindings(plan) {
     if (item.action.campaign_id !== '0' && !/^\d+$/.test(item.action.campaign_id)) throw new Error('invalid_campaign_binding');
     if (!NON_ECONOMIC_ACTIONS.has(item.action.type)) throw new Error('spend_or_creation_action_blocked');
     if (item.action.type === 'campaign_update' && item.action.status === 'ENABLED') throw new Error('campaign_activation_blocked');
+    for (const [key, value] of Object.entries(item.action)) {
+      if (typeof value !== 'string' || !value.startsWith('customers/')) continue;
+      const binding = value.match(/^customers\/(\d{1,20})\/([A-Za-z]+)\/([~-]?\d+(?:~[~-]?\d+)?)$/);
+      if (!binding) throw new Error('invalid_resource_binding');
+      if (binding[1] !== String(plan.customer_id)) throw new Error('plan_customer_mismatch');
+      if (key === 'campaign_resource_name' && binding[2] !== 'campaigns') throw new Error('invalid_campaign_binding');
+      if (key === 'campaign_resource_name' && binding[3] !== item.action.campaign_id) throw new Error('invalid_campaign_binding');
+    }
     if (changes.has(item.change_id)) throw new Error('duplicate_change_id');
     changes.add(item.change_id);
     const rb = item.readback;

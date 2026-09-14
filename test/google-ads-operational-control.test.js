@@ -34,9 +34,9 @@ function input(action, overrides = {}) {
 
 test('compiler covers the required operational entities and keeps every create non-serving', () => {
   const actions = [
-    { type: 'negative_add', campaign_id: '23276824770', text: 'gluten free', match_type: 'PHRASE' },
+    { type: 'negative_add', campaign_id: '23276824770', campaign_resource_name: C, text: 'gluten free', match_type: 'PHRASE' },
     { type: 'keyword_create', campaign_id: '23276824770', ad_group_resource_name: A, text: 'pizza dinner', match_type: 'EXACT', status: 'PAUSED' },
-    { type: 'schedule_create', campaign_id: '23276824770', day_of_week: 'THURSDAY', start_hour: 12, start_minute: 'ZERO', end_hour: 17, end_minute: 'ZERO' },
+    { type: 'schedule_create', campaign_id: '23276824770', campaign_resource_name: C, day_of_week: 'THURSDAY', start_hour: 12, start_minute: 'ZERO', end_hour: 17, end_minute: 'ZERO' },
     { type: 'rsa_create', campaign_id: '23276824770', ad_group_resource_name: A, headlines: ['Dinner in Kreuzberg', 'Organic Pizza Berlin', 'Open From Five'], descriptions: ['Book a table for dinner in Kreuzberg.', 'Organic sourdough pizza made in Berlin.'], final_urls: ['https://example.com/'], status: 'PAUSED' },
     { type: 'ad_group_create', campaign_id: '23276824770', campaign_resource_name: C, name: 'Late Dinner draft', status: 'PAUSED' },
     { type: 'campaign_create', campaign_id: '0', resource_name: 'customers/7376153998/campaigns/-1', name: 'Technical paused draft', campaign_budget: 'customers/7376153998/campaignBudgets/1', advertising_channel_type: 'SEARCH', status: 'PAUSED' },
@@ -71,7 +71,7 @@ test('compiler supports controlled pause/enable and exact owned-resource removal
 });
 
 test('operational mutations use the existing catalog and always produce a rollback plan', async t => {
-  const action = { type: 'schedule_create', campaign_id: '23276824770', day_of_week: 'THURSDAY', start_hour: 12, start_minute: 'ZERO', end_hour: 17, end_minute: 'ZERO' };
+  const action = { type: 'schedule_create', campaign_id: '23276824770', campaign_resource_name: C, day_of_week: 'THURSDAY', start_hour: 12, start_minute: 'ZERO', end_hour: 17, end_minute: 'ZERO' };
   const request = buildMutationRequest(input(action));
   assert.equal(request.mutation_type, 'create_ad_schedule');
   const control = createOperationalGoogleAdsControl({
@@ -189,4 +189,64 @@ test('trusted provider customer binding blocks a foreign operation before transp
   const result = await control.execute(input(action));
   assert.deepEqual(result.blockers, ['mutation_customer_mismatch']);
   assert.equal(calls, 0);
+});
+
+// Regression: campaign 23276824770 belongs to customer 7376153998. Building the
+// campaign resource from campaign_id alone produced
+// customers/23276824770/campaigns/23276824770, which blocked live validate-only.
+const CAMPAIGN_RESOURCE = 'customers/7376153998/campaigns/23276824770';
+
+test('campaign-scoped creates bind the explicit customer-scoped campaign resource', () => {
+  const negative = compileOperation({ type: 'negative_add', campaign_id: '23276824770', campaign_resource_name: CAMPAIGN_RESOURCE, text: 'gluten free', match_type: 'PHRASE' });
+  assert.equal(negative.entity, 'campaign_criterion');
+  assert.equal(negative.resource.campaign, CAMPAIGN_RESOURCE);
+  assert.equal(negative.resource.negative, true);
+  const schedule = compileOperation({ type: 'schedule_create', campaign_id: '23276824770', campaign_resource_name: CAMPAIGN_RESOURCE, day_of_week: 'THURSDAY', start_hour: 12, start_minute: 'ZERO', end_hour: 17, end_minute: 'ZERO' });
+  assert.equal(schedule.entity, 'campaign_criterion');
+  assert.equal(schedule.resource.campaign, CAMPAIGN_RESOURCE);
+  for (const operation of [negative, schedule]) {
+    assert.notEqual(operation.resource.campaign, 'customers/23276824770/campaigns/23276824770');
+    assert.match(operation.resource.campaign, /^customers\/7376153998\/campaigns\/23276824770$/);
+  }
+});
+
+test('campaign resource bindings fail closed on customer or campaign mismatch', async t => {
+  const negative = { type: 'negative_add', campaign_id: '23276824770', text: 'gluten free', match_type: 'PHRASE' };
+  const schedule = { type: 'schedule_create', campaign_id: '23276824770', day_of_week: 'MONDAY', start_hour: 8, start_minute: 'ZERO', end_hour: 12, end_minute: 'ZERO' };
+  for (const action of [negative, schedule]) {
+    assert.throws(() => compileOperation(action), /Required|invalid_union|invalid_type/);
+    assert.throws(() => compileOperation({ ...action, campaign_resource_name: 'customers/7376153998/campaigns/99999999999' }), /campaign_resource_campaign_mismatch/);
+    assert.throws(() => compileOperation({ ...action, campaign_resource_name: 'customers/9999999999/campaigns/99999999999' }), /campaign_resource_campaign_mismatch/);
+    assert.throws(() => compileOperation({ ...action, campaign_resource_name: A }), /invalid_union|invalid_string|Required/);
+  }
+  // The campaign id can never be promoted into the customer id namespace.
+  const smuggled = compileOperation({ ...negative, campaign_resource_name: 'customers/23276824770/campaigns/23276824770' });
+  assert.equal(smuggled.resource.campaign, 'customers/23276824770/campaigns/23276824770');
+  let calls = 0;
+  const control = createOperationalGoogleAdsControl({
+    store: store(t), customer: { customerId: '7376153998', mutateResources: async () => { calls += 1; } }, readState: async () => ({ version: 'before' }),
+    gates: { writes_allowed: true, execution_authorized: true }, now,
+  });
+  const blocked = await control.execute(input({ ...negative, campaign_resource_name: 'customers/23276824770/campaigns/23276824770' }));
+  assert.deepEqual(blocked.blockers, ['mutation_customer_mismatch']);
+  assert.equal(calls, 0);
+  assert.equal(blocked.provider_write, false);
+});
+
+test('negative_add and schedule_create reach the provider with the explicit campaign resource', async t => {
+  const calls = [];
+  const control = createOperationalGoogleAdsControl({
+    store: store(t),
+    customer: { customerId: '7376153998', mutateResources: async (ops, options) => { calls.push({ ops, options }); return { results: [] }; } },
+    readState: async (_mutation, { phase }) => ({ version: phase === 'before' ? 'before' : 'after' }), sleep: async () => {},
+    gates: { writes_allowed: true, execution_authorized: true, spend_allowed: false, activation_authorized: false }, now,
+  });
+  const negative = await control.execute(input({ type: 'negative_add', campaign_id: '23276824770', campaign_resource_name: CAMPAIGN_RESOURCE, text: 'gluten free', match_type: 'PHRASE' }));
+  const schedule = await control.execute(input({ type: 'schedule_create', campaign_id: '23276824770', campaign_resource_name: CAMPAIGN_RESOURCE, day_of_week: 'MONDAY', start_hour: 8, start_minute: 'ZERO', end_hour: 12, end_minute: 'ZERO' }));
+  assert.equal(negative.status, 'VERIFIED');
+  assert.equal(schedule.status, 'VERIFIED');
+  assert.deepEqual(calls.map(call => [call.options.validate_only, call.ops[0].resource.campaign]), [
+    [true, CAMPAIGN_RESOURCE], [false, CAMPAIGN_RESOURCE],
+    [true, CAMPAIGN_RESOURCE], [false, CAMPAIGN_RESOURCE],
+  ]);
 });
