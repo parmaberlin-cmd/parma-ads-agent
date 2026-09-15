@@ -178,7 +178,7 @@ function planReplayState(store, digest, changeIds = []) {
     : { replayable: true, reason: 'commercial_plan_legacy_zero_provider_write' };
 }
 
-async function runCommercialOneShot({ env = process.env, mode = env.GOOGLE_ADS_COMMERCIAL_STARTUP_MODE, customer = null, store = null, controlFactory = createOperationalGoogleAdsControl, readStateFactory = createCommercialReadState, now = Date.now } = {}) {
+async function runCommercialOneShot({ env = process.env, mode = env.GOOGLE_ADS_COMMERCIAL_STARTUP_MODE, customer = null, store = null, controlFactory = createOperationalGoogleAdsControl, readStateFactory = createCommercialReadState, providerTransport = null, now = Date.now } = {}) {
   const base = { mode, customer_id: CUSTOMER_ID, writes_executed: 0, provider_write: false, spend_allowed: false, commercial_mutations: 0 };
   let activeStore = null;
   let activePlan = null;
@@ -210,6 +210,7 @@ async function runCommercialOneShot({ env = process.env, mode = env.GOOGLE_ADS_C
       const control = controlFactory({
         store: activeStore,
         customer: activeCustomer,
+        providerTransport: providerTransport || undefined,
         readState: readStateFactory(activeCustomer, item),
         gates: {
           writes_allowed: mode === 'EXECUTE_APPROVED_PLAN',

@@ -6,6 +6,7 @@
 const { z } = require('zod');
 const { createGoogleAdsMutationGateway, POLICY_CLASSES } = require('./google-ads-mutation-gateway');
 const { AdsKillSwitch, verifyReadAfterWrite } = require('./ads-controlled-execution-core');
+const { createOperationalRestTransport } = require('./google-ads-operational-rest-transport');
 
 // Every campaign-scoped create must carry the full provider resource name
 // (customers/<customer_id>/campaigns/<campaign_id>). The customer id is never
@@ -127,9 +128,15 @@ function buildMutationRequest({ action: rawAction, before_state, proposed_after_
   };
 }
 
-function createOperationalGoogleAdsControl({ store, customer, readState, gates = {}, killSwitch = new AdsKillSwitch(), beforeProviderMutation = async () => {}, now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), readBackAttempts = 5, readBackDelayMs = 500 } = {}) {
-  if (!customer || typeof customer.mutateResources !== 'function' || typeof readState !== 'function' || typeof beforeProviderMutation !== 'function') throw new Error('operational_google_ads_dependencies_required');
+function createOperationalGoogleAdsControl({ store, customer, providerTransport = null, readState, gates = {}, killSwitch = new AdsKillSwitch(), beforeProviderMutation = async () => {}, now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), readBackAttempts = 5, readBackDelayMs = 500 } = {}) {
+  if (!customer || typeof readState !== 'function' || typeof beforeProviderMutation !== 'function') throw new Error('operational_google_ads_dependencies_required');
   if (!Number.isInteger(readBackAttempts) || readBackAttempts < 1 || readBackAttempts > 10 || !Number.isInteger(readBackDelayMs) || readBackDelayMs < 0 || readBackDelayMs > 5000 || typeof sleep !== 'function') throw new Error('invalid_operational_read_back_policy');
+  // Provider writes always run through a bounded transport. The default is the
+  // REST transport (the gax/gRPC mutateResources channel can hang without ever
+  // answering); an injected transport is only accepted when it exposes the same
+  // single-operation contract.
+  const transport = providerTransport || createOperationalRestTransport(customer);
+  if (typeof transport?.mutateResources !== 'function') throw new Error('operational_provider_transport_required');
   const trustedGates = Object.freeze({
     writes_allowed: gates.writes_allowed === true,
     execution_authorized: gates.execution_authorized === true,
@@ -154,9 +161,22 @@ function createOperationalGoogleAdsControl({ store, customer, readState, gates =
       const action = pendingActions.get(mutation.change_id);
       if (!action) throw new Error('operational_action_context_missing');
       const operation = compileOperation(action);
-      await customer.mutateResources([operation], { validate_only: true, partial_failure: false });
+      const validated = await transport.mutateResources([operation], { validate_only: true, partial_failure: false });
+      if (validated?.provider_write === true) throw new Error('operational_validation_transport_mismatch');
+      store.append('audit', {
+        event: 'operational_provider_validate_only', change_id: mutation.change_id, campaign_id: mutation.campaign_id,
+        mutation_type: mutation.mutation_type, http_status: validated?.http_status ?? null, request_id: validated?.request_id ?? null,
+        provider_write: false, writes_executed: 0, at: new Date(now()).toISOString(),
+      });
       await beforeProviderMutation(mutation);
-      return customer.mutateResources([operation], { validate_only: false, partial_failure: false });
+      const written = await transport.mutateResources([operation], { validate_only: false, partial_failure: false });
+      if (written?.provider_write === false) throw new Error('operational_write_transport_mismatch');
+      store.append('audit', {
+        event: 'operational_provider_write', change_id: mutation.change_id, campaign_id: mutation.campaign_id,
+        mutation_type: mutation.mutation_type, http_status: written?.http_status ?? null, request_id: written?.request_id ?? null,
+        provider_write: true, writes_executed: 1, at: new Date(now()).toISOString(),
+      });
+      return written;
     },
   });
 

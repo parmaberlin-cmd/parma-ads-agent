@@ -7,7 +7,12 @@ const scheduler = fs.readFileSync(path.join(__dirname, '..', 'scheduler-bootstra
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
 
 test('production startup uses the read-only Shadow scheduler and Google intelligence preload', () => {
-  assert.equal(pkg.scripts.start, 'node -r ./google-campaign-intelligence-preload.js -r ./meta-legacy-write-preload.js scheduler-bootstrap.js');
+  assert.equal(pkg.scripts.start, 'node -r ./google-campaign-intelligence-preload.js -r ./meta-legacy-write-preload.js -r ./google-ads-unattended-preload.js scheduler-bootstrap.js');
+  // The unattended worker preload is inert unless explicitly opted in, so the
+  // production startup command stays write-closed by default.
+  assert.match(pkg.scripts.check, /google-ads-unattended-preload\.js/);
+  assert.match(pkg.scripts.check, /google-ads-unattended-runner\.js/);
+  assert.match(pkg.scripts.check, /google-ads-unattended-job-store\.js/);
   assert.match(pkg.scripts.check, /google-campaign-intelligence-preload\.js/);
   assert.match(pkg.scripts.check, /google-campaign-breakdowns\.js/);
   assert.match(pkg.scripts.check, /scheduler-bootstrap\.js/);

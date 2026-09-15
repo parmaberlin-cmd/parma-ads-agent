@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { planDigest, runCommercialOneShot } = require('../google-ads-commercial-runner');
+const { planDigest, planReplayState, runCommercialOneShot } = require('../google-ads-commercial-runner');
 
 const CUSTOMER_ID = '7376153998';
 const CAMPAIGN_ID = '23276824770';
@@ -49,8 +49,27 @@ function memoryStore(records = []) {
   };
 }
 
-function customer({ query = async () => [], mutateResources = async () => ({ results: [] }) } = {}) {
+const grpcGuard = async () => { throw new Error('client_mutateResources_must_not_be_used'); };
+
+function customer({ query = async () => [], mutateResources = grpcGuard } = {}) {
   return { customerId: CUSTOMER_ID, query, mutateResources };
+}
+
+// The commercial runner writes through a provider transport (default: bounded
+// REST). Tests inject this double; the client's own mutateResources stays
+// guarded so a gRPC regression fails loudly.
+function transportDouble({ onWrite = async () => {}, writeError = null } = {}) {
+  return {
+    mutateResources: async (operations, options) => {
+      assert.equal(Array.isArray(operations) && operations.length, 1);
+      assert.equal(options.partial_failure, false);
+      if (options.validate_only === true) return { results: [], http_status: 200, provider_write: false };
+      if (options.validate_only !== false) throw new Error('invalid_transport_call');
+      await onWrite(operations);
+      if (writeError) throw writeError;
+      return { results: [], http_status: 200, provider_write: true };
+    },
+  };
 }
 
 test('default startup is disabled and performs zero writes', async () => {
@@ -111,7 +130,8 @@ test('authorized dry-run reaches operational control with provider read-back and
   const store = memoryStore();
   const result = await runCommercialOneShot({
     mode: 'DRY_RUN', env: envFor(), store,
-    customer: customer({ query: async () => { reads += 1; return []; }, mutateResources: async () => { writes += 1; } }),
+    customer: customer({ query: async () => { reads += 1; return []; } }),
+    providerTransport: transportDouble({ onWrite: async () => { writes += 1; } }),
   });
   assert.equal(result.status, 'DRY_RUN_VERIFIED');
   assert.equal(result.provider_credentials_internal, true);
@@ -162,9 +182,8 @@ test('legacy reservation is retryable only when durable order proves preflight n
   const store = memoryStore([{ kind: 'audit', payload: { event: 'commercial_plan_execution_started', plan_digest: planDigest(value) } }]);
   const provider = customer({
     query: async () => writes ? [{ campaign_criterion: { keyword: { text: 'synthetic intent', match_type: 'PHRASE' } } }] : [],
-    mutateResources: async (_operations, options) => { if (!options.validate_only) writes += 1; return { results: [] }; },
   });
-  const result = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store });
+  const result = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store, providerTransport: transportDouble({ onWrite: async () => { writes += 1; } }) });
   assert.equal(result.status, 'VERIFIED');
   assert.equal(writes, 1);
 });
@@ -191,14 +210,14 @@ test('failure before provider boundary records zero-write and permits one safe r
       if (failRead) throw new Error('snapshot_unavailable');
       return writes ? [{ campaign_criterion: { keyword: { text: 'synthetic intent', match_type: 'PHRASE' } } }] : [];
     },
-    mutateResources: async (_operations, options) => { if (!options.validate_only) writes += 1; return { results: [] }; },
   });
-  const first = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store });
+  const providerTransport = transportDouble({ onWrite: async () => { writes += 1; } });
+  const first = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store, providerTransport });
   assert.deepEqual(first.blockers, ['snapshot_unavailable']);
   assert.equal(store.records.at(-1).payload.event, 'commercial_plan_failed_zero_write');
   assert.equal(writes, 0);
   failRead = false;
-  const retry = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store });
+  const retry = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store, providerTransport });
   assert.equal(retry.status, 'VERIFIED');
   assert.equal(writes, 1);
 });
@@ -209,16 +228,12 @@ test('provider boundary marker makes failed or ambiguous execution non-replayabl
   let actualCalls = 0;
   const provider = customer({
     query: async () => [],
-    mutateResources: async (_operations, options) => {
-      if (options.validate_only) return { results: [] };
-      actualCalls += 1;
-      throw new Error('provider_transport_ambiguous');
-    },
   });
-  const first = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store });
+  const providerTransport = transportDouble({ writeError: new Error('provider_transport_ambiguous'), onWrite: async () => { actualCalls += 1; } });
+  const first = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store, providerTransport });
   assert.deepEqual(first.blockers, ['provider_transport_ambiguous']);
   assert.equal(store.records.at(-1).payload.event, 'commercial_plan_failed_ambiguous');
-  const retry = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store });
+  const retry = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store, providerTransport });
   assert.deepEqual(retry.blockers, ['commercial_plan_replay_blocked:commercial_plan_provider_state_ambiguous']);
   assert.equal(actualCalls, 1);
 });
@@ -229,11 +244,11 @@ test('completed plan remains non-replayable and cannot execute twice', async () 
   let writes = 0;
   const provider = customer({
     query: async () => writes ? [{ campaign_criterion: { keyword: { text: 'synthetic intent', match_type: 'PHRASE' } } }] : [],
-    mutateResources: async (_operations, options) => { if (!options.validate_only) writes += 1; return { results: [] }; },
   });
-  const first = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store });
+  const providerTransport = transportDouble({ onWrite: async () => { writes += 1; } });
+  const first = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store, providerTransport });
   assert.equal(first.status, 'VERIFIED');
-  const second = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store });
+  const second = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store, providerTransport });
   assert.deepEqual(second.blockers, ['commercial_plan_replay_blocked:commercial_plan_completed']);
   assert.equal(writes, 1);
 });
@@ -262,16 +277,20 @@ test('executed commercial plan targets the explicit customer-scoped campaign res
       }
       return negativeWritten ? [{ campaign_criterion: { keyword: { text: 'synthetic intent', match_type: 'PHRASE' } } }] : [];
     },
-    mutateResources: async (operations, options) => {
-      calls.push({ campaign: operations[0].resource.campaign, validate_only: options.validate_only });
-      if (!options.validate_only) {
-        if (operations[0].resource.ad_schedule) scheduleWritten = true;
-        else negativeWritten = true;
-      }
-      return { results: [] };
+  });
+  const providerTransport = transportDouble({
+    onWrite: async operations => {
+      if (operations[0].resource.ad_schedule) scheduleWritten = true;
+      else negativeWritten = true;
     },
   });
-  const result = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store: memoryStore() });
+  const recordingTransport = {
+    mutateResources: async (operations, options) => {
+      calls.push({ campaign: operations[0].resource.campaign, validate_only: options.validate_only });
+      return providerTransport.mutateResources(operations, options);
+    },
+  };
+  const result = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store: memoryStore(), providerTransport: recordingTransport });
   assert.equal(result.status, 'VERIFIED');
   assert.equal(result.writes_executed, 2);
   assert.deepEqual(calls, [
@@ -303,4 +322,17 @@ test('commercial plans fail closed on missing, foreign or mismatched campaign re
   wrongEntity.actions[0].action.campaign_resource_name = `customers/${CUSTOMER_ID}/adGroups/100`;
   const wrongEntityResult = await runCommercialOneShot({ mode: 'DRY_RUN', env: envFor(wrongEntity), customer: customer(), store: memoryStore() });
   assert.deepEqual(wrongEntityResult.blockers, ['malformed_commercial_plan']);
+});
+
+test('operational provider evidence records never count as a provider write for replay', () => {
+  const value = plan();
+  const digest = planDigest(value);
+  const reserved = [
+    { id: 'R_1', kind: 'audit', payload: { event: 'commercial_plan_execution_reserved', plan_digest: digest } },
+    { id: 'R_2', kind: 'audit', payload: { event: 'operational_provider_validate_only', change_id: 'commercial-change-1', provider_write: false, writes_executed: 0 } },
+  ];
+  assert.deepEqual(planReplayState(memoryStore(reserved), digest, ['commercial-change-1']), { replayable: true, reason: 'commercial_plan_reserved_zero_provider_write' });
+
+  const written = [...reserved, { id: 'R_3', kind: 'change', payload: { change_id: 'commercial-change-1', provider_write: true, writes_executed: 1 } }];
+  assert.deepEqual(planReplayState(memoryStore(written), digest, ['commercial-change-1']), { replayable: false, reason: 'commercial_plan_provider_state_ambiguous' });
 });

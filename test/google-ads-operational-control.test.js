@@ -32,6 +32,20 @@ function input(action, overrides = {}) {
   };
 }
 
+// Provider-write transport double. The control always writes through a
+// transport (the default is the bounded REST transport); fixtures inject this
+// stub so tests stay offline while keeping the same single-operation contract.
+function transport(onMutation = async () => ({ results: [] })) {
+  return {
+    mutateResources: async (operations, options) => {
+      assert.equal(Array.isArray(operations) && operations.length, 1);
+      assert.equal(typeof options.validate_only, 'boolean');
+      assert.equal(options.partial_failure, false);
+      return onMutation(operations, options);
+    },
+  };
+}
+
 test('compiler covers the required operational entities and keeps every create non-serving', () => {
   const actions = [
     { type: 'negative_add', campaign_id: '23276824770', campaign_resource_name: C, text: 'gluten free', match_type: 'PHRASE' },
@@ -75,7 +89,7 @@ test('operational mutations use the existing catalog and always produce a rollba
   const request = buildMutationRequest(input(action));
   assert.equal(request.mutation_type, 'create_ad_schedule');
   const control = createOperationalGoogleAdsControl({
-    store: store(t), customer: { mutateResources: async () => ({}) },
+    store: store(t), customer: { customerId: '7376153998' }, providerTransport: transport(),
     readState: async (_mutation, { phase }) => ({ version: phase === 'before' ? 'before' : 'after' }), now,
   });
   const result = await control.dryRun(input(action));
@@ -88,7 +102,7 @@ test('execution is fail-closed unless both write and execution gates are trusted
   const action = { type: 'keyword_create', campaign_id: '23276824770', ad_group_resource_name: A, text: 'pizza dinner', match_type: 'EXACT', status: 'PAUSED' };
   for (const gates of [{}, { writes_allowed: true }]) {
     let calls = 0;
-    const control = createOperationalGoogleAdsControl({ store: store(t), customer: { mutateResources: async () => { calls += 1; } }, readState: async () => ({ version: 'before' }), gates, now });
+    const control = createOperationalGoogleAdsControl({ store: store(t), customer: { customerId: '7376153998' }, providerTransport: transport(async () => { calls += 1; }), readState: async () => ({ version: 'before' }), gates, now });
     const result = await control.execute(input(action));
     assert.equal(result.status, 'BLOCKED');
     assert.equal(calls, 0);
@@ -99,7 +113,7 @@ test('campaign activation needs its separate authorization and spend remains den
   const action = { type: 'campaign_update', campaign_id: '23276824770', resource_name: C, status: 'ENABLED' };
   let calls = 0;
   const control = createOperationalGoogleAdsControl({
-    store: store(t), customer: { mutateResources: async () => { calls += 1; } }, readState: async () => ({ version: 'before' }),
+    store: store(t), customer: { customerId: '7376153998' }, providerTransport: transport(async () => { calls += 1; }), readState: async () => ({ version: 'before' }),
     gates: { writes_allowed: true, execution_authorized: true, spend_allowed: false, activation_authorized: false }, now,
   });
   const result = await control.execute(input(action));
@@ -116,7 +130,7 @@ test('campaign budget creation exists but is blocked while spend authorization i
   assert.equal(operation.resource.explicitly_shared, false);
   let calls = 0;
   const control = createOperationalGoogleAdsControl({
-    store: store(t), customer: { mutateResources: async () => { calls += 1; } }, readState: async () => ({ version: 'before' }),
+    store: store(t), customer: { customerId: '7376153998' }, providerTransport: transport(async () => { calls += 1; }), readState: async () => ({ version: 'before' }),
     gates: { writes_allowed: true, execution_authorized: true, spend_allowed: false, economic_authorized: false }, now,
   });
   const result = await control.execute(input(action));
@@ -132,7 +146,8 @@ test('mock execution validates first, writes once, reads independently, verifies
   const action = { type: 'keyword_update', campaign_id: '23276824770', resource_name: 'customers/7376153998/adGroupCriteria/100~200', status: 'PAUSED' };
   const control = createOperationalGoogleAdsControl({
     store: audit,
-    customer: { mutateResources: async (ops, options) => { calls.push({ ops, options }); return { results: [] }; } },
+    customer: { customerId: '7376153998' },
+    providerTransport: transport((ops, options) => { calls.push({ ops, options }); return { results: [], http_status: 200, provider_write: options.validate_only !== true }; }),
     readState: async (_mutation, { phase }) => { phases.push(phase); return { version: phase === 'before' ? 'before' : 'after' }; }, sleep: async () => {},
     gates: { writes_allowed: true, execution_authorized: true, spend_allowed: false, activation_authorized: false }, now,
   });
@@ -147,7 +162,7 @@ test('mock execution validates first, writes once, reads independently, verifies
 test('read-back mismatch fails reconciliation closed', async t => {
   const action = { type: 'ad_group_update', campaign_id: '23276824770', resource_name: A, status: 'PAUSED' };
   const control = createOperationalGoogleAdsControl({
-    store: store(t), customer: { mutateResources: async () => ({}) },
+    store: store(t), customer: { customerId: '7376153998' }, providerTransport: transport(),
     readState: async (_mutation, { phase }) => ({ version: phase === 'before' ? 'before' : 'unexpected' }),
     gates: { writes_allowed: true, execution_authorized: true }, now, sleep: async () => {}, readBackAttempts: 2,
   });
@@ -160,7 +175,7 @@ test('independent read-back uses bounded retry and stops when normalized state m
   const action = { type: 'keyword_update', campaign_id: '23276824770', resource_name: 'customers/7376153998/adGroupCriteria/100~200', status: 'PAUSED' };
   let afterReads = 0;
   const control = createOperationalGoogleAdsControl({
-    store: store(t), customer: { mutateResources: async () => ({}) },
+    store: store(t), customer: { customerId: '7376153998' }, providerTransport: transport(),
     readState: async (_mutation, { phase }) => {
       if (phase === 'before') return { version: 'before' };
       afterReads += 1;
@@ -183,7 +198,7 @@ test('trusted provider customer binding blocks a foreign operation before transp
   let calls = 0;
   const action = { type: 'ad_group_update', campaign_id: '23276824770', resource_name: A, status: 'PAUSED' };
   const control = createOperationalGoogleAdsControl({
-    store: store(t), customer: { customerId: '9999999999', mutateResources: async () => { calls += 1; } }, readState: async () => ({ version: 'before' }),
+    store: store(t), customer: { customerId: '9999999999' }, providerTransport: transport(async () => { calls += 1; }), readState: async () => ({ version: 'before' }),
     gates: { writes_allowed: true, execution_authorized: true }, now,
   });
   const result = await control.execute(input(action));
@@ -224,7 +239,7 @@ test('campaign resource bindings fail closed on customer or campaign mismatch', 
   assert.equal(smuggled.resource.campaign, 'customers/23276824770/campaigns/23276824770');
   let calls = 0;
   const control = createOperationalGoogleAdsControl({
-    store: store(t), customer: { customerId: '7376153998', mutateResources: async () => { calls += 1; } }, readState: async () => ({ version: 'before' }),
+    store: store(t), customer: { customerId: '7376153998' }, providerTransport: transport(async () => { calls += 1; }), readState: async () => ({ version: 'before' }),
     gates: { writes_allowed: true, execution_authorized: true }, now,
   });
   const blocked = await control.execute(input({ ...negative, campaign_resource_name: 'customers/23276824770/campaigns/23276824770' }));
@@ -237,7 +252,8 @@ test('negative_add and schedule_create reach the provider with the explicit camp
   const calls = [];
   const control = createOperationalGoogleAdsControl({
     store: store(t),
-    customer: { customerId: '7376153998', mutateResources: async (ops, options) => { calls.push({ ops, options }); return { results: [] }; } },
+    customer: { customerId: '7376153998' },
+    providerTransport: transport((ops, options) => { calls.push({ ops, options }); return { results: [] }; }),
     readState: async (_mutation, { phase }) => ({ version: phase === 'before' ? 'before' : 'after' }), sleep: async () => {},
     gates: { writes_allowed: true, execution_authorized: true, spend_allowed: false, activation_authorized: false }, now,
   });
@@ -249,4 +265,56 @@ test('negative_add and schedule_create reach the provider with the explicit camp
     [true, CAMPAIGN_RESOURCE], [false, CAMPAIGN_RESOURCE],
     [true, CAMPAIGN_RESOURCE], [false, CAMPAIGN_RESOURCE],
   ]);
+});
+
+test('provider writes use the bounded transport and never the client gRPC mutateResources path', async t => {
+  const calls = [];
+  let grpcCalls = 0;
+  const audit = store(t);
+  const control = createOperationalGoogleAdsControl({
+    store: audit,
+    customer: { customerId: '7376153998', mutateResources: async () => { grpcCalls += 1; return { results: [] }; } },
+    providerTransport: transport((operations, options) => {
+      calls.push({ operation: operations[0], validate_only: options.validate_only });
+      return { results: [], http_status: 200, provider_write: options.validate_only !== true, request_id: 'req-1' };
+    }),
+    readState: async (_mutation, { phase }) => ({ version: phase === 'before' ? 'before' : 'after' }), sleep: async () => {},
+    gates: { writes_allowed: true, execution_authorized: true, spend_allowed: false, activation_authorized: false }, now,
+  });
+  const result = await control.execute(input({ type: 'negative_add', campaign_id: '23276824770', campaign_resource_name: CAMPAIGN_RESOURCE, text: 'gluten free', match_type: 'PHRASE' }));
+  assert.equal(result.status, 'VERIFIED');
+  assert.equal(grpcCalls, 0);
+  assert.deepEqual(calls.map(call => call.validate_only), [true, false]);
+  assert.deepEqual(calls.map(call => call.operation.resource.campaign), [CAMPAIGN_RESOURCE, CAMPAIGN_RESOURCE]);
+  const evidence = audit.list('audit').map(record => record.payload).filter(payload => String(payload.event || '').startsWith('operational_provider_'));
+  assert.deepEqual(evidence.map(payload => [payload.event, payload.provider_write, payload.writes_executed, payload.http_status]), [
+    ['operational_provider_validate_only', false, 0, 200],
+    ['operational_provider_write', true, 1, 200],
+  ]);
+  assert.deepEqual(evidence.map(payload => payload.request_id), ['req-1', 'req-1']);
+});
+
+test('control construction fails closed without a REST-capable customer or an injected transport', async t => {
+  assert.throws(() => createOperationalGoogleAdsControl({
+    store: store(t), customer: { customerId: '7376153998', query: async () => [] },
+    readState: async () => ({ version: 'before' }), now,
+  }), /invalid_operational_rest_transport/);
+  assert.throws(() => createOperationalGoogleAdsControl({
+    store: store(t), customer: { customerId: '7376153998' }, providerTransport: {},
+    readState: async () => ({ version: 'before' }), now,
+  }), /operational_provider_transport_required/);
+});
+
+test('transport claiming a write during validation aborts before the real write is attempted', async t => {
+  let calls = 0;
+  const control = createOperationalGoogleAdsControl({
+    store: store(t), customer: { customerId: '7376153998' },
+    providerTransport: transport(() => { calls += 1; return { results: [], provider_write: true }; }),
+    readState: async () => ({ version: 'before' }),
+    gates: { writes_allowed: true, execution_authorized: true }, now,
+  });
+  await assert.rejects(
+    () => control.execute(input({ type: 'negative_add', campaign_id: '23276824770', campaign_resource_name: CAMPAIGN_RESOURCE, text: 'gluten free', match_type: 'PHRASE' })),
+    /operational_validation_transport_mismatch/);
+  assert.equal(calls, 1);
 });
