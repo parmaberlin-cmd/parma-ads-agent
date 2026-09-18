@@ -41,6 +41,7 @@ require('./google-write-validation-preload');
 require('./google-ads-canary-preload');
 require('./google-ads-commercial-preload');
 require('./autonomous-runtime-preload');
+require('./google-ads-economic-preload');
 require('./bootstrap');
 startReadonlyShadowScheduler();
 
