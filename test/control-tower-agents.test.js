@@ -1,0 +1,5 @@
+const test=require('node:test');const assert=require('node:assert/strict');const a=require('../control-tower-agents');
+test('routes task to lowest-priority-number capable specialist',()=>{const r=a.createRegistry([{id:'general',capabilities:['generate_report'],priority:50},{id:'reporter',capabilities:['generate_report'],priority:10}]);assert.equal(a.routeTask({kind:'generate_report'},r).agent_id,'reporter')});
+test('missing specialist fails closed',()=>{const r=a.createRegistry([]);assert.equal(a.routeTask({kind:'run_diagnostics'},r).routed,false)});
+test('duplicate agents rejected',()=>assert.throws(()=>a.createRegistry([{id:'x'},{id:'x'}]),/agent_registry_invalid/));
+test('buildExecutors binds specialist identity',async()=>{const r=a.createRegistry([{id:'diag',capabilities:['run_diagnostics']}]);let seen;const ex=a.buildExecutors({registry:r,handlers:{diag:async(t,c)=>{seen=c.agent_id;return{level1_passed:true,level2_passed:true}}}});await ex.run_diagnostics({id:'a'},{});assert.equal(seen,'diag')});
