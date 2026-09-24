@@ -14,7 +14,8 @@ const {
 } = require("./google-time-utils");
 const { buildGoogleReadiness, buildMetaOverview } = require("./reporting");
 const { buildMetaDinnerProposal } = require("./proposals");
-const { auditInstagramContentCapability, auditInstagramLoginCapability } = require("./instagram-content-publishing");\nconst { discoverStories } = require("./instagram-story-capability");
+const { auditInstagramContentCapability, auditInstagramLoginCapability } = require("./instagram-content-publishing");
+const { discoverStories } = require("./instagram-story-capability");
 const { registerInstagramMediaHost } = require("./instagram-media-host");
 const { startInstagramEditorialRuntime } = require("./instagram-editorial-runtime");
 const {
