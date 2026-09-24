@@ -32,9 +32,9 @@ test('BLOCKED_EXTERNAL cannot be falsely marked completed externally',async()=>{
  assert.throws(()=>resumeObjective(r,{objective_id:'blocked',task_id:'read',mode:'completed_externally'}),/blocked_external_retry_only/);
 });
 
-test('action registry defines ownership and keeps future Instagram publish disabled',()=>{
+test('action registry defines controlled package-specific Instagram publishing',()=>{
  assert.equal(describeAction('google_ads.execute_authorized').specialist,'google_ads');
  assert.equal(describeAction('google_ads.execute_authorized').concurrency,'google_ads:account_mutation');
- const publish=describeAction('instagram.publish');assert.equal(publish.specialist,'meta');assert.equal(publish.implemented,false);assert.equal(publish.authorization,'explicit_instagram_content_delegation_required');
+ const publish=describeAction('instagram.publish');assert.equal(publish.specialist,'meta');assert.equal(publish.implemented,true);assert.equal(publish.write,'controlled_external');assert.equal(publish.authorization,'package_specific_instagram_authorization_required');
  assert.equal(describeAction('orderbird.read_revenue').implemented,false);
 });
