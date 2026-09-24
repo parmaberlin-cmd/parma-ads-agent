@@ -389,8 +389,13 @@ async function executeInstagramCanary({
     return buildBlockedResult(['instagram_publish_id_missing'], { real_instagram_publication_attempted: true });
   }
 
-  const verification = await verifyPublishedMedia({ transport: executionTransport, mediaId });
-  if (!verification.published || !verification.media?.permalink) {
+  const verification = await verifyPublishedMedia({
+    transport: executionTransport,
+    mediaId,
+    expectedMediaType: mediaType,
+    expectedUsername: prepared.username,
+  });
+  if (!verification.published) {
     resolvedAuditStore.append('audit', { phase: 'instagram_verification_failed', verification, at: clockIso(now) });
     return buildBlockedResult(['instagram_publication_not_verified'], { verification, real_instagram_publication_attempted: true });
   }
