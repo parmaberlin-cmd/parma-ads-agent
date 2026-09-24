@@ -2,6 +2,7 @@
 
 const { randomBytes } = require('node:crypto');
 const { buildEnvelope } = require('./scripts/submit-commercial-job');
+const { planSchema } = require('./google-ads-commercial-runner');
 const { UnattendedJobStore, jobStoreDirectory, jobIntegrityKey, signEnvelope } = require('./google-ads-unattended-job-store');
 
 const ALLOWED = new Set(['negative_add','negative_remove','keyword_create','keyword_update','keyword_remove','schedule_create','schedule_remove','rsa_create','rsa_update','rsa_remove','ad_group_update','campaign_update']);
@@ -12,8 +13,9 @@ function createCommercialHandoffTool({ env = process.env, authorize, now = Date.
     try {
       if (await authorize(authContext, { scope: 'parma.write', tool: 'parma_submit_commercial_plan' }) !== true) throw new Error('unauthorized');
       if (args.confirm_authorized !== true) throw new Error('explicit_authorization_required');
-      const plan = args.plan;
-      if (!plan || typeof plan !== 'object' || Array.isArray(plan)) throw new Error('plan_required');
+      const parsedPlan = planSchema.safeParse(args.plan);
+      if (!parsedPlan.success) throw new Error('malformed_commercial_plan');
+      const plan = parsedPlan.data;
       if (plan.spend_allowed !== false) throw new Error('spend_must_remain_false');
       const actions = Array.isArray(plan.actions) ? plan.actions : [];
       if (!actions.length || actions.length > 50) throw new Error('invalid_action_count');
