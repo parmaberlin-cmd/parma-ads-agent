@@ -20,7 +20,7 @@ class ParmaOAuthProvider {
       client_id: config.clientId, client_secret: config.clientSecret,
       client_name: 'Parma private ChatGPT connector', redirect_uris: [config.redirectUri],
       token_endpoint_auth_method: 'client_secret_post', grant_types: ['authorization_code', 'refresh_token'],
-      response_types: ['code'], scope: 'parma.read',
+      response_types: ['code'], scope: 'parma.read parma.write',
     } : undefined };
   }
   checkClient(client) {
@@ -30,7 +30,7 @@ class ParmaOAuthProvider {
     if (resource?.href !== this.config.resource) throw new InvalidRequestError('Invalid resource');
   }
   checkScopes(scopes) {
-    if (!Array.isArray(scopes) || scopes.length !== 1 || scopes[0] !== 'parma.read') throw new InvalidScopeError('Only parma.read is supported');
+    if (!Array.isArray(scopes) || scopes.length !== 2 || !scopes.includes('parma.read') || !scopes.includes('parma.write')) throw new InvalidScopeError('parma.read and parma.write are required');
   }
   cleanup() {
     for (const map of [this.pending, this.codes]) {
@@ -124,7 +124,7 @@ class ParmaOAuthProvider {
   validRecord(row, type) {
     return row && row.type === type && row.expires > this.now() &&
       row.clientId === this.config.clientId && row.ownerEmail === this.config.ownerEmail &&
-      row.resource === this.config.resource && row.issuer === this.config.issuer && row.scope === 'parma.read' &&
+      row.resource === this.config.resource && row.issuer === this.config.issuer && row.scope === 'parma.read parma.write' &&
       typeof row.subject === 'string' && row.subject.length > 0;
   }
   issue({ subject, family, familyExpires }, state = this.store.snapshot()) {
@@ -132,12 +132,12 @@ class ParmaOAuthProvider {
     if (Object.keys(state.tokens).length > 2000) throw new InvalidGrantError('Authorization capacity reached');
     const access = opaque(), refresh = opaque();
     const common = { subject, family, familyExpires, clientId: this.config.clientId, ownerEmail: this.config.ownerEmail,
-      resource: this.config.resource, issuer: this.config.issuer, scope: 'parma.read' };
+      resource: this.config.resource, issuer: this.config.issuer, scope: 'parma.read parma.write' };
     state.tokens[hash(access)] = { ...common, type: 'access', expires: Math.min(this.now() + 3600000, familyExpires) };
     state.tokens[hash(refresh)] = { ...common, type: 'refresh', expires: familyExpires, used: false };
     this.store.save(state); // Persist before returning tokens; failure never grants access.
     return { access_token: access, refresh_token: refresh, token_type: 'Bearer',
-      expires_in: Math.floor((state.tokens[hash(access)].expires - this.now()) / 1000), scope: 'parma.read' };
+      expires_in: Math.floor((state.tokens[hash(access)].expires - this.now()) / 1000), scope: 'parma.read parma.write' };
   }
   async exchangeRefreshToken(client, token, scopes, resource) {
     this.checkClient(client);
@@ -160,7 +160,7 @@ class ParmaOAuthProvider {
     if (!credential(token)) throw new InvalidTokenError('Invalid token');
     const row = this.store.snapshot().tokens[hash(token)];
     if (!this.validRecord(row, 'access')) throw new InvalidTokenError('Invalid token');
-    return { token, clientId: row.clientId, scopes: ['parma.read'], expiresAt: row.expires / 1000,
+    return { token, clientId: row.clientId, scopes: ['parma.read', 'parma.write'], expiresAt: row.expires / 1000,
       resource: new URL(row.resource), extra: { subject: row.subject } };
   }
   async revokeToken(client, { token }) {
