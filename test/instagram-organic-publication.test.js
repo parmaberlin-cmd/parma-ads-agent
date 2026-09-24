@@ -14,6 +14,7 @@ const {
   executeInstagramPublication,
 } = require('../instagram-organic-publication');
 const { InstagramEditorialScheduler } = require('../instagram-editorial-timing');
+const { importManualPublicationRecords } = require('../instagram-manual-publication-registry');
 
 const FIXED_NOW = Date.parse('2026-09-08T12:00:00.000Z');
 const now = () => FIXED_NOW;
@@ -171,6 +172,36 @@ test('publication idempotency survives a fresh durable store instance', async t 
   });
   assert.equal(duplicate.status, 'BLOCKED');
   assert.ok(duplicate.blockers.includes('duplicate_publication_blocked'));
+});
+
+test('preflight blocks an asset already reported as manually published before provider writes', async t => {
+  const store = makeStore(t);
+  const assetHash = 'c'.repeat(64);
+  importManualPublicationRecords(store, [{
+    publication_id: 'manual-reel-existing',
+    account: 'parma.divinibenedetti',
+    asset_sha256: assetHash,
+    content_type: 'REELS',
+    provider_verified: false,
+  }], { now });
+  const f = loginTransport();
+  const result = await validateInstagramPublication({
+    publicationPackage: packageFixture({ publication_id: 'automatic-duplicate', asset_sha256: assetHash }),
+    env: {
+      INSTAGRAM_ORGANIC_CANARY_ENABLED: 'true',
+      INSTAGRAM_ORGANIC_KILL_SWITCH: 'false',
+      INSTAGRAM_ORGANIC_AUDIT_INTEGRITY_KEY: '0123456789abcdef0123456789abcdef',
+      INSTAGRAM_ORGANIC_AUDIT_PATH: store.directory,
+    },
+    store,
+    transport: f.transport,
+    loginTransport: f.transport,
+    now,
+    requireDurableMount: false,
+  });
+  assert.equal(result.status, 'BLOCKED');
+  assert.deepEqual(result.blockers, ['manual_publication_duplicate_blocked']);
+  assert.equal(f.getPublishCalls(), 0);
 });
 
 test('editorial schedule and execution intent do not block the first real publication', async t => {

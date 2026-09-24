@@ -7,6 +7,7 @@ const {
 } = require('./instagram-organic-canary');
 const { validateStableVideoUrl } = require('./instagram-media-host');
 const { META_DOMAINS, canAuthorizeDomain } = require('./meta-execution-domains');
+const { manuallyPublishedAsset } = require('./instagram-manual-publication-registry');
 
 const PUBLICATION_INTERFACES = Object.freeze({
   VALIDATE: 'VALIDATE_PUBLICATION',
@@ -118,6 +119,16 @@ async function validateInstagramPublication({
     return {
       status: 'BLOCKED',
       blockers: ['duplicate_publication_blocked'],
+      interface: PUBLICATION_INTERFACES.VALIDATE,
+      publication_id: publicationPackage.publication_id,
+      writes_executed: 0,
+      real_instagram_publication_attempted: false,
+    };
+  }
+  if (manuallyPublishedAsset(store, publicationPackage)) {
+    return {
+      status: 'BLOCKED',
+      blockers: ['manual_publication_duplicate_blocked'],
       interface: PUBLICATION_INTERFACES.VALIDATE,
       publication_id: publicationPackage.publication_id,
       writes_executed: 0,
