@@ -15,6 +15,7 @@ const {
 const { buildGoogleReadiness, buildMetaOverview } = require("./reporting");
 const { buildMetaDinnerProposal } = require("./proposals");
 const { auditInstagramContentCapability, auditInstagramLoginCapability } = require("./instagram-content-publishing");
+const { discoverStories } = require("./instagram-story-capability");
 const { registerInstagramMediaHost } = require("./instagram-media-host");
 const { startInstagramEditorialRuntime } = require("./instagram-editorial-runtime");
 const {
@@ -187,6 +188,40 @@ app.get("/health/instagram-content-capability", async (req, res) => {
       blocker:"instagram_capability_audit_failed",
       graph_code:error?.response?.data?.error?.code||null,
       graph_subcode:error?.response?.data?.error?.error_subcode||null,
+      contains_secret:false,
+    });
+  }
+});
+
+app.get("/health/instagram-current-stories", async (req, res) => {
+  if (!META_ACCESS_TOKEN) {
+    return res.status(503).json({ success:false, status:"BLOCKED", blocker:"instagram_access_token_missing", contains_secret:false });
+  }
+  try {
+    const result = await discoverStories({ transport: instagramLoginReadTransport });
+    const stories = result.stories.map(story => ({
+      id: story.id,
+      media_type: story.media_type,
+      timestamp: story.timestamp,
+    }));
+    return res.status(200).json({
+      success:true,
+      status:result.status,
+      account:result.account,
+      stories_count:result.stories_count,
+      stories,
+      historical_depth:result.historical_depth,
+      writes_executed:0,
+      contains_secret:false,
+    });
+  } catch (error) {
+    return res.status(503).json({
+      success:false,
+      status:"BLOCKED",
+      blocker:"instagram_current_stories_read_failed",
+      graph_code:error?.response?.data?.error?.code||null,
+      graph_subcode:error?.response?.data?.error?.error_subcode||null,
+      writes_executed:0,
       contains_secret:false,
     });
   }

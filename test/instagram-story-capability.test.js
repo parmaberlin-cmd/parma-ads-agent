@@ -55,6 +55,7 @@ function loginTransport() {
       async get(endpoint) {
         if (endpoint === '/me') return { id: '17841463253292929', user_id: '17841463253292929', username: 'parma.divinibenedetti', account_type: 'BUSINESS', media_count: 108 };
         if (endpoint === '/me/media') return { data: [] };
+        if (endpoint === '/me/stories') return { data: [] };
         if (endpoint === '/me/insights') return { data: [] };
         if (endpoint === '/111') return { id: '111', status_code: 'FINISHED', status: 'FINISHED' };
         if (endpoint === '/222') return { id: '222', media_type: 'STORIES', media_product_type: 'STORIES', permalink: 'https://www.instagram.com/stories/parma-story/', timestamp: new Date(now()).toISOString(), username: 'parma.divinibenedetti' };
@@ -75,13 +76,27 @@ test('official read path reports no currently discoverable Stories', async () =>
   const transport = {
     get: async endpoint => {
       if (endpoint === '/me') return { username: 'parma.divinibenedetti', account_type: 'BUSINESS', media_count: 108 };
-      if (endpoint === '/me/media') return { data: [{ id: '1', media_type: 'VIDEO', media_product_type: 'REELS' }] };
+      if (endpoint === '/me/stories') return { data: [] };
       throw new Error('unexpected');
     },
   };
   const result = await discoverStories({ transport });
   assert.equal(result.status, STORY_DISCOVERY_STATUS.NOT_AVAILABLE_FROM_PROVIDER);
   assert.equal(result.stories_count, 0);
+});
+
+test('official Story edge returns current Stories without exposing historical assumptions', async () => {
+  const transport = {
+    get: async endpoint => {
+      if (endpoint === '/me') return { username: 'parma.divinibenedetti', account_type: 'BUSINESS', media_count: 108 };
+      if (endpoint === '/me/stories') return { data: [{ id: '77', media_type: 'STORIES', media_product_type: 'STORIES', timestamp: '2026-09-24T16:00:00+0000' }] };
+      throw new Error('unexpected');
+    },
+  };
+  const result = await discoverStories({ transport });
+  assert.equal(result.status, STORY_DISCOVERY_STATUS.VERIFIED_LIVE);
+  assert.equal(result.stories_count, 1);
+  assert.equal(result.historical_depth, 'current_stories_only');
 });
 
 test('Story package rejects Reel package, caption, unsupported media, and signed URL', () => {

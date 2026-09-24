@@ -34,11 +34,11 @@ async function discoverStories({ transport } = {}) {
   const account = await transport.get('/me', {
     fields: 'id,user_id,username,account_type,media_count',
   });
-  const first = await transport.get('/me/media', {
+  const current = await transport.get('/me/stories', {
     fields: 'id,media_type,media_product_type,permalink,timestamp,thumbnail_url,media_url',
     limit: 100,
   });
-  const stories = normalizeStories(first?.data || []);
+  const stories = normalizeStories(current?.data || []);
   return {
     schema: 'instagram.story_discovery.v1',
     account: {
@@ -48,7 +48,7 @@ async function discoverStories({ transport } = {}) {
     },
     stories_count: stories.length,
     stories,
-    historical_depth: 'only_currently_visible_media',
+    historical_depth: 'current_stories_only',
     status: stories.length ? STORY_DISCOVERY_STATUS.VERIFIED_LIVE : STORY_DISCOVERY_STATUS.NOT_AVAILABLE_FROM_PROVIDER,
     contains_secret: false,
   };
