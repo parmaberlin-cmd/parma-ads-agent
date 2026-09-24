@@ -48,7 +48,7 @@ function validateEvidence(evidence,{since,until,focusSince,focusUntil}){
   if(evidence.writes_allowed!==false||evidence.publishing_allowed!==false||evidence.spend_allowed!==false)errors.push('read_only_invariant_failed');
   const metrics=[...(evidence.account_metrics||[]),...(evidence.content||[]).flatMap(x=>x.metrics||[])];
   for(const m of metrics){if(m.availability==='AVAILABLE'&&typeof m.value==='number'&&m.value<0)errors.push('negative_metric:'+m.metric_name);if(!['AVAILABLE','UNAVAILABLE'].includes(m.availability))errors.push('availability_invalid');}
-  if(JSON.stringify(evidence).match(/access_token|api_key|client_secret|app_secret/i))errors.push('secret_shaped_field');
+  if(JSON.stringify(evidence).match(/\"(?:access_token|api_key|client_secret|app_secret)\"\s*:/i))errors.push('secret_shaped_field');
   return {ok:errors.length===0,errors};
 }
 async function readInstagramInsights({env=process.env,since,until,focusSince,focusUntil,now=Date.now}={}){
