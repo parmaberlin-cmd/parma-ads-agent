@@ -339,11 +339,21 @@ async function processJob({
   }
 
   if (after.state === JOB_STATES.PROVIDER_BOUNDARY_REACHED || after.state === JOB_STATES.AMBIGUOUS || replayReason) {
+    // Preserve partial provider progress. A later ambiguous action must never
+    // collapse already verified writes to zero, otherwise the durable result
+    // could falsely look safe to replay.
+    const partialActions = Array.isArray(outcome.results) ? outcome.results : [];
+    const recordedWrites = Number(outcome.writes_executed) || partialActions.reduce(
+      (sum, action) => sum + (Number(action?.writes_executed) || (action?.provider_write === true ? 1 : 0)),
+      0,
+    );
+    const providerWrite = outcome.provider_write === true || recordedWrites > 0;
     return writeOutcome(jobStore, job, {
       result: JOB_RESULTS.NEEDS_HUMAN,
       state: after.state === JOB_STATES.AMBIGUOUS ? JOB_STATES.AMBIGUOUS : JOB_STATES.NEEDS_HUMAN,
       checkpoint: after.reason, attempts: attemptNumber, blockers,
-      evidence: { status: outcome.status, auto_retry: false }, archive: true,
+      providerWrite, writesExecuted: recordedWrites, actions: partialActions,
+      evidence: { status: outcome.status, auto_retry: false, partial_progress_preserved: providerWrite }, archive: true,
     });
   }
 

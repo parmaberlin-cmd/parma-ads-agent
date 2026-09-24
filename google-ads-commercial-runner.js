@@ -206,6 +206,42 @@ async function runCommercialOneShot({ env = process.env, mode = env.GOOGLE_ADS_C
       activeStore.append('audit', { event: 'commercial_plan_execution_reserved', plan_id: plan.plan_id, plan_digest: digest, customer_id: CUSTOMER_ID, replay_reason: replay.reason, spend_allowed: false });
     }
     const results = [];
+    // Schedules are special: Google rejects overlapping ad-schedule criteria.
+    // Reconcile the provider state before the first schedule write and fail
+    // closed if the plan would create an overlap. This keeps replacement plans
+    // from crossing the provider boundary in an ambiguous order.
+    const scheduleItems = plan.actions.filter(item => item.action.type === 'schedule_create');
+    if (mode === 'EXECUTE_APPROVED_PLAN' && scheduleItems.length) {
+      const byCampaign = new Map();
+      for (const item of scheduleItems) {
+        if (!byCampaign.has(item.action.campaign_id)) byCampaign.set(item.action.campaign_id, []);
+        byCampaign.get(item.action.campaign_id).push(item);
+      }
+      const minuteValue = value => ({ ZERO: 0, FIFTEEN: 15, THIRTY: 30, FORTY_FIVE: 45 })[normalizeEnum(value, MINUTE)] ?? 0;
+      const interval = schedule => ({
+        day: normalizeEnum(schedule.day_of_week, DAY),
+        start: Number(schedule.start_hour) * 60 + minuteValue(schedule.start_minute),
+        end: Number(schedule.end_hour) * 60 + minuteValue(schedule.end_minute),
+      });
+      const overlaps = (a, b) => a.day === b.day && Math.max(a.start, b.start) < Math.min(a.end, b.end);
+      for (const [campaignId, items] of byCampaign) {
+        const rows = await activeCustomer.query(`SELECT campaign_criterion.resource_name, campaign_criterion.ad_schedule.day_of_week, campaign_criterion.ad_schedule.start_hour, campaign_criterion.ad_schedule.start_minute, campaign_criterion.ad_schedule.end_hour, campaign_criterion.ad_schedule.end_minute FROM campaign_criterion WHERE campaign.id = ${campaignId} AND campaign_criterion.type = 'AD_SCHEDULE' AND campaign_criterion.status != 'REMOVED' LIMIT 1000`);
+        const existing = (rows || []).map(row => ({
+          resource_name: row?.campaign_criterion?.resource_name || null,
+          ...interval(row?.campaign_criterion?.ad_schedule || {}),
+        }));
+        const removals = new Set(plan.actions.filter(item => item.action.type === 'schedule_remove' && item.action.campaign_id === campaignId).map(item => item.action.resource_name));
+        const surviving = existing.filter(item => !removals.has(item.resource_name));
+        const proposed = [];
+        for (const item of items) {
+          const wanted = interval(item.action);
+          if (surviving.some(current => overlaps(current, wanted)) || proposed.some(current => overlaps(current, wanted))) {
+            throw new Error(`schedule_overlap_blocked:${item.change_id}`);
+          }
+          proposed.push(wanted);
+        }
+      }
+    }
     for (const item of plan.actions) {
       const control = controlFactory({
         store: activeStore,

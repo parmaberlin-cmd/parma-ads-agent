@@ -336,3 +336,77 @@ test('operational provider evidence records never count as a provider write for 
   const written = [...reserved, { id: 'R_3', kind: 'change', payload: { change_id: 'commercial-change-1', provider_write: true, writes_executed: 1 } }];
   assert.deepEqual(planReplayState(memoryStore(written), digest, ['commercial-change-1']), { replayable: false, reason: 'commercial_plan_provider_state_ambiguous' });
 });
+
+
+test('overlapping schedule is blocked before any provider mutation', async () => {
+  const value = plan();
+  value.actions = [{
+    action: { type: 'schedule_create', campaign_id: CAMPAIGN_ID, campaign_resource_name: CAMPAIGN_RESOURCE, day_of_week: 'FRIDAY', start_hour: 20, start_minute: 'THIRTY', end_hour: 23, end_minute: 'ZERO' },
+    readback: { kind: 'AD_SCHEDULE', day_of_week: 'FRIDAY', start_hour: 20, start_minute: 'THIRTY', end_hour: 23, end_minute: 'ZERO' },
+    before_state: { present: false, count: 0 },
+    proposed_after_state: { present: true, count: 1, day_of_week: 'FRIDAY', start_hour: 20, start_minute: 'THIRTY', end_hour: 23, end_minute: 'ZERO' },
+    change_id: 'schedule-overlap', objective_id: 'approved-commercial-plan',
+    reason: 'Regression for overlapping provider schedules.',
+    evidence: [{ type: 'operator_approval', reference: 'schedule-overlap-regression' }], confidence: 1,
+  }];
+  let writes = 0;
+  const provider = customer({ query: async sql => sql.includes('ad_schedule') ? [{
+    campaign_criterion: {
+      resource_name: `customers/${CUSTOMER_ID}/campaignCriteria/${CAMPAIGN_ID}~777`,
+      ad_schedule: { day_of_week: 'FRIDAY', start_hour: 17, start_minute: 'ZERO', end_hour: 23, end_minute: 'ZERO' },
+    },
+  }] : [] });
+  const result = await runCommercialOneShot({
+    mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store: memoryStore(),
+    providerTransport: transportDouble({ onWrite: async () => { writes += 1; } }),
+  });
+  assert.equal(result.status, 'BLOCKED');
+  assert.deepEqual(result.blockers, ['schedule_overlap_blocked:schedule-overlap']);
+  assert.equal(result.provider_write, false);
+  assert.equal(result.writes_executed, 0);
+  assert.equal(writes, 0);
+});
+
+test('schedule replacement may remove the overlapping criterion then create the replacement', async () => {
+  const resource = `customers/${CUSTOMER_ID}/campaignCriteria/${CAMPAIGN_ID}~777`;
+  const value = plan();
+  value.actions = [
+    {
+      action: { type: 'schedule_remove', campaign_id: CAMPAIGN_ID, resource_name: resource },
+      readback: { kind: 'RESOURCE_STATUS', resource_name: resource },
+      before_state: { present: true, resource_name: resource, status: 'ENABLED' },
+      proposed_after_state: { present: false, resource_name: resource, status: null },
+      change_id: 'schedule-remove-old', objective_id: 'approved-commercial-plan',
+      reason: 'Remove old schedule before replacement.',
+      evidence: [{ type: 'operator_approval', reference: 'schedule-replacement-regression' }], confidence: 1,
+    },
+    {
+      action: { type: 'schedule_create', campaign_id: CAMPAIGN_ID, campaign_resource_name: CAMPAIGN_RESOURCE, day_of_week: 'FRIDAY', start_hour: 17, start_minute: 'ZERO', end_hour: 23, end_minute: 'ZERO' },
+      readback: { kind: 'AD_SCHEDULE', day_of_week: 'FRIDAY', start_hour: 17, start_minute: 'ZERO', end_hour: 23, end_minute: 'ZERO' },
+      before_state: { present: false, count: 0 },
+      proposed_after_state: { present: true, count: 1, day_of_week: 'FRIDAY', start_hour: 17, start_minute: 'ZERO', end_hour: 23, end_minute: 'ZERO' },
+      change_id: 'schedule-create-new', objective_id: 'approved-commercial-plan',
+      reason: 'Create replacement schedule after exact removal.',
+      evidence: [{ type: 'operator_approval', reference: 'schedule-replacement-regression' }], confidence: 1,
+    },
+  ];
+  let oldPresent = true;
+  let newPresent = false;
+  let writes = 0;
+  const provider = customer({ query: async sql => {
+    if (sql.includes('ad_schedule')) return oldPresent ? [{
+      campaign_criterion: { resource_name: resource, ad_schedule: { day_of_week: 'FRIDAY', start_hour: 20, start_minute: 'THIRTY', end_hour: 23, end_minute: 'ZERO' } },
+    }] : (newPresent ? [{ campaign_criterion: { resource_name: `customers/${CUSTOMER_ID}/campaignCriteria/${CAMPAIGN_ID}~888`, ad_schedule: { day_of_week: 'FRIDAY', start_hour: 17, start_minute: 'ZERO', end_hour: 23, end_minute: 'ZERO' } } }] : []);
+    if (sql.includes(resource)) return oldPresent ? [{ campaign_criterion: { resource_name: resource, status: 'ENABLED' } }] : [];
+    return [];
+  }});
+  const providerTransport = transportDouble({ onWrite: async operations => {
+    writes += 1;
+    if (operations[0].operation === 'remove') oldPresent = false;
+    if (operations[0].resource?.ad_schedule) newPresent = true;
+  }});
+  const result = await runCommercialOneShot({ mode: 'EXECUTE_APPROVED_PLAN', env: envFor(value), customer: provider, store: memoryStore(), providerTransport });
+  assert.equal(result.status, 'VERIFIED');
+  assert.equal(result.writes_executed, 2);
+  assert.equal(writes, 2);
+});
