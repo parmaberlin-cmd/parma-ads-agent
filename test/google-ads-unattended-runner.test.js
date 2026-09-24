@@ -449,3 +449,77 @@ test('authorization scope is enforced: extra actions beyond the grant are refuse
   assert.deepEqual(outcomes[0].blockers, ['job_action_count_exceeds_grant']);
   assert.equal(p.calls.write, 0);
 });
+
+
+test('partial verified writes are never collapsed to zero when a later action is ambiguous', async t => {
+  const f = fixture(t);
+  const actions = [
+    negativeAction('partial-1', 'change-partial-1'),
+    negativeAction('partial-2', 'change-partial-2'),
+    negativeAction('partial-3', 'change-partial-3'),
+    negativeAction('partial-4', 'change-partial-4'),
+    negativeAction('partial-5', 'change-partial-5'),
+  ];
+  const plan = commercialPlan({ planId: 'partial-write-accounting', actions });
+  submit(f, plan);
+
+  const runner = async ({ store }) => {
+    for (const item of actions.slice(0, 4)) {
+      store.append('change', {
+        event: 'commercial_change_verified',
+        plan_id: plan.plan_id,
+        plan_digest: planDigest(plan),
+        change_id: item.change_id,
+        customer_id: CUSTOMER_ID,
+        provider_write: true,
+        writes_executed: 1,
+        verified: true,
+        spend_allowed: false,
+      });
+    }
+    store.append('audit', {
+      event: 'commercial_plan_failed_ambiguous',
+      plan_id: plan.plan_id,
+      plan_digest: planDigest(plan),
+      change_id: actions[4].change_id,
+      customer_id: CUSTOMER_ID,
+      provider_boundary_started: true,
+      provider_write: false,
+      spend_allowed: false,
+    });
+    return {
+      status: 'BLOCKED',
+      blockers: ['provider_transport_ambiguous'],
+      provider_write: true,
+      writes_executed: 4,
+      results: actions.slice(0, 4).map(item => ({
+        change_id: item.change_id,
+        provider_write: true,
+        writes_executed: 1,
+        verified: true,
+      })),
+    };
+  };
+
+  const p = provider();
+  const outcomes = await runUnattendedOnce({
+    jobStore: f.jobStore,
+    auditStore: f.auditStore,
+    env: environment(),
+    now,
+    customer: p.customer,
+    runner,
+    providerTransport: p.transport,
+    readStateFactory: readStateFactory(() => 1),
+  });
+
+  assert.equal(outcomes[0].result, JOB_RESULTS.NEEDS_HUMAN);
+  assert.equal(outcomes[0].state, JOB_STATES.AMBIGUOUS);
+  assert.equal(outcomes[0].provider_write, true, 'partial provider writes must remain visible');
+  assert.equal(outcomes[0].writes_executed, 4, 'four completed writes must never be reported as zero');
+  assert.deepEqual(
+    outcomes[0].actions.map(action => action.change_id),
+    ['change-partial-1', 'change-partial-2', 'change-partial-3', 'change-partial-4'],
+  );
+  assert.equal(outcomes[0].evidence.auto_retry, false);
+});
