@@ -229,9 +229,10 @@ class InstagramEditorialScheduler {
     });
   }
 
-  async tick({ technical_ready, editorial_ready, execute, reconcile = null, execution_enabled = true }) {
+  async tick({ technical_ready, editorial_ready, execute, reconcile = null, execution_enabled = true, publicationId = null }) {
     const due = this.store.list('change').filter(record =>
       record.payload?.kind_event === 'instagram_editorial_schedule_created' &&
+      (!publicationId || record.payload?.publication_id === publicationId) &&
       !hasScheduleExecuted(this.store, record.payload.schedule_fingerprint)
     );
     const results = [];
@@ -319,19 +320,6 @@ class InstagramEditorialScheduler {
         continue;
       }
 
-      if (execution_enabled !== true) {
-        if (!currentState || currentState.status !== PUBLICATION_STATES.SCHEDULED || currentState.reason !== 'provider_writes_frozen') {
-          markPublicationState(this.store, {
-            publicationId: pkg.publication_id,
-            status: PUBLICATION_STATES.SCHEDULED,
-            reason: 'provider_writes_frozen',
-            now: this.now,
-          });
-        }
-        results.push({ publication_id: pkg.publication_id, status: 'PROVIDER_WRITES_FROZEN', provider_writes: 0 });
-        continue;
-      }
-
       if (currentState?.status === PUBLICATION_STATES.AMBIGUOUS ||
           currentState?.status === PUBLICATION_STATES.DISPATCHED ||
           currentState?.status === PUBLICATION_STATES.CONTAINER_CREATED ||
@@ -372,6 +360,21 @@ class InstagramEditorialScheduler {
         }
         continue;
       }
+
+      if (execution_enabled !== true) {
+        if (!currentState || currentState.status !== PUBLICATION_STATES.SCHEDULED || currentState.reason !== 'provider_writes_frozen') {
+          markPublicationState(this.store, {
+            publicationId: pkg.publication_id,
+            status: PUBLICATION_STATES.SCHEDULED,
+            reason: 'provider_writes_frozen',
+            now: this.now,
+          });
+        }
+        results.push({ publication_id: pkg.publication_id, status: 'PROVIDER_WRITES_FROZEN', provider_writes: 0 });
+        continue;
+      }
+
+
 
       if (currentState && !canRetryPublicationState(currentState, this.now)) {
         results.push({ publication_id: pkg.publication_id, status: currentState.status, provider_writes: 0 });

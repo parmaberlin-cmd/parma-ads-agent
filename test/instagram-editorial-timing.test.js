@@ -313,3 +313,56 @@ test('active scheduler wakes automatically and executes at most once', async t =
   assert.equal(executions, 1);
   assert.equal(scheduler.hasExecutionIntent(pkg), true);
 });
+
+
+test('targeted wake executes only the requested publication', async t => {
+  const store = makeStore(t);
+  const scheduler = new InstagramEditorialScheduler({ store, now });
+  const first = packageFixture({ publication_id: 'target-one' });
+  const second = packageFixture({ publication_id: 'target-two', content_fingerprint: 'content-hash-2' });
+  scheduler.schedule(first);
+  scheduler.schedule(second);
+  current = Date.parse('2026-09-08T12:00:00.000Z');
+  const executed = [];
+  const result = await scheduler.tick({
+    technical_ready: true,
+    editorial_ready: true,
+    publicationId: second.publication_id,
+    execute: async pkg => {
+      executed.push(pkg.publication_id);
+      return { status: 'INSTAGRAM_PUBLISH_VERIFIED', verification_result: true, provider_writes: 1 };
+    },
+  });
+  assert.deepEqual(executed, ['target-two']);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].publication_id, 'target-two');
+  assert.equal(latestPublicationState(store, 'target-one').status, 'SCHEDULED');
+});
+
+test('ambiguous publication reconciles read-only while provider writes are frozen', async t => {
+  const store = makeStore(t);
+  const scheduler = new InstagramEditorialScheduler({ store, now });
+  const pkg = packageFixture({ publication_id: 'reconcile-frozen' });
+  scheduler.schedule(pkg);
+  current = Date.parse('2026-09-08T12:00:00.000Z');
+  await scheduler.tick({
+    technical_ready: true,
+    editorial_ready: true,
+    execute: async () => ({ status: 'RECONCILIATION_REQUIRED', provider_writes: 1, real_instagram_publication_attempted: true }),
+  });
+  let executions = 0;
+  let reconciliations = 0;
+  const result = await scheduler.tick({
+    technical_ready: true,
+    editorial_ready: true,
+    execution_enabled: false,
+    execute: async () => { executions += 1; },
+    reconcile: async () => {
+      reconciliations += 1;
+      return { status: 'INSTAGRAM_PUBLISH_VERIFIED', verification_result: true, provider_writes: 0, instagram_media_id: '333' };
+    },
+  });
+  assert.equal(executions, 0);
+  assert.equal(reconciliations, 1);
+  assert.equal(result[0].status, 'VERIFIED_LIVE');
+});

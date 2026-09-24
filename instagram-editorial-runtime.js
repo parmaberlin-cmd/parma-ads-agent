@@ -15,6 +15,8 @@ const { createProductionReconcileCallback } = require('./instagram-publication-r
 const { importManualPublicationRecords } = require('./instagram-manual-publication-registry');
 const manualPublicationSeeds = require('./instagram-manual-publication-seed');
 
+let activeInstagramEditorialRuntime = null;
+
 function createProductionExecutionCallback({ env, store, now = Date.now } = {}) {
   const facebookTransport = env.META_ACCESS_TOKEN
     ? facebookGraphReadTransport({ accessToken: env.META_ACCESS_TOKEN })
@@ -75,10 +77,9 @@ function startInstagramEditorialRuntime({
     intervalMs,
   });
 
-  return {
+  const runtimeHandle = {
     scheduler: resolvedScheduler,
     store: resolvedStore,
-    stop: () => resolvedScheduler.stop(),
     reconcile,
     wakeNow: () => resolvedScheduler.tick({
       technical_ready: true,
@@ -87,10 +88,29 @@ function startInstagramEditorialRuntime({
       reconcile,
       execution_enabled: executionEnabled,
     }),
+    wakePublication: publicationId => resolvedScheduler.tick({
+      technical_ready: true,
+      editorial_ready: true,
+      execute: callback,
+      reconcile,
+      execution_enabled: executionEnabled,
+      publicationId,
+    }),
   };
+  runtimeHandle.stop = () => {
+    resolvedScheduler.stop();
+    if (activeInstagramEditorialRuntime === runtimeHandle) activeInstagramEditorialRuntime = null;
+  };
+  activeInstagramEditorialRuntime = runtimeHandle;
+  return runtimeHandle;
+}
+
+function getActiveInstagramEditorialRuntime() {
+  return activeInstagramEditorialRuntime;
 }
 
 module.exports = {
   createProductionExecutionCallback,
   startInstagramEditorialRuntime,
+  getActiveInstagramEditorialRuntime,
 };

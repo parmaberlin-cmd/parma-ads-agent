@@ -67,10 +67,10 @@ test('runtime publish loads only the immutable scheduled package by id', () => {
 test('runtime publish fails closed for kill switch, frozen writes and missing schedule', async () => {
   const pkg = packageFixture();
   let calls = 0;
-  const execute = async () => { calls += 1; };
-  assert.equal((await executeScheduledInstagramPublish({ env:{INSTAGRAM_PROVIDER_WRITES:'1'},store:storeWith(pkg),publicationId:pkg.publication_id,runtimeKillSwitch:true,now,execute })).evidence.blockers[0], 'runtime_kill_switch_active');
-  assert.equal((await executeScheduledInstagramPublish({ env:{INSTAGRAM_PROVIDER_WRITES:'0'},store:storeWith(pkg),publicationId:pkg.publication_id,now,execute })).evidence.blockers[0], 'provider_writes_frozen');
-  assert.equal((await executeScheduledInstagramPublish({ env:{INSTAGRAM_PROVIDER_WRITES:'1'},store:{list:()=>[]},publicationId:pkg.publication_id,now,execute })).evidence.blockers[0], 'scheduled_publication_package_not_found');
+  const editorialRuntime = { wakePublication: async () => { calls += 1; return []; } };
+  assert.equal((await executeScheduledInstagramPublish({ env:{INSTAGRAM_PROVIDER_WRITES:'1'},store:storeWith(pkg),publicationId:pkg.publication_id,runtimeKillSwitch:true,now,editorialRuntime })).evidence.blockers[0], 'runtime_kill_switch_active');
+  assert.equal((await executeScheduledInstagramPublish({ env:{INSTAGRAM_PROVIDER_WRITES:'0'},store:storeWith(pkg),publicationId:pkg.publication_id,now,editorialRuntime })).evidence.blockers[0], 'provider_writes_frozen');
+  assert.equal((await executeScheduledInstagramPublish({ env:{INSTAGRAM_PROVIDER_WRITES:'1'},store:{list:()=>[]},publicationId:pkg.publication_id,now,editorialRuntime })).evidence.blockers[0], 'scheduled_publication_package_not_found');
   assert.equal(calls, 0);
 });
 
@@ -82,11 +82,11 @@ test('runtime publish executes once only after all gates and returns provider ev
     store:storeWith(pkg),
     publicationId:pkg.publication_id,
     now,
-    execute: async received => {
+    editorialRuntime: { wakePublication: async publicationId => {
       calls += 1;
-      assert.deepEqual(received, pkg);
-      return { status:'INSTAGRAM_PUBLISH_VERIFIED', verification_result:true, instagram_media_id:'222', container_id:'111', permalink:null, writes_executed:1 };
-    },
+      assert.equal(publicationId, pkg.publication_id);
+      return [{ publication_id:publicationId, status:'INSTAGRAM_PUBLISH_VERIFIED', provider_writes:1, execution:{ status:'INSTAGRAM_PUBLISH_VERIFIED', verification_result:true, instagram_media_id:'222', container_id:'111', permalink:null, writes_executed:1 } }];
+    } },
   });
   assert.equal(result.validated, true);
   assert.equal(result.evidence.verification_result, true);
