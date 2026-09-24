@@ -12,8 +12,7 @@ const ACTIONS=Object.freeze({
   'google_ads.execute_authorized':{specialist:'google_ads',write:'controlled_external',spend:'standing_delegation_only',authorization:'standing_delegation_required',concurrency:'google_ads:account_mutation'},
   'instagram.audit_capability':{specialist:'meta',write:false,spend:false,authorization:'autonomous_read_only',concurrency:'meta:read'},
   'instagram.publish_preflight':{specialist:'meta',write:false,spend:false,authorization:'autonomous_read_only',concurrency:'meta:content_preflight'},
-  // Future contract only. No runtime handler or autonomous authorization is installed here.
-  'instagram.publish':{specialist:'meta',write:'external',spend:false,authorization:'explicit_instagram_content_delegation_required',concurrency:'meta:content_publish',implemented:false},
+  'instagram.publish':{specialist:'meta',write:'controlled_external',spend:false,authorization:'package_specific_instagram_authorization_required',concurrency:'meta:content_publish',implemented:true},
   'ga4.read_conversion_integrity':{specialist:'ga4',write:false,spend:false,authorization:'provider_read_required',concurrency:'ga4:read',implemented:false},
   'orderbird.read_revenue':{specialist:'orderbird',write:false,spend:false,authorization:'official_provider_read_required',concurrency:'orderbird:read',implemented:false},
 });
