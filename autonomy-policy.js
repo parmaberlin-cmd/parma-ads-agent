@@ -14,7 +14,7 @@ const SAFE_AUTONOMOUS_ACTIONS = new Set([
   'google_ads.read_campaign','google_ads.propose_changes','google_ads.execution_preflight','google_ads.cycle_plan',
   'instagram.audit_capability','instagram.publish_preflight',
 ]);
-const CONTROLLED_GATEWAYS=new Set(['google_ads.execute_authorized']);
+const CONTROLLED_GATEWAYS=new Set(['google_ads.execute_authorized','instagram.publish']);
 const CONTROLLED_INTERNAL=new Set(['runtime.register_recurring']);
 
 function classifyAction(action = {}) {
