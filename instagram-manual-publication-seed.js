@@ -9,5 +9,6 @@ module.exports = Object.freeze([
     source_asset: 'parma-story-2026-09-24-book-a-table.mp4',
     provider_verified: false,
     reported_at: '2026-09-24',
+    reported_time_precision: 'date',
   }),
 ]);
