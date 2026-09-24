@@ -10,6 +10,7 @@ const ACTIONS=Object.freeze({
   'google_ads.execution_preflight':{specialist:'google_ads',write:false,spend:false,authorization:'autonomous_read_only',concurrency:'google_ads:preflight'},
   'google_ads.cycle_plan':{specialist:'google_ads',write:false,spend:false,authorization:'autonomous_read_only',concurrency:'google_ads:plan'},
   'google_ads.execute_authorized':{specialist:'google_ads',write:'controlled_external',spend:'standing_delegation_only',authorization:'standing_delegation_required',concurrency:'google_ads:account_mutation'},
+  'instagram.read_insights':{specialist:'meta',write:false,spend:false,authorization:'autonomous_read_only',concurrency:'meta:read'},
   'instagram.audit_capability':{specialist:'meta',write:false,spend:false,authorization:'autonomous_read_only',concurrency:'meta:read'},
   'instagram.publish_preflight':{specialist:'meta',write:false,spend:false,authorization:'autonomous_read_only',concurrency:'meta:content_preflight'},
   'instagram.publish':{specialist:'meta',write:'controlled_external',spend:false,authorization:'package_specific_instagram_authorization_required',concurrency:'meta:content_publish',implemented:true},
