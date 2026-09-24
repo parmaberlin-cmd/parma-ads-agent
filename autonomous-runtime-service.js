@@ -18,6 +18,9 @@ const {buildControlTower}=require('./control-tower');
 const {listSpecialists}=require('./specialist-registry');
 const {conversionIntegrity}=require('./economic-ground-truth');
 const {auditInstagramContentCapability,auditInstagramLoginCapability,buildContainerPayload}=require('./instagram-content-publishing');
+const {createInstagramOrganicAuditStore}=require('./meta-durable-audit');
+const {createProductionExecutionCallback}=require('./instagram-editorial-runtime');
+const {executeScheduledInstagramPublish}=require('./instagram-runtime-publish');
 
 function metaReadTransport(env){
   const version=String(env.META_API_VERSION||'v19.0');
@@ -39,6 +42,7 @@ function localHandlers(env=process.env){
     run_diagnostics: async () => ({ validated:true, evidence:{ component:'autonomous_runtime', storage:storageStatus(env), delegation_policy:autonomyPolicySummary(), standing_delegation:standingDelegationSummary(), specialists:listSpecialists(), conversion_integrity:conversionIntegrity, kill_switch_supported:true } }),
     'instagram.audit_capability': async()=>{const audit=await instagramAudit(env);return {validated:true,evidence:audit};},
     'instagram.publish_preflight': async({task})=>{let media;try{media=buildContainerPayload(task.input||{});}catch(error){return {validated:false,correctable:false,evidence:{schema:'instagram.publish_preflight.v1',blockers:['invalid_media_contract'],detail:String(error.message).slice(0,160),writes_attempted:0}};}const audit=await instagramAudit(env);const blockers=[...audit.blockers];if(!audit.capabilities.publish)blockers.push('live_publish_capability_not_verified');return {validated:blockers.length===0,correctable:false,evidence:{schema:'instagram.publish_preflight.v1',media_type:media.media_type,caption_present:Boolean(media.caption),share_to_feed:media.share_to_feed??null,public_https_media:true,account_linked:audit.checks.page_linked,publish_permission_verified:audit.capabilities.publish,blockers:[...new Set(blockers)],writes_attempted:0,authorized_publish:false}};},
+    'instagram.publish': async({task})=>{const state=readState(statePath(env));const store=createInstagramOrganicAuditStore({env,now:Date.now,requireDurableMount:true});const execute=createProductionExecutionCallback({env,store,now:Date.now});return executeScheduledInstagramPublish({env,store,publicationId:String(task.input?.publication_id||''),runtimeKillSwitch:state.runner.kill_switch===true,now:Date.now,execute});},
     'runtime.register_recurring': async ({task})=>{const schedule=upsertSchedule(task.input?.schedule,{file:recurringFilePath(env),now:Date.now()});return {validated:true,evidence:{schema:'runtime.recurring_registration.v1',schedule:{id:schedule.id,enabled:schedule.enabled,cadence:schedule.cadence,timezone:schedule.timezone},commercial_mutations_enabled:false}};},
     'google_ads.read_campaign': async ({task}) => {const campaignId=String(task.input?.campaign_id||task.id||'').replace(/^campaign-/, '').replace(/^cycle-(?:read|observe)-/, '');return readCampaign({campaignId,...taskDateRange(task.input),env});},
     'google_ads.propose_changes': async ({objective_id,task}) => {const state=readState(statePath(env));const objective=state.objectives.find(x=>x.id===objective_id);const source=firstDone(objective,'google_ads.read_campaign')?.evidence?.[0]||null;return proposeChanges({readEvidence:source,context:task.input?.context||{}});},
