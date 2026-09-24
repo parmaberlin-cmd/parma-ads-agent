@@ -18,6 +18,7 @@ const { auditInstagramContentCapability, auditInstagramLoginCapability } = requi
 const { discoverStories } = require("./instagram-story-capability");
 const { registerInstagramMediaHost } = require("./instagram-media-host");
 const { startInstagramEditorialRuntime } = require("./instagram-editorial-runtime");
+const { scheduleApprovedPublishingPackage } = require("./instagram-package-ingress");
 const {
   APPROVAL_TOKEN: META_PAUSED_DRAFT_APPROVAL_TOKEN,
   ONE_SHOT_TRIGGER: META_PAUSED_DRAFT_ONE_SHOT_TRIGGER,
@@ -57,6 +58,7 @@ app.use((req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
+let instagramEditorialRuntime = null;
 
 const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN;
 let META_AD_ACCOUNT_ID = process.env.META_AD_ACCOUNT_ID;
@@ -2210,6 +2212,41 @@ app.get("/openapi.yaml", (req, res) => {
   res.sendFile(path.join(__dirname, "openapi.yaml"));
 });
 
+app.post("/instagram/publications/schedule", requireApiKey, (req, res) => {
+  if (!instagramEditorialRuntime?.scheduler) {
+    return res.status(503).json({
+      success: false,
+      status: "BLOCKED",
+      blockers: ["instagram_editorial_runtime_unavailable"],
+      provider_writes: 0,
+    });
+  }
+  try {
+    const result = scheduleApprovedPublishingPackage({
+      scheduler: instagramEditorialRuntime.scheduler,
+      publicationPackage: req.body,
+    });
+    const accepted = result.status === "SCHEDULED" || result.status === "DUPLICATE_SCHEDULE_BLOCKED";
+    return res.status(accepted ? 202 : 400).json({
+      success: accepted,
+      status: result.status,
+      publication_id: result.publication_id || null,
+      blockers: result.blockers || [],
+      package_fingerprint: result.package_fingerprint || null,
+      approval_fingerprint: result.approval_fingerprint || null,
+      immutable: result.immutable === true,
+      provider_writes: 0,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      status: "BLOCKED",
+      blockers: [String(error?.message || "instagram_package_schedule_failed").slice(0, 160)],
+      provider_writes: 0,
+    });
+  }
+});
+
 registerInstagramMediaHost(app);
 
 app.use((req, res) => {
@@ -2259,7 +2296,7 @@ app.listen(PORT, () => {
   console.log(`Parma Growth Operator running on port ${PORT}`);
   setImmediate(runMetaPausedDraftOneShot);
   try {
-    startInstagramEditorialRuntime({ env: process.env });
+    instagramEditorialRuntime = startInstagramEditorialRuntime({ env: process.env });
   } catch (error) {
     console.error(JSON.stringify({
       event: "instagram_editorial_runtime_start_failed",
