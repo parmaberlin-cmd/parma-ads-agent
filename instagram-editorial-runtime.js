@@ -12,6 +12,8 @@ const {
   frozenProviderResult,
 } = require('./instagram-publication-state');
 const { createProductionReconcileCallback } = require('./instagram-publication-reconcile');
+const { importManualPublicationRecords } = require('./instagram-manual-publication-registry');
+const manualPublicationSeeds = require('./instagram-manual-publication-seed');
 
 function createProductionExecutionCallback({ env, store, now = Date.now } = {}) {
   const facebookTransport = env.META_ACCESS_TOKEN
@@ -47,6 +49,7 @@ function startInstagramEditorialRuntime({
     now,
     requireDurableMount: true,
   });
+  importManualPublicationRecords(resolvedStore, manualPublicationSeeds, { now });
   const resolvedScheduler = scheduler || new InstagramEditorialScheduler({
     store: resolvedStore,
     now,
