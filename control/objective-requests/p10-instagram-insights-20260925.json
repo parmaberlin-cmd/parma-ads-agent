@@ -1,0 +1,24 @@
+{
+  "id": "p10-instagram-insights-20260925",
+  "objective": "P10 production end-to-end Instagram Insights read-only specialist for parma.divinibenedetti",
+  "tasks": [
+    {
+      "id": "read-insights",
+      "kind": "instagram.read_insights",
+      "input": {
+        "since": "2026-08-26",
+        "until": "2026-09-24",
+        "focus_since": "2026-09-18",
+        "focus_until": "2026-09-24"
+      },
+      "max_attempts": 3
+    },
+    {
+      "id": "report",
+      "kind": "generate_report",
+      "depends_on": ["read-insights"],
+      "input": {},
+      "max_attempts": 2
+    }
+  ]
+}
