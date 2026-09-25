@@ -38,7 +38,7 @@ function fixture() {
   const client = { client_id: config.clientId };
   async function begin() {
     let cookie;
-    await provider.authorize(client, { state: 'chatgpt-state', scopes: ['parma.read'], codeChallenge: challenge(verifier),
+    await provider.authorize(client, { state: 'chatgpt-state', scopes: ['parma.read', 'parma.write'], codeChallenge: challenge(verifier),
       redirectUri: config.redirectUri, resource: new URL(config.resource) }, {
       cookie: (name, value) => { assert.equal(name, COOKIE); cookie = value; }, redirect: () => {},
     });
@@ -77,7 +77,7 @@ test('owner sign-in, consent and single-use authorization code produce resource-
   assert.equal(await f.provider.challengeForAuthorizationCode(f.client, code), challenge(verifier));
   const tokens = await f.exchange(code);
   const auth = await f.provider.verifyAccessToken(tokens.access_token);
-  assert.deepEqual(auth.scopes, ['parma.read']);
+  assert.deepEqual(auth.scopes, ['parma.read', 'parma.write']);
   assert.equal(auth.resource.href, f.config.resource);
   await assert.rejects(() => f.exchange(code));
   assert.ok(!JSON.stringify(f.store.snapshot()).includes(tokens.access_token));
@@ -129,9 +129,9 @@ test('token expiry, refresh rotation, reuse detection, and revocation are enforc
   const f = fixture(), tokens = await f.exchange(await f.grant());
   f.advance(3600001);
   await assert.rejects(() => f.provider.verifyAccessToken(tokens.access_token));
-  const rotated = await f.provider.exchangeRefreshToken(f.client, tokens.refresh_token, ['parma.read'], new URL(f.config.resource));
+  const rotated = await f.provider.exchangeRefreshToken(f.client, tokens.refresh_token, ['parma.read', 'parma.write'], new URL(f.config.resource));
   await f.provider.verifyAccessToken(rotated.access_token);
-  await assert.rejects(() => f.provider.exchangeRefreshToken(f.client, tokens.refresh_token, ['parma.read'], new URL(f.config.resource)));
+  await assert.rejects(() => f.provider.exchangeRefreshToken(f.client, tokens.refresh_token, ['parma.read', 'parma.write'], new URL(f.config.resource)));
   await assert.rejects(() => f.provider.verifyAccessToken(rotated.access_token));
   const next = await f.exchange(await f.grant());
   await f.provider.revokeToken(f.client, { token: next.refresh_token });
@@ -140,7 +140,7 @@ test('token expiry, refresh rotation, reuse detection, and revocation are enforc
 test('refresh cannot escalate scopes or audience', async () => {
   const f = fixture(), tokens = await f.exchange(await f.grant());
   await assert.rejects(() => f.provider.exchangeRefreshToken(f.client, tokens.refresh_token, ['parma.write'], new URL(f.config.resource)));
-  await assert.rejects(() => f.provider.exchangeRefreshToken(f.client, tokens.refresh_token, ['parma.read'], new URL('https://evil.example')));
+  await assert.rejects(() => f.provider.exchangeRefreshToken(f.client, tokens.refresh_token, ['parma.read', 'parma.write'], new URL('https://evil.example')));
 });
 test('token persistence failure does not return a usable grant', async () => {
   const f = fixture(), code = await f.grant();
@@ -261,7 +261,7 @@ test('OAuth metadata is discoverable and unauthenticated MCP is challenged', asy
   assert.equal((await f.request('/mcp', { headers: { origin: 'https://evil.example' } })).status, 403);
   assert.equal((await f.request('/mcp', { headers: { host: 'evil.example' } })).status, 403);
   const invalidScope = new URLSearchParams({ client_id: f.config.clientId, redirect_uri: f.config.redirectUri,
-    response_type: 'code', code_challenge: challenge(verifier), code_challenge_method: 'S256', scope: 'parma.write',
+    response_type: 'code', code_challenge: challenge(verifier), code_challenge_method: 'S256', scope: 'parma.read',
     state: 'preserved-state', resource: f.config.resource });
   const denied = await f.request(`/authorize?${invalidScope}`);
   assert.equal(denied.status, 302);
@@ -275,7 +275,7 @@ test('consent page preserves form Origin without disclosing callback query; reje
   let flowCookie, googleState;
   const original = f.google.generateAuthUrl;
   f.google.generateAuthUrl = params => { googleState = params.state; return original(params); };
-  await provider.authorize(f.client, { state: 'chatgpt-state', scopes: ['parma.read'], codeChallenge: challenge(verifier),
+  await provider.authorize(f.client, { state: 'chatgpt-state', scopes: ['parma.read', 'parma.write'], codeChallenge: challenge(verifier),
     redirectUri: f.config.redirectUri, resource: new URL(f.config.resource) }, {
     cookie: (_, value) => { flowCookie = value; }, redirect: () => {},
   });
@@ -301,7 +301,7 @@ test('consent page preserves form Origin without disclosing callback query; reje
   assert.equal(accepted.headers.get('referrer-policy'), 'no-referrer');
   assert.equal((await submit(origin)).status, 400);
 });
-test('real SDK transport initializes, lists and calls only read tools', async t => {
+test('real SDK transport initializes, lists reads and controlled handoff tool', async t => {
   const f = await httpFixture(t);
   const tokens = f.mounted.provider.issue({ subject: 'owner-subject', family: 'test-family', familyExpires: Date.now() + 86400000 });
   const rpc = async (method, params = {}) => {
@@ -314,7 +314,8 @@ test('real SDK transport initializes, lists and calls only read tools', async t 
   const initialized = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
   assert.equal(initialized.result.serverInfo.name, 'parma-readonly');
   const listed = await rpc('tools/list');
-  assert.equal(listed.result.tools.length, 3);
+  assert.equal(listed.result.tools.length, 4);
+  assert.ok(listed.result.tools.some(tool => tool.name === 'parma_submit_commercial_plan'));
   const called = await rpc('tools/call', { name: 'parma_google_test', arguments: {} });
   assert.equal(called.result.structuredContent.data.clicks, 7);
   const rejected = await rpc('tools/call', { name: 'pause_campaign', arguments: {} });
@@ -325,7 +326,7 @@ test('SDK token endpoint validates client secret and PKCE before issuing tokens'
   let flowCookie, googleState;
   const original = f.google.generateAuthUrl;
   f.google.generateAuthUrl = params => { googleState = params.state; return original(params); };
-  await provider.authorize(f.client, { state: 'client-state', scopes: ['parma.read'], codeChallenge: challenge(verifier),
+  await provider.authorize(f.client, { state: 'client-state', scopes: ['parma.read', 'parma.write'], codeChallenge: challenge(verifier),
     redirectUri: f.config.redirectUri, resource: new URL(f.config.resource) }, { cookie: (_, value) => { flowCookie = value; }, redirect: () => {} });
   const flow = { state: googleState, cookie: flowCookie, code: 'mock-code' };
   const { csrf } = await provider.finishGoogle(flow);

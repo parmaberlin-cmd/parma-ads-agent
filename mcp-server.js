@@ -9,6 +9,7 @@ const { requireBearerAuth } = require('@modelcontextprotocol/sdk/server/auth/mid
 const { z } = require('zod');
 const { apiKeysMatch } = require('./api-key-auth');
 const { createReadOnlyTools, listTools } = require('./mcp-readonly-tools');
+const { createCommercialHandoffTool } = require('./mcp-commercial-tools');
 const { ParmaOAuthProvider, COOKIE, COOKIE_OPTIONS } = require('./mcp-oauth-provider');
 const { FileTokenStore } = require('./mcp-auth-store');
 
@@ -132,7 +133,7 @@ function installMcp(app, { env = process.env, store, google, read, now } = {}) {
     next();
   });
   const authOptions = { provider, issuerUrl: new URL(config.issuer), resourceServerUrl: new URL(config.resource),
-    scopesSupported: ['parma.read'], resourceName: 'Parma Ads Agent — read only',
+    scopesSupported: ['parma.read', 'parma.write'], resourceName: 'Parma Ads Agent — controlled commercial handoff',
     // The outer global limiter avoids proxy-IP ambiguity on Railway.
     authorizationOptions: { rateLimit: false }, tokenOptions: { rateLimit: false }, revocationOptions: { rateLimit: false },
   };
@@ -162,8 +163,8 @@ function installMcp(app, { env = process.env, store, google, read, now } = {}) {
       res.set('Referrer-Policy', 'strict-origin');
       // Only cryptographically generated base64url values enter this HTML.
       res.type('html').send(`<!doctype html><html lang="it"><meta charset="utf-8"><title>Collega Parma Agent</title>
-        <h1>Collega ChatGPT a Parma Agent</h1><p>Consenti esclusivamente la lettura di diagnostica e dati Google Ads.
-        Nessuna modifica a campagne, budget o spesa.</p><form method="post" action="/mcp/oauth/consent">
+        <h1>Collega ChatGPT a Parma Agent</h1><p>Consenti lettura diagnostica e l'invio di piani commerciali Google Ads esplicitamente autorizzati.
+        Budget, spesa e attivazioni restano bloccati da questo connettore.</p><form method="post" action="/mcp/oauth/consent">
         <input type="hidden" name="state" value="${state}"><input type="hidden" name="csrf" value="${csrf}">
         <button name="decision" value="allow">Consenti lettura</button><button name="decision" value="deny">Annulla</button></form></html>`);
     } catch { res.status(400).json({ error: 'google_identity_or_session_invalid' }); }
@@ -178,7 +179,7 @@ function installMcp(app, { env = process.env, store, google, read, now } = {}) {
       res.redirect(destination);
     } catch { res.status(400).json({ error: 'consent_session_invalid' }); }
   });
-  const bearer = requireBearerAuth({ verifier: provider, requiredScopes: ['parma.read'],
+  const bearer = requireBearerAuth({ verifier: provider, requiredScopes: ['parma.read', 'parma.write'],
     resourceMetadataUrl: `${config.origin}/.well-known/oauth-protected-resource/mcp` });
   router.all('/mcp', bearer, async (req, res) => {
     if (req.method !== 'POST') { res.set('Allow', 'POST'); return res.status(405).end(); }
@@ -197,6 +198,32 @@ function installMcp(app, { env = process.env, store, google, read, now } = {}) {
       server.registerTool(definition.name, { description: definition.description, annotations: definition.annotations, inputSchema },
         async args => tools.callTool(definition.name, args, req.auth));
     }
+    const submitCommercialPlan = createCommercialHandoffTool({
+      env,
+      authorize: async auth => {
+        if (!auth?.token) return false;
+        const verified = await provider.verifyAccessToken(auth.token);
+        return verified.resource.href === config.resource && verified.clientId === config.clientId && verified.scopes.includes('parma.write');
+      },
+    });
+    server.registerTool('parma_submit_commercial_plan', {
+      description: 'Queue an explicitly authorized, bounded Google Ads commercial plan for the existing fail-closed Railway worker. Spend and activation are always denied.',
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+      inputSchema: z.object({
+        confirm_authorized: z.literal(true),
+        job_id: z.string().regex(/^[A-Za-z0-9:_-]{1,128}$/).optional(),
+        depends_on: z.array(z.string().regex(/^[A-Za-z0-9:_-]{1,128}$/)).max(20).optional(),
+        plan: z.object({
+          plan_id: z.string().min(1).max(128),
+          customer_id: z.string().regex(/^\d{1,20}$/),
+          spend_allowed: z.literal(false),
+          actions: z.array(z.any()).min(1).max(50),
+        }).passthrough(),
+      }).strict(),
+    }, async args => {
+      const data = await submitCommercialPlan(args, req.auth);
+      return { isError: data.success !== true, content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data };
+    });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     let closed = false;
     const close = () => {
