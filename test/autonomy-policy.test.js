@@ -8,6 +8,13 @@ test('read-only diagnostics are allowlisted autonomous actions', () => {
   assert.equal(result.action_class, ACTION_CLASSES.READ_ONLY);
 });
 
+test('instagram insights is an autonomous safe read-only action', () => {
+  const result = authorizeAutonomy({ name: 'instagram.read_insights' }, {});
+  assert.equal(result.allowed, true);
+  assert.equal(result.reason, 'safe_read_only_action');
+  assert.equal(result.action_class, ACTION_CLASSES.READ_ONLY);
+});
+
 test('budget changes always require human approval and are not autonomously allowed', () => {
   const result = authorizeAutonomy({ name: 'increase_budget' }, { autonomy_class: 'supervised_reversible_candidate', human_approved: true });
   assert.equal(result.allowed, false);
