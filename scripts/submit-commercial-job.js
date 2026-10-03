@@ -18,7 +18,7 @@ const {
   signEnvelope,
   canonicalEnvelope,
 } = require('../google-ads-unattended-job-store');
-const { planDigest } = require('../google-ads-commercial-runner');
+const { planDigest, planSchema } = require('../google-ads-commercial-runner');
 
 const ID_PATTERN = /^[A-Za-z0-9:_-]{1,128}$/;
 
@@ -44,7 +44,14 @@ function buildEnvelope(handoff, { now = Date.now() } = {}) {
   if (!Number.isInteger(grant.max_actions) || grant.max_actions < 1 || grant.max_actions > 50) blockers.push('grant_max_actions_invalid');
   if (blockers.length) return { blockers };
 
-  const actions = Array.isArray(plan.actions) ? plan.actions : [];
+  // The unattended worker and independent read-back require the complete
+  // canonical commercial-plan contract (change_id, readback, before/after
+  // state, evidence, etc.). Reject partial handoffs here, before they can
+  // reach the durable queue or provider boundary.
+  const parsedPlan = planSchema.safeParse(plan);
+  if (!parsedPlan.success) return { blockers: ['malformed_commercial_plan'] };
+
+  const actions = parsedPlan.data.actions;
   if (actions.length === 0) blockers.push('plan_actions_required');
   if (actions.length > grant.max_actions) blockers.push('plan_action_count_exceeds_grant');
   const allowed = new Set(grant.allowed_action_types);
@@ -59,8 +66,8 @@ function buildEnvelope(handoff, { now = Date.now() } = {}) {
     created_at: new Date(now).toISOString(),
     expires_at: new Date(Math.min(expiresAt, now + 24 * 60 * 60 * 1000)).toISOString(),
     depends_on: Array.isArray(handoff.depends_on) ? handoff.depends_on : [],
-    plan,
-    plan_digest: planDigest(plan),
+    plan: parsedPlan.data,
+    plan_digest: planDigest(parsedPlan.data),
     authorization: {
       grant_id: grant.grant_id,
       issued_at: new Date(now).toISOString(),
