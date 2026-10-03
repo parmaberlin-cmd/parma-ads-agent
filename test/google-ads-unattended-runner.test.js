@@ -523,3 +523,37 @@ test('partial verified writes are never collapsed to zero when a later action is
   );
   assert.equal(outcomes[0].evidence.auto_retry, false);
 });
+
+
+test('handoff rejects an incomplete action before it can enter the unattended queue', () => {
+  const incompletePlan = {
+    schema: 'google_ads.commercial_plan.v1',
+    plan_id: 'incomplete-schedule-plan',
+    customer_id: CUSTOMER_ID,
+    spend_allowed: false,
+    actions: [{
+      action: {
+        type: 'schedule_remove',
+        campaign_id: CAMPAIGN_ID,
+        resource_name: `customers/${CUSTOMER_ID}/campaignCriteria/304868`,
+      },
+    }],
+  };
+  const handoff = {
+    job_id: 'incomplete-schedule-job',
+    plan: incompletePlan,
+    authorization: {
+      grant_id: 'grant-incomplete',
+      expires_at: new Date(now() + hours(2)).toISOString(),
+      customer_id: CUSTOMER_ID,
+      allowed_action_types: ['schedule_remove'],
+      activation_allowed: false,
+      spend_allowed: false,
+      max_actions: 1,
+      nonce: 'nonce-incomplete',
+    },
+  };
+  const built = buildEnvelope(handoff, { now: now() });
+  assert.deepEqual(built.blockers, ['malformed_commercial_plan']);
+  assert.equal(built.envelope, undefined);
+});
