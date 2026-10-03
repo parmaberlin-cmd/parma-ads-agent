@@ -7,6 +7,15 @@ const { z } = require('zod');
 
 const sha256 = value => crypto.createHash('sha256').update(stableStringify(value)).digest('hex');
 
+// Hash exactly the JSON value that can survive durable serialization. This
+// prevents in-memory-only values such as object properties set to `undefined`
+// from contributing to a record hash and then disappearing in JSON.stringify.
+function canonicalJsonValue(value) {
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) throw new Error('controlled_ads_record_not_json_serializable');
+  return JSON.parse(serialized);
+}
+
 function stableStringify(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
@@ -699,7 +708,7 @@ class ControlledAdsStore {
       kind,
       created_at: new Date(this.now()).toISOString(),
       previous_hash: previousHash,
-      payload: redactSecrets(payload),
+      payload: canonicalJsonValue(redactSecrets(payload)),
     };
     record.hash = sha256({ id: record.id, kind: record.kind, created_at: record.created_at, previous_hash: record.previous_hash, payload: record.payload });
     state.sequence = sequence;
@@ -836,5 +845,6 @@ module.exports = {
   ControlledAdsStore,
   ExperimentEngine,
   stableStringify,
+  canonicalJsonValue,
   redactSecrets,
 };

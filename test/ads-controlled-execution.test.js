@@ -27,6 +27,7 @@ const {
   ControlledAdsStore,
   ExperimentEngine,
   stableStringify,
+  canonicalJsonValue,
 } = require('../ads-controlled-execution-core');
 
 const { createGoogleAdsMutationGateway } = require('../google-ads-mutation-gateway');
@@ -120,6 +121,28 @@ test('controlled store assigns versioned sequential ids and persists an immutabl
   assert.equal(experiment.id, 'EXPERIMENT_000003');
   assert.equal(store.last('state').id, state.id);
   assert.equal(store.verify().ok, true);
+});
+
+test('controlled store hashes the durable JSON form when payload contains undefined', t => {
+  const store = makeStore(t);
+  const record = store.append('change', {
+    change_id: 'repro-change-253',
+    provider_write: true,
+    writes_executed: 1,
+    read_after_write: { verified: false, actual: undefined },
+  });
+  assert.deepEqual(record.payload.read_after_write, { verified: false });
+  assert.equal(Object.prototype.hasOwnProperty.call(record.payload.read_after_write, 'actual'), false);
+  assert.equal(store.verify().ok, true);
+
+  // Re-open from disk: the hash must still describe exactly the persisted JSON.
+  const reopened = new ControlledAdsStore({ directory: store.directory, integrityKey: store.key, now });
+  assert.equal(reopened.verify().ok, true);
+  assert.equal(reopened.get(record.id).hash, record.hash);
+});
+
+test('canonical JSON normalization matches JSON persistence semantics', () => {
+  assert.deepEqual(canonicalJsonValue({ keep: 1, drop: undefined, array: [undefined, 2] }), { keep: 1, array: [null, 2] });
 });
 
 test('controlled store redacts secrets and rejects tampering', t => {
