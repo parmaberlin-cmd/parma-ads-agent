@@ -657,9 +657,9 @@ class ControlledAdsStore {
       if (!record || typeof record.id !== 'string' || !record.created_at || !record.previous_hash || !record.hash || !record.kind) {
         throw new Error('controlled_ads_store_corrupt');
       }
-      if (record.previous_hash !== previousHash) throw new Error('controlled_ads_store_hash_chain_broken');
+      if (record.previous_hash !== previousHash) throw new Error(`controlled_ads_store_hash_chain_broken:${record.id}:previous_hash`);
       if (record.hash !== sha256({ id: record.id, kind: record.kind, created_at: record.created_at, previous_hash: record.previous_hash, payload: record.payload })) {
-        throw new Error('controlled_ads_store_hash_chain_broken');
+        throw new Error(`controlled_ads_store_hash_chain_broken:${record.id}:record_hash`);
       }
       previousHash = record.hash;
     }
