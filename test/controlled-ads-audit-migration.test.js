@@ -56,7 +56,7 @@ test('migration apply preserves exact evidence and installs a valid replacement'
   const evidence=fs.readFileSync(path.join(f.dir,out.evidence_file)); assert.deepEqual(evidence,before);
   const envelope=JSON.parse(fs.readFileSync(active,'utf8')); const state=JSON.parse(envelope.payload);
   assert.equal(state.sequence,254); assert.equal(state.records.at(-1).payload.event,'controlled_ads_audit_migrated_v1');
-  let prev=hash('genesis'); for(const rec of state.records){ assert.equal(rec.previous_hash,prev); assert.equal(rec.hash,hash(rec)); prev=rec.hash; }
+  let prev=hash('genesis'); for(const rec of state.records){ assert.equal(rec.previous_hash,prev); assert.equal(rec.hash,hash({ id: rec.id, kind: rec.kind, created_at: rec.created_at, previous_hash: rec.previous_hash, payload: rec.payload })); prev=rec.hash; }
 });
 
 test('migration fails closed while unattended worker is enabled', t => {
