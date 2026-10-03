@@ -98,3 +98,30 @@ test("GA4 event inventory propagates missing booking-start tracking automaticall
   assert.ok(diagnosed.issues.some((item) => item.code === "BOOKING_STARTED_TRACKING_MISSING"));
   assert.equal(diagnosed.issues.some((item) => item.code === "LANDING_TO_RESERVATION_LEAKAGE"), false);
 });
+
+
+test("configured but unobserved reservation funnel blocks optimization", () => {
+  const report = buildShadowAgentReport({
+    now: "2026-10-03T07:39:08Z",
+    conversions: {
+      google_ads_conversions: 291,
+      booking_completed: 291,
+      google_last_seen_at: "2026-10-03T07:30:00Z",
+      ga4_last_seen_at: "2026-10-03T07:30:00Z",
+      google_collected_at: "2026-10-03T07:39:00Z",
+      ga4_collected_at: "2026-10-03T07:39:00Z",
+    },
+    funnel: {
+      reservationPageConfigured: true,
+      reservationPageObserved: false,
+      bookingStartedConfigured: true,
+      bookingStartedObserved: false,
+      bookingStartedTracked: false,
+      bookingCompletedConfigured: true,
+      bookingCompletedObserved: true,
+    },
+  });
+  assert.equal(report.conversion_integrity.status, "degraded");
+  assert.equal(report.conversion_integrity.optimization_allowed, false);
+  assert.ok(report.conversion_integrity.issues.includes("reservation_funnel_observation_incomplete"));
+});

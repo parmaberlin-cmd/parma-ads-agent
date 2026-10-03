@@ -11,7 +11,7 @@ function buildShadowAgentReport(input = {}) {
   const meta = input.meta || {};
   const google = input.google || {};
   const conversions = input.conversions || {};
-  const conversionIntegrity = assessConversionIntegrity({
+  const rawConversionIntegrity = assessConversionIntegrity({
     googleAdsConversions: conversions.google_ads_conversions ?? null,
     ga4Bookings: conversions.booking_completed ?? null,
     googleLastSeenAt: conversions.google_last_seen_at || null,
@@ -20,6 +20,23 @@ function buildShadowAgentReport(input = {}) {
     ga4CollectedAt: conversions.ga4_collected_at || null,
     now: input.now ? new Date(input.now) : new Date(),
   });
+  const funnelObservationIncomplete =
+    input.funnel?.reservationPageConfigured === true &&
+    input.funnel?.bookingStartedConfigured === true &&
+    (input.funnel?.reservationPageObserved !== true ||
+      input.funnel?.bookingStartedObserved !== true);
+  const conversionIntegrity = funnelObservationIncomplete
+    ? {
+        ...rawConversionIntegrity,
+        status: "degraded",
+        confidence: "medium",
+        optimization_allowed: false,
+        issues: Array.from(new Set([
+          ...(rawConversionIntegrity.issues || []),
+          "reservation_funnel_observation_incomplete",
+        ])),
+      }
+    : rawConversionIntegrity;
 
   const legacyDecisionSupport = buildDecisionSupportReport({ meta, google, conversions });
   const baseAnomalies = detectAnomalies({ current: input.current || {}, baseline: input.baseline || {}, access: input.access || {} });
