@@ -70,7 +70,8 @@ function main() {
   const secret = process.env.ADS_AUDIT_INTEGRITY_KEY || process.env.ADS_AUDIT_HMAC_KEY || process.env.PARMA_ADS_AUDIT_SECRET;
   if (!base || !path.isAbsolute(base)) throw new Error('audit_migration_volume_unavailable');
   if (!secret) throw new Error('audit_migration_integrity_secret_unavailable');
-  if (process.env.GOOGLE_ADS_UNATTENDED_JOBS === 'enabled') throw new Error('audit_migration_unattended_jobs_must_be_disabled');
+  if (process.env.GOOGLE_ADS_UNATTENDED_JOBS !== 'disabled') throw new Error('audit_migration_unattended_jobs_must_be_disabled');
+  if (process.env.GOOGLE_ADS_ECONOMIC_JOBS !== 'disabled') throw new Error('audit_migration_economic_jobs_must_be_disabled');
 
   const key = crypto.createHash('sha256').update(`parma-google-ads-commercial-audit-v1:${secret}`).digest();
   const directory = path.join(base, 'parma-ads-audit', 'google-ads-commercial');
