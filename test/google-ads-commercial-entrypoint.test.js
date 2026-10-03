@@ -410,3 +410,25 @@ test('schedule replacement may remove the overlapping criterion then create the 
   assert.equal(result.writes_executed, 2);
   assert.equal(writes, 2);
 });
+
+
+test('commercial runner preserves structured non-Error failure reason', async () => {
+  const value = plan();
+  const store = memoryStore();
+  const result = await runCommercialOneShot({
+    mode: 'EXECUTE_APPROVED_PLAN',
+    env: envFor(value),
+    customer: customer(),
+    store,
+    controlFactory: () => ({
+      execute: async () => Promise.reject({ code: 'provider_transport_rejected' }),
+    }),
+  });
+
+  assert.equal(result.status, 'BLOCKED');
+  assert.deepEqual(result.blockers, ['provider_transport_rejected']);
+  assert.equal(result.provider_write, false);
+  assert.equal(result.writes_executed, 0);
+  const failure = store.list('audit').find(record => record.payload?.event === 'commercial_plan_failed_zero_write');
+  assert.equal(failure?.payload?.failure_reason, 'provider_transport_rejected');
+});
