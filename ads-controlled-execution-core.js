@@ -378,7 +378,7 @@ function verifyRollbackResult({ expected = {}, actual = {}, snapshot = null } = 
 
 function verifyReadAfterWrite({ expected = {}, actual = {}, readCompletedAt = null } = {}) {
   const mismatches = [];
-  for (const key of new Set([...Object.keys(expected), ...Object.keys(actual)])) {
+  for (const key of Object.keys(expected)) {
     if (!Object.prototype.hasOwnProperty.call(actual, key) || stableStringify(actual[key]) !== stableStringify(expected[key])) {
       mismatches.push({ field: key, expected: expected[key], actual: actual[key] });
     }

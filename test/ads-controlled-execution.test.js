@@ -159,6 +159,23 @@ test('read-after-write is mandatory and fails closed on mismatch', async t => {
   assert.equal(failed.read_after_write.verified, false);
 });
 
+test('read-after-write ignores diagnostic fields not declared in expected state', () => {
+  const result = verifyReadAfterWrite({
+    expected: { present: false },
+    actual: { present: false, resource_name: 'customers/7376153998/campaignCriteria/23276824770~304868', status: null },
+    readCompletedAt: '2026-10-03T15:38:05.853Z',
+  });
+  assert.equal(result.verified, true);
+  assert.deepEqual(result.mismatches, []);
+});
+
+test('read-after-write still fails when an expected field is missing or different', () => {
+  const missing = verifyReadAfterWrite({ expected: { present: false }, actual: { status: null }, readCompletedAt: '2026-10-03T15:38:05.853Z' });
+  const different = verifyReadAfterWrite({ expected: { present: false }, actual: { present: true, status: 'ENABLED' }, readCompletedAt: '2026-10-03T15:38:05.853Z' });
+  assert.equal(missing.verified, false);
+  assert.equal(different.verified, false);
+});
+
 test('gateway is write-disabled by default and requires a live executor when enabled', async t => {
   const { gateway } = gatewayFixture(t);
   assert.equal(gateway.status().writes_allowed, false);
