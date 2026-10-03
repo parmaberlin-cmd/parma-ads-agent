@@ -107,3 +107,12 @@ function operationBlock(openapiText, operationId) {
   const nextPath = openapiText.indexOf("\n  /", start);
   return openapiText.slice(start, nextPath === -1 ? openapiText.length : nextPath);
 }
+
+
+test("commercial job control routes are authenticated and durable", () => {
+  assert.ok(bootstrap.includes('app.post("/tools/agent/google-ads/commercial/jobs"'));
+  assert.ok(bootstrap.includes('app.get("/tools/agent/google-ads/commercial/jobs/:jobId"'));
+  assert.ok(bootstrap.includes("submitHandoff(req.body || {}"));
+  assert.ok(bootstrap.includes("UnattendedJobStore.fromEnv(process.env)"));
+  assert.ok(bootstrap.includes("if (!authorized(req))"));
+});

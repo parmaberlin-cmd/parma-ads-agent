@@ -24,6 +24,8 @@ const {
   historyStorageStatus,
 } = require("./shadow-history-store");
 const metaPreflightStatus = require("./meta-preflight-status");
+const { submitHandoff } = require("./scripts/submit-commercial-job");
+const { UnattendedJobStore } = require("./google-ads-unattended-job-store");
 
 const state = {
   status: "starting",
@@ -241,6 +243,26 @@ function wrappedExpress(...args) {
     if (state.status === "starting" && !state.result) return res.status(202).json({ success:true, mode:"shadow", status:"running", writes_allowed:false, started_at:state.started_at });
     if (state.status === "failed" && !state.result) return res.status(500).json({ success:false, mode:"shadow", status:"failed", writes_allowed:false, started_at:state.started_at, finished_at:state.finished_at, error:state.error });
     return res.json({ success:true, mode:"shadow", status:refreshPromise?"refreshing":"completed", writes_allowed:false, started_at:state.started_at, finished_at:state.finished_at, refresh_error:state.last_refresh_error, last_refresh_failed_at:state.last_refresh_failed_at, ...state.result });
+  });
+
+  app.post("/tools/agent/google-ads/commercial/jobs", realExpress.json({ limit: "64kb" }), (req, res) => {
+    if (!authorized(req)) return res.status(401).json({ success:false, error:"Unauthorized" });
+    const outcome = submitHandoff(req.body || {}, { env: process.env });
+    const ok = outcome.status === "QUEUED";
+    return res.status(ok ? 202 : 400).json({ success:ok, ...outcome });
+  });
+
+  app.get("/tools/agent/google-ads/commercial/jobs/:jobId", (req, res) => {
+    if (!authorized(req)) return res.status(401).json({ success:false, error:"Unauthorized" });
+    if (!/^[A-Za-z0-9:_-]{1,128}$/.test(String(req.params.jobId || ""))) return res.status(400).json({ success:false, error:"invalid_job_id" });
+    try {
+      const store = UnattendedJobStore.fromEnv(process.env);
+      const result = store.readResult(req.params.jobId);
+      const jobState = store.readState(req.params.jobId);
+      return res.json({ success:true, job_id:req.params.jobId, state:jobState, result });
+    } catch {
+      return res.status(500).json({ success:false, error:"commercial_job_status_unavailable" });
+    }
   });
 
   app.post("/tools/agent/shadow/refresh", (req, res) => {
