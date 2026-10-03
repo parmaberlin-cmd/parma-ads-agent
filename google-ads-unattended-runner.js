@@ -407,6 +407,52 @@ async function runUnattendedOnce({
   return outcomes;
 }
 
+function retireExpiredJobs({ jobStore = null, env = process.env, now = Date.now } = {}) {
+  const store = jobStore || jobStoreFromEnv(env, { now });
+  const outcomes = [];
+  for (const entry of store.listIncoming()) {
+    const job = entry.job;
+    let signatureValid = false;
+    try { signatureValid = verifyEnvelope(job, store.key); } catch { signatureValid = false; }
+    if (!signatureValid) continue;
+    const expired = Date.parse(job.authorization?.expires_at) <= now() || Date.parse(job.expires_at) <= now();
+    if (!expired) continue;
+    const existing = store.readResult(job.job_id);
+    if (existing) { store.archive(job.job_id); outcomes.push(existing); continue; }
+    outcomes.push(writeOutcome(store, job, {
+      result: JOB_RESULTS.NEEDS_HUMAN,
+      state: JOB_STATES.NEEDS_HUMAN,
+      checkpoint: 'authorization_expired_housekeeping',
+      attempts: store.readState(job.job_id)?.attempts || 0,
+      blockers: ['job_authorization_expired'],
+      evidence: { provider_write: false, writes_executed: 0, housekeeping: true, auto_retry: false },
+      archive: true,
+    }));
+  }
+  return outcomes;
+}
+
+function startExpiredJobHousekeeping({ env = process.env, log = entry => console.log(JSON.stringify(entry)), intervalMs = 15000, onError = null, ...options } = {}) {
+  let ticking = false;
+  const tick = () => {
+    if (ticking) return [];
+    ticking = true;
+    try {
+      const outcomes = retireExpiredJobs({ env, ...options });
+      for (const outcome of outcomes) log({ event: 'google_ads_expired_job_retired', job_id: outcome.job_id, result: outcome.result, provider_write: false, writes_executed: 0 });
+      return outcomes;
+    } catch (error) {
+      if (typeof onError === 'function') onError(error);
+      log({ event: 'google_ads_expired_job_housekeeping_error', error: String(error?.message || error).split('\\n')[0], provider_write: false, writes_executed: 0 });
+      return [];
+    } finally { ticking = false; }
+  };
+  const timer = setInterval(tick, intervalMs);
+  if (typeof timer.unref === 'function') timer.unref();
+  setImmediate(tick);
+  return { tick, stop: () => clearInterval(timer) };
+}
+
 function startUnattendedWorker({ env = process.env, log = entry => console.log(JSON.stringify(entry)), intervalMs = 15000, onError = null, ...options } = {}) {
   let ticking = false;
   const tick = async () => {
@@ -447,4 +493,6 @@ module.exports = {
   processJob,
   runUnattendedOnce,
   startUnattendedWorker,
+  retireExpiredJobs,
+  startExpiredJobHousekeeping,
 };
