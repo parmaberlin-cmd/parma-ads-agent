@@ -15,6 +15,7 @@ const {
   validateJobAuthorization,
   reconcileFromReadBack,
   runUnattendedOnce,
+  retireExpiredJobs,
 } = require('../google-ads-unattended-runner');
 const { buildEnvelope } = require('../scripts/submit-commercial-job');
 
@@ -556,4 +557,30 @@ test('handoff rejects an incomplete action before it can enter the unattended qu
   const built = buildEnvelope(handoff, { now: now() });
   assert.deepEqual(built.blockers, ['malformed_commercial_plan']);
   assert.equal(built.envelope, undefined);
+});
+
+
+test('expired-job housekeeping retires a signed queued job with zero provider access', t => {
+  const f = fixture(t);
+  const plan = commercialPlan({ planId: 'expired-housekeeping-plan' });
+  const job = submit(f, plan);
+  const afterExpiry = () => Date.parse(job.authorization.expires_at) + 1;
+  const outcomes = retireExpiredJobs({ jobStore: f.jobStore, env: environment({ GOOGLE_ADS_UNATTENDED_JOBS: 'disabled' }), now: afterExpiry });
+  assert.equal(outcomes.length, 1);
+  assert.equal(outcomes[0].result, JOB_RESULTS.NEEDS_HUMAN);
+  assert.deepEqual(outcomes[0].blockers, ['job_authorization_expired']);
+  assert.equal(outcomes[0].provider_write, false);
+  assert.equal(outcomes[0].writes_executed, 0);
+  assert.equal(outcomes[0].evidence.housekeeping, true);
+  assert.equal(fs.existsSync(path.join(f.jobStore.incoming, 'job-1.json')), false);
+  assert.equal(fs.existsSync(path.join(f.jobStore.done, 'job-1.json')), true);
+  assert.equal(f.jobStore.readState('job-1').checkpoint, 'authorization_expired_housekeeping');
+});
+
+test('expired-job housekeeping never retires an unexpired signed job', t => {
+  const f = fixture(t);
+  submit(f, commercialPlan());
+  const outcomes = retireExpiredJobs({ jobStore: f.jobStore, env: environment({ GOOGLE_ADS_UNATTENDED_JOBS: 'disabled' }), now });
+  assert.deepEqual(outcomes, []);
+  assert.equal(fs.existsSync(path.join(f.jobStore.incoming, 'job-1.json')), true);
 });
