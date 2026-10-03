@@ -84,6 +84,20 @@ function buildEnvelope(handoff, { now = Date.now() } = {}) {
   return { envelope };
 }
 
+function submitHandoff(handoff, { env = process.env, now = Date.now(), dryRun = false } = {}) {
+  const built = buildEnvelope(handoff, { now });
+  if (!built.envelope) return { status: 'BLOCKED', blockers: built.blockers || ['handoff_invalid'], provider_write: false, writes_executed: 0 };
+  const key = jobIntegrityKey(env);
+  const signature = signEnvelope(built.envelope, key);
+  const envelope = { ...built.envelope, authorization: { ...built.envelope.authorization, signature } };
+  if (dryRun) return { status: 'VALIDATED', dry_run: true, job_id: envelope.job_id, plan_id: envelope.plan.plan_id, plan_digest: envelope.plan_digest, actions: envelope.plan.actions.length, expires_at: envelope.authorization.expires_at, depends_on: envelope.depends_on, provider_write: false, writes_executed: 0 };
+  const directory = jobStoreDirectory(env);
+  if (!directory) return { status: 'BLOCKED', blockers: ['job_store_directory_unavailable'], provider_write: false, writes_executed: 0 };
+  const store = new UnattendedJobStore({ directory, integrityKey: key });
+  try { store.submit(envelope); } catch (error) { return { status: 'BLOCKED', blockers: [String(error?.message || error).split('\n')[0]], provider_write: false, writes_executed: 0 }; }
+  return { status: 'QUEUED', job_id: envelope.job_id, plan_id: envelope.plan.plan_id, plan_digest: envelope.plan_digest, actions: envelope.plan.actions.length, depends_on: envelope.depends_on, expires_at: envelope.authorization.expires_at, execution: 'service_side_worker', provider_write: false, writes_executed: 0 };
+}
+
 function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
@@ -131,4 +145,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { buildEnvelope };
+module.exports = { buildEnvelope, submitHandoff };
