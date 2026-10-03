@@ -38,7 +38,7 @@ function fixture() {
 }
 
 function run(f, args = [], extraEnv = {}) {
-  return spawnSync(process.execPath, [script, ...args], { encoding: 'utf8', env: { ...process.env, RAILWAY_VOLUME_MOUNT_PATH: f.root, PARMA_ADS_AUDIT_SECRET: f.secret, GOOGLE_ADS_UNATTENDED_JOBS: 'disabled', ...extraEnv } });
+  return spawnSync(process.execPath, [script, ...args], { encoding: 'utf8', env: { ...process.env, RAILWAY_VOLUME_MOUNT_PATH: f.root, PARMA_ADS_AUDIT_SECRET: f.secret, GOOGLE_ADS_UNATTENDED_JOBS: 'disabled', GOOGLE_ADS_ECONOMIC_JOBS: 'disabled', ...extraEnv } });
 }
 
 test('migration dry-run verifies expected legacy break without changing source bytes', t => {
@@ -64,4 +64,12 @@ test('migration fails closed while unattended worker is enabled', t => {
   const active=path.join(f.dir,'controlled-ads-audit.json'); const before=fs.readFileSync(active);
   const r=run(f,['--apply'],{GOOGLE_ADS_UNATTENDED_JOBS:'enabled'});
   assert.notEqual(r.status,0); assert.match(r.stderr,/audit_migration_unattended_jobs_must_be_disabled/); assert.deepEqual(fs.readFileSync(active),before);
+});
+
+
+test('migration fails closed unless economic worker is explicitly disabled', t => {
+  const f=fixture(); t.after(()=>fs.rmSync(f.root,{recursive:true,force:true}));
+  const active=path.join(f.dir,'controlled-ads-audit.json'); const before=fs.readFileSync(active);
+  const r=run(f,['--apply'],{GOOGLE_ADS_ECONOMIC_JOBS:'enabled'});
+  assert.notEqual(r.status,0); assert.match(r.stderr,/audit_migration_economic_jobs_must_be_disabled/); assert.deepEqual(fs.readFileSync(active),before);
 });
