@@ -269,16 +269,31 @@ async function runCommercialOneShot({ env = process.env, mode = env.GOOGLE_ADS_C
     activeStore.append('audit', { event: mode === 'DRY_RUN' ? 'commercial_plan_dry_run_completed' : 'commercial_plan_execution_completed', plan_id: plan.plan_id, plan_digest: digest, customer_id: CUSTOMER_ID, result_count: results.length, writes_executed: writes, spend_allowed: false });
     return { ...base, status: mode === 'DRY_RUN' ? 'DRY_RUN_VERIFIED' : 'VERIFIED', plan_id: plan.plan_id, plan_digest: digest, replay_state: replay, action_count: results.length, results, provider_credentials_internal: true, writes_executed: writes, provider_write: results.some(result => result.provider_write), commercial_mutations: writes };
   } catch (error) {
-    if (mode === 'EXECUTE_APPROVED_PLAN' && activeStore && activePlan && activeDigest && !String(error?.message || '').startsWith('commercial_plan_replay_blocked:')) {
+    // Provider/control helpers are allowed to reject with non-Error values.
+    // Preserve a bounded, useful reason instead of collapsing those failures to
+    // the opaque commercial_runner_failed fallback.
+    const failureReason = (() => {
+      if (typeof error === 'string' && error.trim()) return error.trim();
+      if (error && typeof error.message === 'string' && error.message.trim()) return error.message.trim();
+      if (error && typeof error.code === 'string' && error.code.trim()) return error.code.trim();
+      if (error && Array.isArray(error.blockers) && error.blockers.length) return String(error.blockers[0]);
+      try {
+        const serialized = JSON.stringify(error);
+        if (serialized && serialized !== '{}') return serialized;
+      } catch {}
+      return 'commercial_runner_failed';
+    })().split('\n')[0].slice(0, 500);
+    if (mode === 'EXECUTE_APPROVED_PLAN' && activeStore && activePlan && activeDigest && !failureReason.startsWith('commercial_plan_replay_blocked:')) {
       const changeIds = activePlan.actions.map(item => item.change_id);
       const providerWrite = activeStore.list('change').some(record => changeIds.includes(record.payload?.change_id) && (record.payload?.provider_write === true || Number(record.payload?.writes_executed || 0) > 0));
       activeStore.append('audit', {
         event: providerBoundaryStarted || providerWrite ? 'commercial_plan_failed_ambiguous' : 'commercial_plan_failed_zero_write',
         plan_id: activePlan.plan_id, plan_digest: activeDigest, customer_id: CUSTOMER_ID,
         provider_boundary_started: providerBoundaryStarted, provider_write: providerWrite, spend_allowed: false,
+        failure_reason: failureReason,
       });
     }
-    return { ...base, status: 'BLOCKED', blockers: [String(error?.message || 'commercial_runner_failed').split('\n')[0]] };
+    return { ...base, status: 'BLOCKED', blockers: [failureReason] };
   }
 }
 
