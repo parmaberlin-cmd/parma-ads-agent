@@ -7,6 +7,7 @@ const { GoogleAdsApi } = require("google-ads-api");
 const {
   installGoogleCampaignIntelligenceRoute,
 } = require("./google-campaign-intelligence-route");
+const { installPersonalOsHandoffRoute } = require("./personal-os-handoff-route");
 const {
   DEFAULT_GOOGLE_TIMEZONE,
   getGoogleDateRange,
@@ -147,6 +148,8 @@ function requireApiKey(req, res, next) {
 
   next();
 }
+
+installPersonalOsHandoffRoute({ app, requireApiKey });
 
 function disableAdWrites(req, res) {
   return res.status(403).json({
