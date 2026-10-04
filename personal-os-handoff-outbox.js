@@ -90,6 +90,16 @@ function canonicalSignatureMessage(envelope) {
   ].join('\n');
 }
 
+function publicSigningKey(signingKey) {
+  return crypto.createPublicKey(signingKey).export({ type: 'spki', format: 'pem' });
+}
+
+function publicKeyFingerprint(publicKeyPem) {
+  const key = publicKeyPem?.type === 'public' ? publicKeyPem : crypto.createPublicKey(publicKeyPem);
+  const der = key.export({ type: 'spki', format: 'der' });
+  return crypto.createHash('sha256').update(der).digest('hex');
+}
+
 function outboxDirectory(env = process.env) {
   if (typeof env.PERSONAL_OS_HANDOFF_OUTBOX_PATH === 'string' && path.isAbsolute(env.PERSONAL_OS_HANDOFF_OUTBOX_PATH)) {
     return env.PERSONAL_OS_HANDOFF_OUTBOX_PATH;
@@ -239,6 +249,16 @@ class PersonalOsHandoffOutbox {
       .slice(0, limit);
     return records.map(record => this.sign(record.handoff));
   }
+
+  signerMetadata() {
+    const publicKeyPem = publicSigningKey(this.signingKey);
+    return {
+      executor_id: this.executorId,
+      key_id: this.keyId,
+      public_key_pem: publicKeyPem,
+      fingerprint_sha256: publicKeyFingerprint(publicKeyPem),
+    };
+  }
 }
 
 module.exports = {
@@ -249,4 +269,6 @@ module.exports = {
   digest,
   outboxDirectory,
   privateSigningKey,
+  publicKeyFingerprint,
+  publicSigningKey,
 };

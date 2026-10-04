@@ -13,7 +13,7 @@ const SAFE_ERRORS = new Set([
 ]);
 
 function installPersonalOsHandoffRoute({ app, requireApiKey, env = process.env, now, nonce }) {
-  app.get('/control/personal-os/handoffs', requireApiKey, (req, res) => {
+  const respond = (req, res, exposeSigner) => {
     res.set({
       'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff',
@@ -51,6 +51,7 @@ function installPersonalOsHandoffRoute({ app, requireApiKey, env = process.env, 
         spend_changed: false,
         published: false,
       };
+      if (exposeSigner) payload.signer = outbox.signerMetadata();
       assertPublicPayloadSafe(payload);
       return res.status(200).json(payload);
     } catch (error) {
@@ -66,7 +67,9 @@ function installPersonalOsHandoffRoute({ app, requireApiKey, env = process.env, 
         published: false,
       });
     }
-  });
+  };
+  app.get('/control/personal-os/handoffs', requireApiKey, (req, res) => respond(req, res, false));
+  app.get('/control/personal-os/handoffs/public', (req, res) => respond(req, res, true));
 }
 
 module.exports = { installPersonalOsHandoffRoute };

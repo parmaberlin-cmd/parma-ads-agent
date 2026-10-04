@@ -11,6 +11,7 @@ const {
   PersonalOsHandoffOutbox,
   canonicalSignatureMessage,
   digest,
+  publicKeyFingerprint,
 } = require('../personal-os-handoff-outbox');
 const { installPersonalOsHandoffRoute } = require('../personal-os-handoff-route');
 
@@ -116,6 +117,17 @@ test('stores a canonical handoff and emits a receiver-compatible Ed25519 envelop
   fs.rmSync(directory, { recursive: true, force: true });
 });
 
+test('exposes only stable public signer discovery metadata', () => {
+  const { directory, outbox, publicKey } = setup();
+  const metadata = outbox.signerMetadata();
+  assert.equal(metadata.executor_id, 'parma-ads-agent');
+  assert.equal(metadata.key_id, 'test-key-1');
+  assert.match(metadata.public_key_pem, /^-----BEGIN PUBLIC KEY-----/);
+  assert.equal(metadata.fingerprint_sha256, publicKeyFingerprint(publicKey));
+  assert.doesNotMatch(JSON.stringify(metadata), /PRIVATE KEY/);
+  fs.rmSync(directory, { recursive: true, force: true });
+});
+
 test('idempotent resubmission is accepted and conflicting content is rejected', () => {
   const { directory, outbox } = setup();
   assert.equal(outbox.submit(handoff()).duplicate, false);
@@ -170,10 +182,12 @@ test('fromEnv requires a durable path and a valid Ed25519 private key only when 
 });
 
 test('authenticated route is read-only, no-store and blocked by default', () => {
-  let registration;
+  const registrations = [];
   const requireApiKey = () => {};
-  const app = { get(route, middleware, handler) { registration = { route, middleware, handler }; } };
+  const app = { get(...args) { registrations.push(args); } };
   installPersonalOsHandoffRoute({ app, requireApiKey, env: {} });
+  const [route, middleware, handler] = registrations[0];
+  const registration = { route, middleware, handler };
   assert.equal(registration.route, '/control/personal-os/handoffs');
   assert.equal(registration.middleware, requireApiKey);
   const res = responseCapture();
@@ -198,8 +212,8 @@ test('route returns fresh signed handoffs and never exposes signing material', (
     PERSONAL_OS_HANDOFF_SIGNING_PRIVATE_KEY_PEM: pem,
   };
   PersonalOsHandoffOutbox.fromEnv(env, { now: () => NOW, nonce: () => 'nonce-for-submit' }).submit(handoff());
-  let handler;
-  const app = { get(_route, _middleware, registered) { handler = registered; } };
+  const registrations = [];
+  const app = { get(...args) { registrations.push(args); } };
   installPersonalOsHandoffRoute({
     app,
     requireApiKey: (_req, _res, next) => next(),
@@ -207,6 +221,7 @@ test('route returns fresh signed handoffs and never exposes signing material', (
     now: () => NOW + 1000,
     nonce: () => 'nonce-for-read',
   });
+  const handler = registrations.find(args => args[0] === '/control/personal-os/handoffs')[2];
   const res = responseCapture();
   handler({ query: { limit: '1' } }, res);
   assert.equal(res.output.status, 200);
@@ -215,5 +230,37 @@ test('route returns fresh signed handoffs and never exposes signing material', (
   assert.equal(res.output.body.handoffs[0].nonce, 'nonce-for-read');
   assert.doesNotMatch(JSON.stringify(res.output.body), /BEGIN PRIVATE KEY|failed:\s|Error:/);
   assert.equal(res.output.body.provider_writes, 0);
+  fs.rmSync(directory, { recursive: true, force: true });
+});
+
+test('public route is unauthenticated but signed, sanitized and read-only', () => {
+  const directory = temporaryDirectory();
+  const { privateKey } = crypto.generateKeyPairSync('ed25519');
+  const env = {
+    PERSONAL_OS_HANDOFF_OUTBOX_ENABLED: 'true',
+    PERSONAL_OS_HANDOFF_OUTBOX_PATH: directory,
+    PERSONAL_OS_HANDOFF_EXECUTOR_ID: 'parma-ads-agent',
+    PERSONAL_OS_HANDOFF_KEY_ID: 'test-key-1',
+    PERSONAL_OS_HANDOFF_SIGNING_PRIVATE_KEY_PEM: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+  };
+  PersonalOsHandoffOutbox.fromEnv(env, { now: () => NOW, nonce: () => 'nonce-for-submit' }).submit(handoff());
+  const registrations = [];
+  installPersonalOsHandoffRoute({
+    app: { get(...args) { registrations.push(args); } },
+    requireApiKey: () => {},
+    env,
+    now: () => NOW + 1000,
+    nonce: () => 'nonce-public-read',
+  });
+  const registration = registrations.find(args => args[0] === '/control/personal-os/handoffs/public');
+  assert.equal(registration.length, 2);
+  const res = responseCapture();
+  registration[1]({ query: { limit: '1' } }, res);
+  assert.equal(res.output.status, 200);
+  assert.equal(res.output.body.count, 1);
+  assert.equal(res.output.body.signer.executor_id, 'parma-ads-agent');
+  assert.match(res.output.body.signer.public_key_pem, /^-----BEGIN PUBLIC KEY-----/);
+  assert.doesNotMatch(JSON.stringify(res.output.body), /BEGIN PRIVATE KEY|Bearer|api_key/i);
+  assert.equal(res.output.body.authority_granted, false);
   fs.rmSync(directory, { recursive: true, force: true });
 });
