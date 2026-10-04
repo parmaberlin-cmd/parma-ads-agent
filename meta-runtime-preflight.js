@@ -131,7 +131,8 @@ function validateScheduleForAccount({ start, durationDays, account, businessTime
   };
 }
 
-async function executeRuntimeMetaPreflight({ env = process.env, startsAt, httpClient = axios } = {}) {
+async function executeRuntimeMetaPreflight({ env = process.env, startsAt, httpClient = axios, onPhase = () => {} } = {}) {
+  onPhase('configuration');
   const config = runtimeConfig(env);
   const missing = [];
   if (!config.accessToken) missing.push("META_ACCESS_TOKEN");
@@ -154,13 +155,16 @@ async function executeRuntimeMetaPreflight({ env = process.env, startsAt, httpCl
     return finalizeResult({ success: false, mode: "read_only", ready: false, blockers: ["invalid_start_time"] });
   }
 
+  onPhase('transport');
   const transport = createReadTransport({
     accessToken: config.accessToken,
     apiVersion: config.apiVersion,
     client: httpClient,
   });
+  onPhase('account_read');
   const account = await inspectAccountContext(transport, config);
   const durationDays = 14;
+  onPhase('schedule_validation');
   const schedule = validateScheduleForAccount({
     start,
     durationDays,
@@ -185,12 +189,14 @@ async function executeRuntimeMetaPreflight({ env = process.env, startsAt, httpCl
     });
   }
 
+  onPhase('asset_read');
   const assets = await discoverInstagramReelAssets({
     transport,
     adAccountId: config.adAccountId,
     instagramUsername: DEFAULT_USERNAME,
     reelPermalink: DEFAULT_REEL,
   });
+  onPhase('draft_validation');
   const draft = buildPausedReservationDraft({
     pageId: assets.page_id,
     instagramUserId: assets.instagram_user_id,
@@ -205,6 +211,7 @@ async function executeRuntimeMetaPreflight({ env = process.env, startsAt, httpCl
     accountTimezone: account.timezone_name,
     businessTimezone: config.businessTimezone,
   });
+  onPhase('provider_preflight');
   const preflight = await runMetaRealPreflight({
     transport,
     adAccountId: config.adAccountId,
@@ -213,6 +220,7 @@ async function executeRuntimeMetaPreflight({ env = process.env, startsAt, httpCl
     writeGateEnabled: config.writeGateEnabled,
     approvalTokenOk: Boolean(APPROVAL_TOKEN),
   });
+  onPhase('result_validation');
   const blockers = [...account.blockers, ...(preflight.blockers || [])];
 
   return finalizeResult({
