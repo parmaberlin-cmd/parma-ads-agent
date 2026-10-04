@@ -10,5 +10,6 @@ for (const name of ["test.yml", "meta-draft-preflight.yml", "meta-draft-inventor
     const workflow = fs.readFileSync(path.join(root, ".github", "workflows", name), "utf8");
     assert.match(workflow, /npm ci --ignore-scripts/);
     assert.doesNotMatch(workflow, /npm install\b/);
+    assert.doesNotMatch(workflow, /npm audit fix\b/);
   });
 }
