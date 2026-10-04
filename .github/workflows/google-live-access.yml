@@ -3,6 +3,10 @@ name: google-live-access
 on:
   push:
     branches: [main, google/intelligence-breakdowns-v1]
+  pull_request:
+    paths:
+      - .github/workflows/google-live-access.yml
+      - test/google-live-access-workflow.test.js
   workflow_dispatch:
 
 permissions:
@@ -64,7 +68,7 @@ jobs:
           echo "intelligence_live=deferred_until_main_deploy"
 
       - name: Validate live Google campaign intelligence through Railway
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
         env:
           PARMA_AGENT_API_KEY: ${{ secrets.PARMA_AGENT_API_KEY }}
         run: |
@@ -74,7 +78,7 @@ jobs:
           for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
             code=$(curl -sS -o intelligence.json -w "%{http_code}" -H "x-api-key: $PARMA_AGENT_API_KEY" "$BASE/tools/google/campaign/$CAMPAIGN_ID/intelligence?days=$DAYS" || true)
             success=$(jq -r '.success // false' intelligence.json 2>/dev/null || echo false)
-            complete=$(jq -r '(.success == true) and (.reader_version == 3) and ((.overview|type) == "array") and ((.ad_groups|type) == "array") and ((.rsa_ads|type) == "array") and ((.rsa_analysis|type) == "array") and ((.conversion_actions|type) == "array")' intelligence.json 2>/dev/null || echo false)
+            complete=$(jq -r '(.success == true) and (.reader_version == 5) and ((.overview|type) == "array") and ((.ad_groups|type) == "array") and ((.rsa_ads|type) == "array") and ((.rsa_analysis|type) == "array") and ((.conversion_actions|type) == "array") and (.writes_allowed == false) and (.execution_allowed == false) and (.spend_allowed == false)' intelligence.json 2>/dev/null || echo false)
             if [ "$code" = "200" ] && [ "$complete" = "true" ]; then break; fi
             sleep 15
           done
