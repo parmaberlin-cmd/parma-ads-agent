@@ -89,6 +89,25 @@ test('handoff identity is deterministic per terminal transition', () => {
   assert.notEqual(first.handoff_id, resumed.handoff_id);
 });
 
+test('deployment metadata changes produce a new content-addressed handoff id', () => {
+  const first = buildRuntimeHandoff(objective(), {
+    RAILWAY_GIT_BRANCH: 'main',
+    RAILWAY_GIT_COMMIT_SHA: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  });
+  const redeployed = buildRuntimeHandoff(objective(), {
+    RAILWAY_GIT_BRANCH: 'main',
+    RAILWAY_GIT_COMMIT_SHA: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  });
+  assert.notEqual(first.head_commit, redeployed.head_commit);
+  assert.notEqual(first.handoff_id, redeployed.handoff_id);
+
+  const { directory, outbox } = realOutbox();
+  assert.equal(outbox.submit(first).duplicate, false);
+  assert.equal(outbox.submit(redeployed).duplicate, false);
+  assert.equal(outbox.listSigned().length, 2);
+  fs.rmSync(directory, { recursive: true, force: true });
+});
+
 test('disabled producer is inert and does not require runtime state', () => {
   const result = emitTerminalRuntimeHandoffs({ env: {} });
   assert.deepEqual(result, {
