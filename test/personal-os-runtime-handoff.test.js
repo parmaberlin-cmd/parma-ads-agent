@@ -78,7 +78,7 @@ test('preserves NEEDS_HUMAN and BLOCKED_EXTERNAL as failures instead of PASS', (
   }
 });
 
-test('handoff identity is deterministic per terminal transition', () => {
+test('handoff identity is deterministic for identical transferred content', () => {
   const first = buildRuntimeHandoff(objective());
   const same = buildRuntimeHandoff(objective());
   const resumed = buildRuntimeHandoff(objective('DONE', {
@@ -86,7 +86,7 @@ test('handoff identity is deterministic per terminal transition', () => {
     completed_at: '2026-10-04T16:00:00.000Z',
   }));
   assert.equal(first.handoff_id, same.handoff_id);
-  assert.notEqual(first.handoff_id, resumed.handoff_id);
+  assert.equal(first.handoff_id, resumed.handoff_id);
 });
 
 test('deployment metadata changes produce a new content-addressed handoff id', () => {
