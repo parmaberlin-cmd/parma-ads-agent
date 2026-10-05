@@ -1,6 +1,5 @@
 'use strict';
 
-const crypto = require('node:crypto');
 const { PersonalOsHandoffOutbox, digest } = require('./personal-os-handoff-outbox');
 
 const TERMINAL_STATUSES = new Set(['DONE', 'NEEDS_HUMAN', 'BLOCKED_EXTERNAL']);
