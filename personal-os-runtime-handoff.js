@@ -1,7 +1,6 @@
 'use strict';
 
-const crypto = require('node:crypto');
-const { PersonalOsHandoffOutbox } = require('./personal-os-handoff-outbox');
+const { PersonalOsHandoffOutbox, digest } = require('./personal-os-handoff-outbox');
 
 const TERMINAL_STATUSES = new Set(['DONE', 'NEEDS_HUMAN', 'BLOCKED_EXTERNAL']);
 
@@ -10,13 +9,8 @@ function cleanCategory(value, fallback = 'unspecified') {
   return /^[A-Za-z0-9._:-]{1,128}$/.test(text) ? text : fallback;
 }
 
-function terminalIdentity(objective) {
-  const value = [
-    objective.id,
-    objective.status,
-    objective.completed_at || objective.updated_at || objective.created_at || 'unknown-time',
-  ].join('\n');
-  return crypto.createHash('sha256').update(value).digest('hex');
+function terminalIdentity(handoffBody) {
+  return digest(handoffBody);
 }
 
 function taskSummary(objective) {
@@ -43,8 +37,7 @@ function buildRuntimeHandoff(objective, env = process.env) {
     ? env.RAILWAY_GIT_COMMIT_SHA
     : 'runtime-head-unavailable';
   const status = objective.status;
-  return {
-    handoff_id: `ADS-RUNTIME-${terminalIdentity(objective)}`,
+  const handoffBody = {
     schema_version: '1.0',
     phase: 'AUTONOMOUS_RUNTIME',
     goal: 'Preserve sanitized continuity for a terminal Parma Ads Agent objective.',
@@ -119,6 +112,10 @@ function buildRuntimeHandoff(objective, env = process.env) {
       `tasks_needs_human=${summary.needs_human}`,
       `tasks_blocked_external=${summary.blocked_external}`,
     ],
+  };
+  return {
+    handoff_id: `ADS-RUNTIME-${terminalIdentity(handoffBody)}`,
+    ...handoffBody,
   };
 }
 
