@@ -4,6 +4,7 @@ const { CREDENTIAL_VALUE_PATTERNS } = require('./public-output-safety');
 const DEFINITIONS = [
   ['parma_shadow_health', 'Read sanitized shadow health', {}],
   ['parma_google_test', 'Test the configured Google Ads reader without writes', {}],
+  ['parma_lunch_campaign_status', 'Read the exact Parma Lunch campaign state without writes', {}],
   ['parma_campaign_intelligence', 'Read search terms, keywords, devices, hours, geography and campaign diagnostics', {
     campaign_id: { type: 'string', pattern: '^[0-9]{1,20}$' },
     days: { type: 'integer', minimum: 0, maximum: 90, default: 30, description: '0 means today; 1 means yesterday; 2-90 are historical windows ending yesterday' },
@@ -41,6 +42,7 @@ function target(name, args) {
   if (Object.keys(args).length) return null;
   if (name === 'parma_shadow_health') return { path: '/health/agent-shadow-summary', query: {} };
   if (name === 'parma_google_test') return { path: '/tools/google/test', query: {} };
+  if (name === 'parma_lunch_campaign_status') return { path: '/tools/google/lunch/status', query: {} };
   return null;
 }
 
