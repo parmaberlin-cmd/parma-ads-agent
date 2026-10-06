@@ -12,8 +12,8 @@
     "validate:preaccess": "node scripts/run-preaccess-validation.js",
     "validate:google-campaign": "node scripts/run-google-campaign-validation.js",
     "test": "node --test",
-    "test:mcp": "node --test test/mcp-readonly-tools.test.js test/mcp-oauth.test.js",
-    "check:mcp": "node --check mcp-server.js && node --check mcp-oauth-provider.js && node --check mcp-auth-store.js && node --check mcp-readonly-tools.js"
+    "test:mcp": "node --test test/mcp-readonly-tools.test.js test/mcp-oauth.test.js test/mcp-commercial-tools.test.js",
+    "check:mcp": "node --check mcp-server.js && node --check mcp-oauth-provider.js && node --check mcp-auth-store.js && node --check mcp-readonly-tools.js && node --check mcp-commercial-tools.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
