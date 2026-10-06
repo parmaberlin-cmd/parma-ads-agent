@@ -59,14 +59,28 @@ test('campaign plan is paused, bounded, local and scheduled every day', () => {
   assert.deepEqual(proximity, { radius: 2, radiusUnits: 'KILOMETERS', geoPoint: { latitudeInMicroDegrees: 52499597, longitudeInMicroDegrees: 13439966 } });
 });
 
-test('missing authorization and closed kill switch fail before provider access', async () => {
+test('missing authorization blocks access while a closed kill switch still permits read-only reconciliation', async () => {
   let reads = 0;
   const customer = { query: async () => { reads += 1; return []; } };
   const unauthorized = await createLunchCampaign({ env: { GOOGLE_ADS_WRITE_KILL_SWITCH: 'false' }, input: {}, now: NOW, customer });
   assert.deepEqual(unauthorized.evidence.blockers, ['exact_authorization_required']);
+  assert.equal(reads, 0);
   const blocked = await createLunchCampaign({ env: { GOOGLE_ADS_WRITE_KILL_SWITCH: 'true' }, input: grant(), now: NOW, customer });
   assert.deepEqual(blocked.evidence.blockers, ['write_kill_switch_closed']);
-  assert.equal(reads, 0);
+  assert.equal(blocked.evidence.provider_write, false);
+  assert.equal(blocked.evidence.writes_executed, 0);
+  assert.equal(reads, 1);
+});
+
+test('closed kill switch returns an existing exact campaign without any mutation', async () => {
+  const f = fixture({ exists: true, status: 'PAUSED' });
+  const result = await createLunchCampaign({ env: { GOOGLE_ADS_WRITE_KILL_SWITCH: 'true' }, input: grant(), now: NOW, customer: f.customer, transport: f.transport });
+  assert.equal(result.validated, true);
+  assert.equal(result.evidence.status, 'VERIFIED_PAUSED');
+  assert.equal(result.evidence.idempotent, true);
+  assert.equal(result.evidence.provider_write, false);
+  assert.equal(result.evidence.writes_executed, 0);
+  assert.equal(f.calls.length, 0);
 });
 
 test('create is validate-only then atomic paused write, full read-back, and separate activation', async () => {
