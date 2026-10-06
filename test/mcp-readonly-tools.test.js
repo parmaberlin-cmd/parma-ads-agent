@@ -12,9 +12,9 @@ function fixture(options = {}) {
   return { ...tools, calls };
 }
 
-test('MCP preparation has only three explicitly read-only tools and fresh schemas', () => {
+test('MCP preparation has only four explicitly read-only tools and fresh schemas', () => {
   const tools = listTools();
-  assert.equal(tools.length, 3);
+  assert.equal(tools.length, 4);
   assert.ok(tools.every(t => t.annotations.readOnlyHint && !t.annotations.destructiveHint));
   tools[0].inputSchema.properties.injection = {};
   assert.equal(listTools()[0].inputSchema.properties.injection, undefined);
@@ -62,15 +62,17 @@ test('preserves historical days=1 routing semantics', async () => {
   assert.deepEqual(f.calls, [{ method: 'GET', path: '/tools/google/campaign/23276824770/intelligence', query: { days: 1, read_mode: 'historical' } }]);
 });
 
-test('fixed health and Google test routes accept no arbitrary destinations', async () => {
+test('fixed health and Google read routes accept no arbitrary destinations', async () => {
   const f = fixture();
   await f.callTool('parma_shadow_health');
   await f.callTool('parma_google_test');
-  assert.deepEqual(f.calls.map(c => c.path), ['/health/agent-shadow-summary', '/tools/google/test']);
+  await f.callTool('parma_lunch_campaign_status');
+  assert.deepEqual(f.calls.map(c => c.path), ['/health/agent-shadow-summary', '/tools/google/test', '/tools/google/lunch/status']);
 });
 
 for (const [name, args] of [
   ['pause_campaign', {}], ['parma_google_test', { url: 'https://example.invalid' }],
+  ['parma_lunch_campaign_status', { campaign_id: '1' }],
   ['parma_google_test', { method: 'POST' }], ['parma_google_test', null],
   ['parma_campaign_intelligence', { campaign_id: '../start' }],
   ['parma_campaign_intelligence', { campaign_id: 23276824770 }],
