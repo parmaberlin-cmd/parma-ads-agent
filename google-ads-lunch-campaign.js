@@ -174,14 +174,17 @@ async function activateCampaign(customer, transport, campaign) {
 
 async function createLunchCampaign({ env = process.env, input = {}, now = Date.now(), customer = null, transport = null } = {}) {
   if (!authorized(input, now)) return { validated: false, correctable: false, evidence: baseEvidence({ status: 'BLOCKED', blockers: ['exact_authorization_required'] }) };
-  if (env.GOOGLE_ADS_WRITE_KILL_SWITCH !== 'false') return { validated: false, correctable: true, evidence: baseEvidence({ status: 'BLOCKED', blockers: ['write_kill_switch_closed'] }) };
   const provider = customer || (configured(env) ? customerFrom(env) : null);
   if (!provider) return { validated: false, correctable: true, evidence: baseEvidence({ status: 'BLOCKED_EXTERNAL', blockers: ['google_provider_credentials_unavailable'] }) };
+  // Reconcile provider state before applying the write gate. This query is
+  // read-only and lets a closed kill switch distinguish an idempotent existing
+  // campaign from a campaign that would require creation.
   const existing = await readCampaign(provider);
   if (existing) {
     if (existing.daily_budget_micros !== DAILY_BUDGET_MICROS || existing.start_date !== START_DATE || existing.end_date !== END_DATE) return { validated: false, correctable: false, evidence: baseEvidence({ status: 'BLOCKED', blockers: ['existing_campaign_drift'], campaign: existing }) };
     return { validated: true, evidence: baseEvidence({ status: existing.status === 'ENABLED' ? 'VERIFIED_ACTIVE' : 'VERIFIED_PAUSED', campaign: existing, idempotent: true }) };
   }
+  if (env.GOOGLE_ADS_WRITE_KILL_SWITCH !== 'false') return { validated: false, correctable: true, evidence: baseEvidence({ status: 'BLOCKED', blockers: ['write_kill_switch_closed'] }) };
   const tx = transport || restTransport(provider);
   const operations = buildCreateOperations();
   await tx.mutate(operations, { validateOnly: true });
