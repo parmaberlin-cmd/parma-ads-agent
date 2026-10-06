@@ -9,9 +9,9 @@
         "grant_id": "philippe-lunch-search-20261006-v1",
         "approved_by": "Philippe",
         "daily_budget_micros": 5000000,
-        "total_cap_micros": 70000000,
+        "total_cap_micros": 75000000,
         "start_date": "2026-10-06",
-        "end_date": "2026-10-19",
+        "end_date": "2026-10-20",
         "expires_at": "2026-10-07T22:00:00.000Z"
       },
       "idempotency_key": "lunch-search-campaign-create-v1"
@@ -19,13 +19,19 @@
     {
       "id": "register-lunch-search-guardrail",
       "kind": "runtime.register_recurring",
-      "depends_on": ["create-lunch-search-campaign"],
+      "depends_on": [
+        "create-lunch-search-campaign"
+      ],
       "input": {
         "schedule": {
           "id": "lunch-search-spend-guardrail",
           "enabled": true,
           "timezone": "Europe/Berlin",
-          "cadence": { "type": "daily", "hour": 15, "minute": 0 },
+          "cadence": {
+            "type": "daily",
+            "hour": 15,
+            "minute": 0
+          },
           "objective_template": {
             "objective": "Verify lunch Search campaign cost and end date, pausing it when the authorized guardrail requires",
             "tasks": [
@@ -44,7 +50,9 @@
     {
       "id": "report-lunch-search-campaign",
       "kind": "generate_report",
-      "depends_on": ["register-lunch-search-guardrail"],
+      "depends_on": [
+        "register-lunch-search-guardrail"
+      ],
       "input": {},
       "idempotency_key": "lunch-search-report-v1"
     }
