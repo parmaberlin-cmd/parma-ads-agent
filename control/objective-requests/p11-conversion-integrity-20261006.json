@@ -1,0 +1,24 @@
+{
+  "id": "p11-conversion-integrity-20261006",
+  "objective": "P11 production end-to-end GA4 conversion integrity read-only specialist",
+  "tasks": [
+    {
+      "id": "read-conversion-integrity",
+      "kind": "ga4.read_conversion_integrity",
+      "input": {
+        "start": "2026-09-06",
+        "end": "2026-10-05"
+      },
+      "max_attempts": 3
+    },
+    {
+      "id": "report",
+      "kind": "generate_report",
+      "depends_on": [
+        "read-conversion-integrity"
+      ],
+      "input": {},
+      "max_attempts": 2
+    }
+  ]
+}
