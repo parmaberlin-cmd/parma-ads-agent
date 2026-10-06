@@ -36,5 +36,5 @@ test('action registry defines controlled package-specific Instagram publishing',
  assert.equal(describeAction('google_ads.execute_authorized').specialist,'google_ads');
  assert.equal(describeAction('google_ads.execute_authorized').concurrency,'google_ads:account_mutation');
  const publish=describeAction('instagram.publish');assert.equal(publish.specialist,'meta');assert.equal(publish.implemented,true);assert.equal(publish.write,'controlled_external');assert.equal(publish.authorization,'package_specific_instagram_authorization_required');
- assert.equal(describeAction('orderbird.read_revenue').implemented,false);
+ const revenue=describeAction('orderbird.read_revenue');assert.equal(revenue.implemented,true);assert.equal(revenue.specialist,'orderbird');assert.equal(revenue.write,false);assert.equal(revenue.spend,false);assert.equal(revenue.authorization,'autonomous_read_only');
 });
