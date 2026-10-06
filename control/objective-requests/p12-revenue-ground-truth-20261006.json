@@ -1,0 +1,21 @@
+{
+  "id": "p12-revenue-ground-truth-20261006",
+  "objective": "P12 production end-to-end revenue ground truth read-only specialist",
+  "tasks": [
+    {
+      "id": "read-revenue-ground-truth",
+      "kind": "orderbird.read_revenue",
+      "input": {},
+      "max_attempts": 1
+    },
+    {
+      "id": "report",
+      "kind": "generate_report",
+      "depends_on": [
+        "read-revenue-ground-truth"
+      ],
+      "input": {},
+      "max_attempts": 2
+    }
+  ]
+}
