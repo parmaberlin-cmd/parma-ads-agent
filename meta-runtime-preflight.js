@@ -40,6 +40,45 @@ function cleanError(error) {
   };
 }
 
+const FAILURE_PHASES = new Set(["account_context", "asset_discovery", "preflight_validation"]);
+const FAILURE_CATEGORIES = new Set(["authentication", "authorization", "rate_limit", "transport", "provider_response", "runtime"]);
+
+function classifyMetaPreflightException(error) {
+  const graph = error?.response?.data?.error || {};
+  const status = Number(error?.response?.status || 0);
+  const code = Number(graph.code || 0);
+  if (status === 401 || code === 190) return "authentication";
+  if (status === 403 || code === 10 || code === 200) return "authorization";
+  if (status === 429 || [4, 17, 32, 613].includes(code)) return "rate_limit";
+  if (error?.response) return "provider_response";
+  if (["ECONNABORTED", "ECONNRESET", "ENOTFOUND", "ETIMEDOUT"].includes(String(error?.code || ""))) return "transport";
+  return "runtime";
+}
+
+function wrapMetaPreflightException(error, phase) {
+  const wrapped = new Error("meta_runtime_preflight_failed");
+  wrapped.code = "META_RUNTIME_PREFLIGHT_FAILED";
+  wrapped.failure_phase = FAILURE_PHASES.has(phase) ? phase : "unknown";
+  wrapped.failure_category = classifyMetaPreflightException(error);
+  return wrapped;
+}
+
+function sanitizeMetaPreflightException(error) {
+  const phase = FAILURE_PHASES.has(error?.failure_phase) ? error.failure_phase : "unknown";
+  const category = FAILURE_CATEGORIES.has(error?.failure_category)
+    ? error.failure_category
+    : classifyMetaPreflightException(error);
+  return { phase, category };
+}
+
+async function runMetaPreflightPhase(phase, action) {
+  try {
+    return await action();
+  } catch (error) {
+    throw wrapMetaPreflightException(error, phase);
+  }
+}
+
 function normalizeApiVersion(value) {
   const candidate = String(value || META_API_VERSION).trim();
   return /^v\d+\.0$/.test(candidate) ? candidate : META_API_VERSION;
@@ -159,7 +198,7 @@ async function executeRuntimeMetaPreflight({ env = process.env, startsAt, httpCl
     apiVersion: config.apiVersion,
     client: httpClient,
   });
-  const account = await inspectAccountContext(transport, config);
+  const account = await runMetaPreflightPhase("account_context", () => inspectAccountContext(transport, config));
   const durationDays = 14;
   const schedule = validateScheduleForAccount({
     start,
@@ -185,12 +224,12 @@ async function executeRuntimeMetaPreflight({ env = process.env, startsAt, httpCl
     });
   }
 
-  const assets = await discoverInstagramReelAssets({
+  const assets = await runMetaPreflightPhase("asset_discovery", () => discoverInstagramReelAssets({
     transport,
     adAccountId: config.adAccountId,
     instagramUsername: DEFAULT_USERNAME,
     reelPermalink: DEFAULT_REEL,
-  });
+  }));
   const draft = buildPausedReservationDraft({
     pageId: assets.page_id,
     instagramUserId: assets.instagram_user_id,
@@ -205,14 +244,14 @@ async function executeRuntimeMetaPreflight({ env = process.env, startsAt, httpCl
     accountTimezone: account.timezone_name,
     businessTimezone: config.businessTimezone,
   });
-  const preflight = await runMetaRealPreflight({
+  const preflight = await runMetaPreflightPhase("preflight_validation", () => runMetaRealPreflight({
     transport,
     adAccountId: config.adAccountId,
     draft,
     assets,
     writeGateEnabled: config.writeGateEnabled,
     approvalTokenOk: Boolean(APPROVAL_TOKEN),
-  });
+  }));
   const blockers = [...account.blockers, ...(preflight.blockers || [])];
 
   return finalizeResult({
@@ -244,7 +283,7 @@ function registerMetaRealPreflightRoute(app, { authorized, env = process.env, ht
         success: false,
         mode: "read_only",
         ready: false,
-        error: cleanError(error),
+        error: { code: "meta_runtime_preflight_failed", ...sanitizeMetaPreflightException(error) },
         decision: { state: "blocked", next_action: "resolve_runtime_error", write_allowed: false },
         write_operation_performed: false,
         may_activate: false,
@@ -259,6 +298,10 @@ module.exports = {
   normalizeAccountId,
   parseFutureStart,
   cleanError,
+  classifyMetaPreflightException,
+  wrapMetaPreflightException,
+  sanitizeMetaPreflightException,
+  runMetaPreflightPhase,
   normalizeApiVersion,
   runtimeConfig,
   createReadTransport,

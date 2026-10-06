@@ -1,4 +1,4 @@
-const { executeRuntimeMetaPreflight } = require('./meta-runtime-preflight');
+const { executeRuntimeMetaPreflight, sanitizeMetaPreflightException } = require('./meta-runtime-preflight');
 const { safePublicJson } = require('./public-output-safety');
 
 const state = { status:'pending', started_at:null, finished_at:null, result:null, error:null };
@@ -40,15 +40,16 @@ async function run(){
   state.result=sanitize(result);state.status='completed';state.finished_at=new Date().toISOString();
   console.log(JSON.stringify({event:'meta_runtime_preflight',success:true,...state.result}));
  }catch(error){
-  state.status='failed';state.finished_at=new Date().toISOString();state.error='meta_runtime_preflight_failed';
-  console.error(JSON.stringify({event:'meta_runtime_preflight',success:false,error:state.error,mode:'read_only',may_activate:false,may_spend:false}));
+  state.status='failed';state.finished_at=new Date().toISOString();state.result=null;
+  state.error={code:'meta_runtime_preflight_failed',...sanitizeMetaPreflightException(error)};
+  console.error(JSON.stringify({event:'meta_runtime_preflight',success:false,error:state.error.code,failure_phase:state.error.phase,failure_category:state.error.category,mode:'read_only',may_activate:false,may_spend:false}));
  }
 }
 function register(app){
  app.get('/health/meta-real-preflight-summary',(req,res)=>{
   res.setHeader('Cache-Control','no-store');
   if(state.status==='pending'||state.status==='running')return safePublicJson(res.status(202),{success:true,status:state.status,mode:'read_only',may_activate:false,may_spend:false,started_at:state.started_at});
-  if(state.status==='failed')return safePublicJson(res.status(500),{success:false,status:'failed',mode:'read_only',may_activate:false,may_spend:false,error:'meta_runtime_preflight_failed',finished_at:state.finished_at});
+  if(state.status==='failed')return safePublicJson(res.status(500),{success:false,status:'failed',mode:'read_only',may_activate:false,may_spend:false,error:'meta_runtime_preflight_failed',failure_phase:state.error?.phase||'unknown',failure_category:state.error?.category||'runtime',finished_at:state.finished_at});
   return safePublicJson(res,{success:true,status:'completed',finished_at:state.finished_at,...state.result});
  });
 }
