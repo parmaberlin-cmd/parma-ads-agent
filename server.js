@@ -4,6 +4,7 @@ const axios = require("axios");
 const { randomUUID } = require("crypto");
 const { apiKeysMatch } = require("./api-key-auth");
 const { GoogleAdsApi } = require("google-ads-api");
+const { readCampaign: readLunchCampaign } = require("./google-ads-lunch-campaign");
 const {
   installGoogleCampaignIntelligenceRoute,
 } = require("./google-campaign-intelligence-route");
@@ -1892,6 +1893,30 @@ app.get("/tools/google/test", requireApiKey, async (req, res) => {
       success: false,
       connected: false,
       error: cleanGoogleError(error),
+    });
+  }
+});
+
+app.get("/tools/google/lunch/status", requireApiKey, async (req, res) => {
+  if (!checkGoogleConfig(res)) return;
+
+  try {
+    const campaign = await readLunchCampaign(getGoogleCustomer());
+    res.json({
+      success: true,
+      source: "google_ads",
+      mode: "read_only",
+      campaign,
+      writes_allowed: false,
+      spend_allowed: false,
+    });
+  } catch (_error) {
+    res.status(500).json({
+      success: false,
+      source: "google_ads",
+      error: "lunch_campaign_status_read_failed",
+      writes_allowed: false,
+      spend_allowed: false,
     });
   }
 });

@@ -314,7 +314,7 @@ test('real SDK transport initializes, lists and calls only read tools', async t 
   const initialized = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
   assert.equal(initialized.result.serverInfo.name, 'parma-readonly');
   const listed = await rpc('tools/list');
-  assert.equal(listed.result.tools.length, 3);
+  assert.equal(listed.result.tools.length, 4);
   const called = await rpc('tools/call', { name: 'parma_google_test', arguments: {} });
   assert.equal(called.result.structuredContent.data.clicks, 7);
   const rejected = await rpc('tools/call', { name: 'pause_campaign', arguments: {} });
