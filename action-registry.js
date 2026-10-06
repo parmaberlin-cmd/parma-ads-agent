@@ -14,7 +14,7 @@ const ACTIONS=Object.freeze({
   'instagram.audit_capability':{specialist:'meta',write:false,spend:false,authorization:'autonomous_read_only',concurrency:'meta:read'},
   'instagram.publish_preflight':{specialist:'meta',write:false,spend:false,authorization:'autonomous_read_only',concurrency:'meta:content_preflight'},
   'instagram.publish':{specialist:'meta',write:'controlled_external',spend:false,authorization:'package_specific_instagram_authorization_required',concurrency:'meta:content_publish',implemented:true},
-  'ga4.read_conversion_integrity':{specialist:'ga4',write:false,spend:false,authorization:'provider_read_required',concurrency:'ga4:read',implemented:false},
+  'ga4.read_conversion_integrity':{specialist:'ga4',write:false,spend:false,authorization:'autonomous_read_only',concurrency:'ga4:read',implemented:true},
   'orderbird.read_revenue':{specialist:'orderbird',write:false,spend:false,authorization:'official_provider_read_required',concurrency:'orderbird:read',implemented:false},
 });
 
