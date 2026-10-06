@@ -40,7 +40,16 @@ function installPersonalOsHandoffRoute({ app, requireApiKey, env = process.env, 
           provider_writes: 0,
         });
       }
-      const handoffs = outbox.listSigned(limit);
+      const order = req.query?.order === undefined ? 'oldest' : String(req.query.order);
+      if (!['oldest', 'latest'].includes(order)) {
+        return res.status(400).json({
+          success: false,
+          status: 'REJECTED',
+          reason: 'order_must_be_oldest_or_latest',
+          provider_writes: 0,
+        });
+      }
+      const handoffs = outbox.listSigned(limit, { order });
       const payload = {
         success: true,
         status: 'READ_ONLY',

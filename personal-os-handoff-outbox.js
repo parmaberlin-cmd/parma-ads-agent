@@ -240,14 +240,15 @@ class PersonalOsHandoffOutbox {
     return envelope;
   }
 
-  listSigned(limit = 20) {
+  listSigned(limit = 20, { order = 'oldest' } = {}) {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('handoff_list_limit_invalid');
+    if (!['oldest', 'latest'].includes(order)) throw new Error('handoff_list_order_invalid');
     const records = fs.readdirSync(this.pending)
       .filter(name => /^[a-f0-9]{64}\.json$/.test(name))
       .map(name => this.readRecord(path.join(this.pending, name)))
-      .sort((a, b) => String(a.stored_at).localeCompare(String(b.stored_at)) || a.handoff.handoff_id.localeCompare(b.handoff.handoff_id))
-      .slice(0, limit);
-    return records.map(record => this.sign(record.handoff));
+      .sort((a, b) => String(a.stored_at).localeCompare(String(b.stored_at)) || a.handoff.handoff_id.localeCompare(b.handoff.handoff_id));
+    if (order === 'latest') records.reverse();
+    return records.slice(0, limit).map(record => this.sign(record.handoff));
   }
 
   signerMetadata() {
