@@ -1,7 +1,22 @@
 const { executeRuntimeMetaPreflight } = require('./meta-runtime-preflight');
 const { safePublicJson } = require('./public-output-safety');
 
-const state = { status:'pending', started_at:null, finished_at:null, result:null, error:null };
+const state = { status:'pending', started_at:null, finished_at:null, result:null, error:null, diagnostic:null };
+const phases = new Set(['configuration','transport','account_read','schedule_validation','asset_read','draft_validation','provider_preflight','result_validation']);
+function exceptionCategory(error){
+ try{
+  const status=error?.response?.status;
+  const code=error?.response?.data?.error?.code;
+  if(code===190||status===401)return 'authentication';
+  if(code===10||code===200||status===403)return 'permission';
+  if(code===4||code===17||code===32||code===613||status===429)return 'rate_limit';
+  if(error?.code==='ECONNABORTED'||error?.code==='ETIMEDOUT')return 'timeout';
+  if(['ECONNRESET','ENOTFOUND','EAI_AGAIN','ECONNREFUSED'].includes(error?.code))return 'network';
+  if(Number.isInteger(status)&&status>=500&&status<=599)return 'provider_unavailable';
+  if(Number.isInteger(status)&&status>=400&&status<=499)return 'provider_request';
+ }catch{}
+ return 'unknown';
+}
 function futureStart(){ return new Date(Date.now()+24*60*60*1000).toISOString(); }
 function sanitize(result){
  if(!result)return null;
@@ -32,16 +47,19 @@ function sanitize(result){
   }:null
  };
 }
-async function run(){
+async function run({execute=executeRuntimeMetaPreflight}={}){
  if(state.status==='running')return;
- state.status='running';state.started_at=new Date().toISOString();state.error=null;
+ state.status='running';state.started_at=new Date().toISOString();state.error=null;state.diagnostic=null;state.result=null;
+ let phase='configuration';
  try{
-  const result=await executeRuntimeMetaPreflight({startsAt:futureStart()});
+  const result=await execute({startsAt:futureStart(),onPhase:value=>{phase=phases.has(value)?value:'unknown';}});
+  phase='result_validation';
   state.result=sanitize(result);state.status='completed';state.finished_at=new Date().toISOString();
   console.log(JSON.stringify({event:'meta_runtime_preflight',success:true,...state.result}));
  }catch(error){
   state.status='failed';state.finished_at=new Date().toISOString();state.error='meta_runtime_preflight_failed';
-  console.error(JSON.stringify({event:'meta_runtime_preflight',success:false,error:state.error,mode:'read_only',may_activate:false,may_spend:false}));
+  state.diagnostic={phase,category:exceptionCategory(error)};
+  console.error(JSON.stringify({event:'meta_runtime_preflight',success:false,error:state.error,diagnostic:state.diagnostic,mode:'read_only',may_activate:false,may_spend:false}));
  }
 }
 function register(app){
@@ -52,4 +70,4 @@ function register(app){
   return safePublicJson(res,{success:true,status:'completed',finished_at:state.finished_at,...state.result});
  });
 }
-module.exports={state,run,register,sanitize,futureStart};
+module.exports={state,run,register,sanitize,futureStart,exceptionCategory};
