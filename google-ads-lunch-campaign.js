@@ -10,9 +10,9 @@ const CAMPAIGN_NAME = 'Lunch | Wrangelkiez | 12-15';
 const BUDGET_NAME = 'Lunch | Wrangelkiez | EUR 5 daily | 20261006';
 const AD_GROUP_NAME = 'Lunch Kreuzberg';
 const START_DATE = '2026-10-06';
-const END_DATE = '2026-10-19';
+const END_DATE = '2026-10-20';
 const DAILY_BUDGET_MICROS = 5_000_000;
-const TOTAL_CAP_MICROS = 70_000_000;
+const TOTAL_CAP_MICROS = 75_000_000;
 // Google may spend up to twice the average daily budget on an individual day.
 // Pausing at EUR 60 leaves one full EUR 10 daily-overdelivery envelope below
 // the principal-approved EUR 70 ceiling.
@@ -93,7 +93,7 @@ function buildCreateOperations() {
   ];
   for (const [text, matchType] of KEYWORDS) operations.push({ adGroupCriterionOperation: { create: { adGroup: names.adGroup, status: 'ENABLED', keyword: { text, matchType }, negative: false } } });
   for (const text of NEGATIVES) operations.push({ campaignCriterionOperation: { create: { campaign: names.campaign, negative: true, keyword: { text, matchType: 'PHRASE' } } } });
-  for (const dayOfWeek of DAYS) operations.push({ campaignCriterionOperation: { create: { campaign: names.campaign, adSchedule: { dayOfWeek, startHour: 10, startMinute: 'THIRTY', endHour: 14, endMinute: 'THIRTY' } } } });
+  for (const dayOfWeek of DAYS) operations.push({ campaignCriterionOperation: { create: { campaign: names.campaign, adSchedule: { dayOfWeek, startHour: 11, startMinute: 'THIRTY', endHour: 15, endMinute: 'ZERO' } } } });
   operations.push({ campaignCriterionOperation: { create: { campaign: names.campaign, proximity: { radius: 2, radiusUnits: 'KILOMETERS', geoPoint: { latitudeInMicroDegrees: LATITUDE_MICRO_DEGREES, longitudeInMicroDegrees: LONGITUDE_MICRO_DEGREES } } } } });
   for (const languageConstant of ['languageConstants/1000','languageConstants/1001']) operations.push({ campaignCriterionOperation: { create: { campaign: names.campaign, language: { languageConstant } } } });
   operations.push({ adGroupAdOperation: { create: { adGroup: names.adGroup, status: 'ENABLED', ad: { finalUrls: [FINAL_URL], responsiveSearchAd: { headlines: HEADLINES.map(text => ({ text })), descriptions: DESCRIPTIONS.map(text => ({ text })) } } } } });
@@ -153,7 +153,7 @@ async function verifyCreated(customer, campaign) {
   const proximity = criteria[0]?.campaign_criterion?.proximity || {};
   const ok = groups.length === 1 && groups[0]?.ad_group?.name === AD_GROUP_NAME && normalize(groups[0]?.ad_group?.status, STATUS) === 'ENABLED' &&
     JSON.stringify(actualKeywords.sort()) === JSON.stringify(KEYWORDS.map(value => [...value]).sort()) && keywords.every(row => normalize(row?.ad_group_criterion?.status, STATUS) === 'ENABLED') &&
-    JSON.stringify(actualSchedules.sort()) === JSON.stringify(DAYS.map(dayName => [dayName, 10, 'THIRTY', 14, 'THIRTY']).sort()) &&
+    JSON.stringify(actualSchedules.sort()) === JSON.stringify(DAYS.map(dayName => [dayName, 11, 'THIRTY', 15, 'ZERO']).sort()) &&
     ads.length === 1 && normalize(ads[0]?.ad_group_ad?.status, STATUS) === 'ENABLED' &&
     JSON.stringify(sorted((rsa.headlines || []).map(value => value?.text).filter(Boolean))) === JSON.stringify(sorted(HEADLINES)) &&
     JSON.stringify(sorted((rsa.descriptions || []).map(value => value?.text).filter(Boolean))) === JSON.stringify(sorted(DESCRIPTIONS)) &&
