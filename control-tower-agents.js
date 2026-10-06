@@ -1,0 +1,6 @@
+'use strict';
+function safeId(v){return String(v||'').replace(/[^A-Za-z0-9_.:-]/g,'_').slice(0,80);}
+function createRegistry(entries=[]){const map=new Map();for(const raw of entries){const id=safeId(raw.id);if(!id||map.has(id))throw new Error('agent_registry_invalid');const capabilities=[...new Set((raw.capabilities||[]).map(safeId).filter(Boolean))];map.set(id,{id,capabilities,priority:Number(raw.priority||100),enabled:raw.enabled!==false});}return map;}
+function routeTask(task,registry){const required=safeId(task?.kind);const candidates=[...registry.values()].filter(a=>a.enabled&&a.capabilities.includes(required)).sort((a,b)=>a.priority-b.priority||a.id.localeCompare(b.id));if(!candidates.length)return{routed:false,reason:'no_specialist_available',agent_id:null};return{routed:true,reason:'specialist_selected',agent_id:candidates[0].id};}
+function buildExecutors({registry,handlers={}}={}){const out={};for(const agent of registry.values()){const handler=handlers[agent.id];if(typeof handler!=='function')continue;for(const capability of agent.capabilities){if(out[capability])continue;out[capability]=async(task,ctx)=>handler(task,{...ctx,agent_id:agent.id});}}return out;}
+module.exports={safeId,createRegistry,routeTask,buildExecutors};
