@@ -7,6 +7,8 @@ const {
   inspectAccountContext,
   validateScheduleForAccount,
   executeRuntimeMetaPreflight,
+  sanitizeMetaPreflightException,
+  wrapMetaPreflightException,
 } = require("../meta-runtime-preflight");
 
 test("normalizes Meta account ids safely", () => {
@@ -112,4 +114,26 @@ test("incomplete runtime config fails closed without HTTP calls", async () => {
   assert.equal(result.may_spend, false);
   assert.equal(calls, 0);
   assert.ok(result.blockers.includes("configuration_incomplete"));
+});
+
+test("sanitized Meta failure exposes only bounded phase and category", () => {
+  const raw = new Error("Bearer secret https://graph.facebook.com/token?access_token=secret act_123456789");
+  raw.response = { status: 401, data: { error: { code: 190, message: raw.message } } };
+  const wrapped = wrapMetaPreflightException(raw, "account_context");
+  const diagnostic = sanitizeMetaPreflightException(wrapped);
+  assert.deepEqual(diagnostic, { phase: "account_context", category: "authentication" });
+  assert.doesNotMatch(JSON.stringify(diagnostic), /secret|token|graph\.facebook|act_|123456789/i);
+  assert.equal(wrapped.message, "meta_runtime_preflight_failed");
+  assert.equal(wrapped.response, undefined);
+});
+
+test("unknown phase and hostile provider fields fail closed to safe enums", () => {
+  const raw = {
+    failure_phase: "https://evil.example/?token=secret",
+    failure_category: "Bearer secret",
+    response: { status: 429, data: { error: { message: "private payload" } } },
+  };
+  const diagnostic = sanitizeMetaPreflightException(raw);
+  assert.deepEqual(diagnostic, { phase: "unknown", category: "rate_limit" });
+  assert.deepEqual(Object.keys(diagnostic).sort(), ["category", "phase"]);
 });
