@@ -14,9 +14,9 @@ const END_DATE = '2026-10-20';
 const DAILY_BUDGET_MICROS = 5_000_000;
 const TOTAL_CAP_MICROS = 75_000_000;
 // Google may spend up to twice the average daily budget on an individual day.
-// Pausing at EUR 60 leaves one full EUR 10 daily-overdelivery envelope below
-// the principal-approved EUR 70 ceiling.
-const PAUSE_THRESHOLD_MICROS = 60_000_000;
+// Pausing at EUR 65 leaves one full EUR 10 daily-overdelivery envelope below
+// the principal-approved EUR 75 ceiling.
+const PAUSE_THRESHOLD_MICROS = 65_000_000;
 const FINAL_URL = 'https://www.parmaberlin.de/en';
 const LATITUDE_MICRO_DEGREES = 52_499_597;
 const LONGITUDE_MICRO_DEGREES = 13_439_966;
