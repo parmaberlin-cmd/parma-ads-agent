@@ -1,0 +1,52 @@
+{
+  "id": "lunch-search-campaign-20261006",
+  "objective": "Create and verify the principal-authorized Parma lunch Search campaign, then register its daily spend and expiry guardrail",
+  "tasks": [
+    {
+      "id": "create-lunch-search-campaign",
+      "kind": "google_ads.create_lunch_campaign",
+      "input": {
+        "grant_id": "philippe-lunch-search-20261006-v1",
+        "approved_by": "Philippe",
+        "daily_budget_micros": 5000000,
+        "total_cap_micros": 70000000,
+        "start_date": "2026-10-06",
+        "end_date": "2026-10-19",
+        "expires_at": "2026-10-07T22:00:00.000Z"
+      },
+      "idempotency_key": "lunch-search-campaign-create-v1"
+    },
+    {
+      "id": "register-lunch-search-guardrail",
+      "kind": "runtime.register_recurring",
+      "depends_on": ["create-lunch-search-campaign"],
+      "input": {
+        "schedule": {
+          "id": "lunch-search-spend-guardrail",
+          "enabled": true,
+          "timezone": "Europe/Berlin",
+          "cadence": { "type": "daily", "hour": 15, "minute": 0 },
+          "objective_template": {
+            "objective": "Verify lunch Search campaign cost and end date, pausing it when the authorized guardrail requires",
+            "tasks": [
+              {
+                "id": "monitor-lunch-search-campaign",
+                "kind": "google_ads.monitor_lunch_campaign",
+                "input": {},
+                "idempotency_key": "lunch-search-monitor-daily"
+              }
+            ]
+          }
+        }
+      },
+      "idempotency_key": "lunch-search-guardrail-register-v1"
+    },
+    {
+      "id": "report-lunch-search-campaign",
+      "kind": "generate_report",
+      "depends_on": ["register-lunch-search-guardrail"],
+      "input": {},
+      "idempotency_key": "lunch-search-report-v1"
+    }
+  ]
+}
