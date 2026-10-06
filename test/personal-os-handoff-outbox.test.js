@@ -264,3 +264,54 @@ test('public route is unauthenticated but signed, sanitized and read-only', () =
   assert.equal(res.output.body.authority_granted, false);
   fs.rmSync(directory, { recursive: true, force: true });
 });
+
+test('latest ordering exposes recent continuity after the outbox exceeds the response limit', () => {
+  const directory = temporaryDirectory();
+  const { privateKey } = crypto.generateKeyPairSync('ed25519');
+  let clock = NOW;
+  const outbox = new PersonalOsHandoffOutbox({
+    directory,
+    executorId: 'parma-ads-agent',
+    keyId: 'test-key-1',
+    signingKey: privateKey,
+    now: () => clock,
+    nonce: () => 'nonce-latest-read',
+  });
+  outbox.submit(handoff({ handoff_id: 'handoff-oldest' }));
+  clock += 1000;
+  outbox.submit(handoff({ handoff_id: 'handoff-middle' }));
+  clock += 1000;
+  outbox.submit(handoff({ handoff_id: 'handoff-latest' }));
+  assert.deepEqual(
+    outbox.listSigned(2, { order: 'latest' }).map((envelope) => envelope.handoff.handoff_id),
+    ['handoff-latest', 'handoff-middle'],
+  );
+  assert.deepEqual(
+    outbox.listSigned(2).map((envelope) => envelope.handoff.handoff_id),
+    ['handoff-oldest', 'handoff-middle'],
+  );
+  fs.rmSync(directory, { recursive: true, force: true });
+});
+
+test('public route validates the requested handoff ordering', () => {
+  const { directory, privateKey } = setup();
+  const registrations = [];
+  installPersonalOsHandoffRoute({
+    app: { get(...args) { registrations.push(args); } },
+    requireApiKey: () => {},
+    env: {
+      PERSONAL_OS_HANDOFF_OUTBOX_ENABLED: 'true',
+      PERSONAL_OS_HANDOFF_OUTBOX_PATH: directory,
+      PERSONAL_OS_HANDOFF_EXECUTOR_ID: 'parma-ads-agent',
+      PERSONAL_OS_HANDOFF_KEY_ID: 'test-key-1',
+      PERSONAL_OS_HANDOFF_SIGNING_PRIVATE_KEY_PEM: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+    },
+  });
+  const handler = registrations.find(args => args[0] === '/control/personal-os/handoffs/public')[1];
+  const res = responseCapture();
+  handler({ query: { order: 'newest' } }, res);
+  assert.equal(res.output.status, 400);
+  assert.equal(res.output.body.reason, 'order_must_be_oldest_or_latest');
+  assert.equal(res.output.body.provider_writes, 0);
+  fs.rmSync(directory, { recursive: true, force: true });
+});
