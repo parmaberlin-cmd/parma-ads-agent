@@ -31,7 +31,7 @@ test('recurring snapshot carries bootstrap observability state',()=>{
  assert.equal(snap.bootstrap.managed_schedule_id,'autonomous-business-loop-google-cycle');
 });
 
-test('Orderbird specialist is declared but provider access is not fabricated',()=>{const s=getSpecialist('orderbird');assert.equal(s.status,'AWAITING_OFFICIAL_PROVIDER_PATH');assert.equal(s.read,false);assert.equal(s.write,false);});
+test('Orderbird specialist reports source availability without fabricating provider access',()=>{const s=getSpecialist('orderbird');assert.equal(s.status,'RUNTIME_INTEGRATED_SOURCE_UNAVAILABLE');assert.equal(s.read,'status_only_until_official_provider_path');assert.deepEqual(s.capabilities,['orderbird.read_revenue']);assert.equal(s.write,false);assert.equal(s.health,'blocked_external_provider_access');});
 
 test('economic ground truth contract is separate from marketing attribution',()=>{
  const base={schema:'economic_ground_truth.v1',provider:'orderbird',restaurant_id:'parma',business_date:'2026-09-04',currency:'EUR',gross_revenue:100,net_revenue:84,vat:16,captured_at:'2026-09-04T21:00:00.000Z',source_authority:'provider_supported_read_only'};
