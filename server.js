@@ -151,6 +151,7 @@ function requireApiKey(req, res, next) {
 }
 
 installPersonalOsHandoffRoute({ app, requireApiKey });
+installPersonalOsStep3Routes({ app, requireApiKey });
 
 function disableAdWrites(req, res) {
   return res.status(403).json({
