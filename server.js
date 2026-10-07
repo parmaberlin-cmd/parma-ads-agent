@@ -9,6 +9,7 @@ const {
   installGoogleCampaignIntelligenceRoute,
 } = require("./google-campaign-intelligence-route");
 const { installPersonalOsHandoffRoute } = require("./personal-os-handoff-route");
+const { installPersonalOsStep3Routes } = require("./personal-os-step3-route");
 const {
   DEFAULT_GOOGLE_TIMEZONE,
   getGoogleDateRange,
