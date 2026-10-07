@@ -1,0 +1,10 @@
+'use strict';
+const {Step3Store,taskSchema}=require('./personal-os-step3-store');
+function safe(res,status,body){res.set({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});return res.status(status).json(body);}
+function installPersonalOsStep3Routes({app,requireApiKey,env=process.env,now,nonce}){
+ const make=()=>new Step3Store(env,{now,nonce});
+ app.get('/control/personal-os/tasks/public',(req,res)=>{try{const store=make();const n=req.query?.limit===undefined?20:Number(req.query.limit);if(!Number.isInteger(n)||n<1||n>100)return safe(res,400,{success:false,status:'REJECTED',authority_granted:false});const tasks=store.list(n);return safe(res,200,{success:true,status:'READ_ONLY',count:tasks.length,tasks,authority_granted:false,spend_changed:false,published:false,signer:store.signer()});}catch{return safe(res,503,{success:false,status:'BLOCKED',authority_granted:false,spend_changed:false,published:false});}});
+ app.post('/control/personal-os/tasks',requireApiKey,(req,res)=>{try{const task={schema_version:'personal_os.remote_procedure.v1',request_id:req.body?.request_id,issued_at:req.body?.issued_at||new Date(now?now():Date.now()).toISOString(),workspace:'personal-os-control',procedure_id:req.body?.procedure_id,parameters:req.body?.parameters||{}};if(!taskSchema.safeParse(task).success)return safe(res,400,{success:false,status:'REJECTED',authority_granted:false});const out=make().submit(task);return safe(res,202,{success:true,...out,authority_granted:false,provider_writes:0,spend_changed:false,published:false});}catch{return safe(res,503,{success:false,status:'BLOCKED',authority_granted:false,provider_writes:0,spend_changed:false,published:false});}});
+ app.post('/control/personal-os/results/ack',(req,res)=>{try{const out=make().acceptAck(req.body);return safe(res,200,{success:true,...out,authority_granted:false,provider_writes:0,spend_changed:false,published:false});}catch{return safe(res,400,{success:false,status:'REJECTED',authority_granted:false,provider_writes:0,spend_changed:false,published:false});}});
+}
+module.exports={installPersonalOsStep3Routes};
