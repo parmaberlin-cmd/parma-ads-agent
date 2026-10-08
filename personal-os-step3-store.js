@@ -12,7 +12,7 @@ const taskSchema=z.object({
  request_id:ID,
  issued_at:z.string().datetime(),
  workspace:z.literal('personal-os-control'),
- procedure_id:z.enum(['queue.read','queue.status','local.report','repository.test','git.status','git.diff','terminal.canary','browser.read_only']),
+ procedure_id:z.enum(['queue.read','queue.status','local.report','repository.test','git.status','git.diff','terminal.canary','browser.read_only','google_ads.read']),
  parameters:z.record(z.unknown()),
 }).strict();
 const resultSchema=z.object({
