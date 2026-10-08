@@ -30,6 +30,8 @@ app.use(express.json());
 app.get('/existing-health',(_req,res)=>res.json({ok:true}));
 app.post('/existing-json',(req,res)=>res.json({echo:req.body}));
 app.get('/existing-error',(_req,_res,next)=>next(new Error('expected-test-error')));
+require('./personal-os-step7-read-gateway-preload').installOnApp(app);
+app.use((_req,res)=>res.status(404).json({success:false,error:'Not found'}));
 app.use((err,_req,res,_next)=>res.status(418).json({handled:err.message==='expected-test-error'}));
 let callbackCalled=false;
 const server=app.listen(0,'127.0.0.1',()=>{callbackCalled=true;});
@@ -61,3 +63,5 @@ function request(route,method='GET',body){
  const output=execFileSync(process.execPath,['-e',script],{cwd:path.join(__dirname,'..'),encoding:'utf8',timeout:15000});
  assert.match(output,/STEP7_EXPRESS_HTTP_PASS/);
 });
+
+test('production server registers STEP7 gateway before terminal 404 and error middleware',()=>{const fs=require('node:fs');const server=fs.readFileSync(path.join(__dirname,'..','server.js'),'utf8');const install=server.indexOf("require('./personal-os-step7-read-gateway-preload').installOnApp(app)");const catchall=server.indexOf('app.use((req, res) => {',install);const listen=server.indexOf('app.listen(PORT',install);assert.ok(install>0&&catchall>install&&listen>catchall);});
