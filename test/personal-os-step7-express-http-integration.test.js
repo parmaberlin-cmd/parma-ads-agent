@@ -44,6 +44,8 @@ function request(route,method='GET',body){
 }
 (async()=>{
  try{
+  if(!server.listening)await new Promise((resolve,reject)=>{server.once('listening',resolve);server.once('error',reject);});
+  await new Promise(resolve=>setImmediate(resolve));
   assert.equal(callbackCalled,true);
   assert.equal(installed,1);
   assert.deepEqual(await request('/existing-health'),{status:200,body:{ok:true}});
