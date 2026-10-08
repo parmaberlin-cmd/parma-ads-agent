@@ -1,5 +1,37 @@
 'use strict';
-const path=require('node:path');
 const Module=require('node:module');
 const original=Module._load;
-Module._load=function(request,parent,isMain){const exp=original.apply(this,arguments);try{if(request==='express'&&typeof exp==='function'&&!exp.__step7_wrapped){const wrapped=function(){const app=exp();const {installStep7ReadGateway}=require('./personal-os-step7-read-gateway');const {GoogleAdsApi}=require('google-ads-api');const {getGoogleDateRange,DEFAULT_GOOGLE_TIMEZONE}=require('./google-time-utils');function customer(){const client=new GoogleAdsApi({client_id:process.env.GOOGLE_CLIENT_ID,client_secret:process.env.GOOGLE_CLIENT_SECRET,developer_token:process.env.GOOGLE_DEVELOPER_TOKEN});const config={customer_id:String(process.env.GOOGLE_CUSTOMER_ID||'').replace(/\D/g,''),refresh_token:process.env.GOOGLE_REFRESH_TOKEN};const login=String(process.env.GOOGLE_LOGIN_CUSTOMER_ID||'').replace(/\D/g,'');if(login)config.login_customer_id=login;return client.Customer(config);}installStep7ReadGateway({app,getGoogleCustomer:customer,getGoogleDateRange,googleTimezone:()=>process.env.GOOGLE_ACCOUNT_TIMEZONE||DEFAULT_GOOGLE_TIMEZONE});return app;};Object.assign(wrapped,exp);wrapped.__step7_wrapped=true;return wrapped;}}catch{}return exp;};
+Module._load=function(request,parent,isMain){
+ const exp=original.apply(this,arguments);
+ try{
+  if(request==='express'&&typeof exp==='function'&&!exp.__step7_wrapped){
+   const wrapped=function(){
+    const app=exp();
+    const originalListen=app.listen;
+    let installed=false;
+    app.listen=function(...args){
+     if(!installed){
+      const {installStep7ReadGateway}=require('./personal-os-step7-read-gateway');
+      const {GoogleAdsApi}=require('google-ads-api');
+      const {getGoogleDateRange,DEFAULT_GOOGLE_TIMEZONE}=require('./google-time-utils');
+      function customer(){
+       const client=new GoogleAdsApi({client_id:process.env.GOOGLE_CLIENT_ID,client_secret:process.env.GOOGLE_CLIENT_SECRET,developer_token:process.env.GOOGLE_DEVELOPER_TOKEN});
+       const config={customer_id:String(process.env.GOOGLE_CUSTOMER_ID||'').replace(/\D/g,''),refresh_token:process.env.GOOGLE_REFRESH_TOKEN};
+       const login=String(process.env.GOOGLE_LOGIN_CUSTOMER_ID||'').replace(/\D/g,'');
+       if(login)config.login_customer_id=login;
+       return client.Customer(config);
+      }
+      installStep7ReadGateway({app,getGoogleCustomer:customer,getGoogleDateRange,googleTimezone:()=>process.env.GOOGLE_ACCOUNT_TIMEZONE||DEFAULT_GOOGLE_TIMEZONE});
+      installed=true;
+     }
+     return originalListen.apply(app,args);
+    };
+    return app;
+   };
+   Object.assign(wrapped,exp);
+   wrapped.__step7_wrapped=true;
+   return wrapped;
+  }
+ }catch{}
+ return exp;
+};
