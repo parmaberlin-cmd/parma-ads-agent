@@ -6,10 +6,13 @@ const path = require('node:path');
 const scheduler = fs.readFileSync(path.join(__dirname, '..', 'scheduler-bootstrap.js'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
 
-test('production startup uses the read-only Shadow scheduler and Google intelligence preload', () => {
-  assert.equal(pkg.scripts.start, 'node -r ./google-campaign-intelligence-preload.js -r ./meta-legacy-write-preload.js -r ./google-ads-unattended-preload.js scheduler-bootstrap.js');
+test('production startup uses the read-only Shadow scheduler and required preloads', () => {
+  assert.equal(pkg.scripts.start, 'node -r ./personal-os-step7-read-gateway-preload.js -r ./google-campaign-intelligence-preload.js -r ./meta-legacy-write-preload.js -r ./google-ads-unattended-preload.js scheduler-bootstrap.js');
   // The unattended worker preload is inert unless explicitly opted in, so the
-  // production startup command stays write-closed by default.
+  // production startup command stays write-closed by default. STEP7 adds only
+  // the signed read gateway preload and carries no provider-write authority.
+  assert.match(pkg.scripts.check, /personal-os-step7-read-gateway\.js/);
+  assert.match(pkg.scripts.check, /personal-os-step7-read-gateway-preload\.js/);
   assert.match(pkg.scripts.check, /google-ads-unattended-preload\.js/);
   assert.match(pkg.scripts.check, /google-ads-unattended-runner\.js/);
   assert.match(pkg.scripts.check, /google-ads-unattended-job-store\.js/);
