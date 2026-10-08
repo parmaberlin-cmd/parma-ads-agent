@@ -37,7 +37,7 @@ function request(route,method='GET',body){
  return new Promise((resolve,reject)=>{
   const data=body===undefined?null:JSON.stringify(body);
   const req=http.request({hostname:'127.0.0.1',port:server.address().port,path:route,method,headers:data?{'content-type':'application/json','content-length':Buffer.byteLength(data)}:{}},res=>{
-   let text='';res.on('data',chunk=>text+=chunk);res.on('end',()=>resolve({status:res.statusCode,body:text?JSON.parse(text):null}));
+   let text='';res.on('data',chunk=>text+=chunk);res.on('end',()=>resolve({status:res.statusCode,body:text&&res.headers['content-type']?.includes('application/json')?JSON.parse(text):text}));
   });
   req.on('error',reject);if(data)req.write(data);req.end();
  });
