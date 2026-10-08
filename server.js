@@ -2279,6 +2279,9 @@ app.post("/instagram/publications/schedule", requireApiKey, (req, res) => {
 
 registerInstagramMediaHost(app);
 
+// Register STEP7 before the terminal 404 middleware; preload's listen hook is idempotent.
+require('./personal-os-step7-read-gateway-preload').installOnApp(app);
+
 app.use((req, res) => {
   res.status(404).json({
     success: false,
