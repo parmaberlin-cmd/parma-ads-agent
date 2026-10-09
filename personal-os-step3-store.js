@@ -12,9 +12,9 @@ const taskSchema=z.object({
  request_id:ID,
  issued_at:z.string().datetime(),
  workspace:z.literal('personal-os-control'),
- procedure_id:z.enum(['queue.read','queue.status','local.report','repository.test','git.status','git.diff','terminal.canary','browser.read_only','google_ads.read']),
+ procedure_id:z.enum(['queue.read','queue.status','local.report','step7.evidence.read','repository.test','git.status','git.diff','terminal.canary','browser.read_only','google_ads.read']),
  parameters:z.record(z.unknown()),
-}).strict();
+}).strict().refine(task=>task.procedure_id!=='step7.evidence.read'||z.object({request_id:ID}).strict().safeParse(task.parameters).success,{message:'step7_evidence_parameters_invalid'});
 const resultSchema=z.object({
  schema_version:z.literal('personal_os.remote_procedure_result.v1'),
  request_id:ID,status:z.enum(['ACCEPTED','RUNNING','RETRY_WAIT','COMPLETED','FAILED']),
