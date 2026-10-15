@@ -1,0 +1,12 @@
+{
+  "id": "objective-ingress-diagnostic-20261015-01",
+  "objective": "Verify autonomous objective ingress, durable completion and replay protection without commercial provider actions",
+  "tasks": [
+    {
+      "id": "diagnostic-report",
+      "kind": "generate_report",
+      "max_attempts": 1,
+      "idempotency_key": "objective-ingress-diagnostic-20261015-01:diagnostic-report"
+    }
+  ]
+}
