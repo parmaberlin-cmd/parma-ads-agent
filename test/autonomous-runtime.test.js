@@ -70,3 +70,15 @@ test('duplicate objective IDs are rejected without altering state',()=>{
  assert.throws(()=>second.submit({id:'stable-id',objective:'second',tasks:[{id:'b',kind:'generate_report'}]}),{code:'OBJECTIVE_DUPLICATE'});
  assert.deepEqual(readState(file),before);
 });
+
+test('expired lease on delegated write stops for human review',async()=>{
+ const file=tempFile();const now=()=>1700000000000;
+ const r=new AutonomousRuntime({file,now});
+ r.submit({id:'ambiguous',objective:'crash',tasks:[{id:'a',kind:'instagram.publish'}]});
+ const state=readState(file);const task=state.objectives[0].tasks[0];
+ task.status='RUNNING';task.lease={owner:'dead',expires_at:new Date(now()-1).toISOString()};state.objectives[0].status='RUNNING';writeState(state,file,now);
+ let called=0;const restarted=new AutonomousRuntime({file,now,handlers:{'instagram.publish':async()=>{called++;return{validated:true};}}});
+ await restarted.tick();const after=readState(file);
+ assert.equal(called,0);assert.equal(after.objectives[0].status,'NEEDS_HUMAN');
+ assert.equal(after.objectives[0].tasks[0].stop_reason,'ambiguous_execution_after_crash');
+});
