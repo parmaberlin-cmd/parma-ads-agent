@@ -60,3 +60,13 @@ test('kill switch prevents claims',async()=>{
 test('persisted evidence redacts secret-shaped fields',async()=>{
  const file=tempFile(); const r=new AutonomousRuntime({file,handlers:{run_diagnostics:async()=>({validated:true,evidence:{api_key:'do-not-store',note:'ok'}})}}); r.submit({objective:'redact',tasks:[{id:'a',kind:'run_diagnostics'}]}); await r.tick(); const e=readState(file).objectives[0].tasks[0].evidence[0]; assert.equal(e.api_key,'[redacted]'); assert.equal(e.note,'ok');
 });
+
+test('duplicate objective IDs are rejected without altering state',()=>{
+ const file=tempFile();
+ const first=new AutonomousRuntime({file});
+ first.submit({id:'stable-id',objective:'first',tasks:[{id:'a',kind:'run_diagnostics'}]});
+ const before=readState(file);
+ const second=new AutonomousRuntime({file});
+ assert.throws(()=>second.submit({id:'stable-id',objective:'second',tasks:[{id:'b',kind:'generate_report'}]}),{code:'OBJECTIVE_DUPLICATE'});
+ assert.deepEqual(readState(file),before);
+});
