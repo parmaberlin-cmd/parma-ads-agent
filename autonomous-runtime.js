@@ -61,7 +61,7 @@ function selectTask(objective,now=()=>Date.now()){
 }
 function backoffMs(attempt){ return Math.min(15*60*1000, 1000 * (2 ** Math.max(0,attempt-1))); }
 function recoverExpiredLeases(state,now=()=>Date.now()){
-  let recovered=0; for(const o of state.objectives){ if(!ACTIVE.has(o.status))continue; for(const t of o.tasks){ if(t.status==='RUNNING' && (!t.lease?.expires_at || Date.parse(t.lease.expires_at)<=now())){ t.status='PENDING';t.lease=null;t.next_action='retry_after_crash';t.updated_at=nowIso(now);o.status='READY';o.current_task_id=null;o.next_action='recover_crashed_task';audit(state,'task_lease_recovered',{objective_id:o.id,task_id:t.id},now);recovered++; } } } return recovered;
+  let recovered=0; for(const o of state.objectives){ if(!ACTIVE.has(o.status))continue; for(const t of o.tasks){ if(t.status==='RUNNING' && (!t.lease?.expires_at || Date.parse(t.lease.expires_at)<=now())){ const safe=authorizeAutonomy({name:t.kind},{human_approved:false}).action_class==='read_only';t.status=safe?'PENDING':'NEEDS_HUMAN';t.lease=null;t.next_action=safe?'retry_after_crash':'human_review_ambiguous_execution';t.stop_reason=safe?null:'ambiguous_execution_after_crash';t.updated_at=nowIso(now);o.status=safe?'READY':'NEEDS_HUMAN';o.stop_reason=safe?null:t.stop_reason;o.current_task_id=safe?null:t.id;o.next_action=safe?'recover_crashed_task':'human_decision';audit(state,safe?'task_lease_recovered':'task_lease_recovery_blocked',{objective_id:o.id,task_id:t.id},now);recovered++; } } } return recovered;
 }
 function publicSnapshot(state,now=()=>Date.now()){
   const active=state.objectives.find(o=>ACTIVE.has(o.status))||null; const current=active?.tasks.find(t=>t.id===active.current_task_id)||null; const next=active?selectTask(active,now):null;
