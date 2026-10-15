@@ -5,7 +5,7 @@ const crypto=require('node:crypto');
 const {sanitizeEvidence}=require('./autonomous-runtime');
 const TZ='Europe/Berlin';
 const DEFAULT='/tmp/parma-recurring-objectives.json';
-const ALLOWED_RECURRING_KINDS=new Set(['run_diagnostics','generate_report','google_ads.read_campaign','google_ads.propose_changes','google_ads.execution_preflight','google_ads.cycle_plan']);
+const ALLOWED_RECURRING_KINDS=new Set(['run_diagnostics','generate_report','google_ads.read_campaign','google_ads.propose_changes','google_ads.execution_preflight','google_ads.cycle_plan','google_ads.monitor_lunch_campaign']);
 function nowMs(now=Date.now){const value=typeof now==='function'?now():now;const parsed=Number(value);return Number.isFinite(parsed)?parsed:Date.now();}
 function filePath(env=process.env){if(env.RECURRING_OBJECTIVE_STATE_PATH)return env.RECURRING_OBJECTIVE_STATE_PATH;if(env.RAILWAY_VOLUME_MOUNT_PATH)return path.join(env.RAILWAY_VOLUME_MOUNT_PATH,'parma-recurring-objectives.json');return DEFAULT;}
 function empty(){return {version:1,timezone:TZ,schedules:[],emitted:{},last_scan_at:null,updated_at:null};}
