@@ -82,3 +82,16 @@ test('expired lease on delegated write stops for human review',async()=>{
  assert.equal(called,0);assert.equal(after.objectives[0].status,'NEEDS_HUMAN');
  assert.equal(after.objectives[0].tasks[0].stop_reason,'ambiguous_execution_after_crash');
 });
+
+test('controlled delegated and internal actions never dispatch without scoped authority',async()=>{
+ for(const kind of ['instagram.publish','google_ads.execute_authorized','runtime.register_recurring']){
+  const file=tempFile();let calls=0;
+  const runtime=new AutonomousRuntime({file,handlers:{[kind]:async()=>{calls++;return{validated:true};}}});
+  runtime.submit({objective:'authority gate',tasks:[{id:'a',kind}]});
+  await runtime.tick();
+  const objective=readState(file).objectives[0];
+  assert.equal(calls,0,kind);
+  assert.equal(objective.status,'NEEDS_HUMAN',kind);
+  assert.equal(objective.tasks[0].stop_reason,'scoped_authority_not_verified',kind);
+ }
+});
