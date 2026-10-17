@@ -93,5 +93,6 @@ test('controlled delegated and internal actions never dispatch without scoped au
   assert.equal(calls,0,kind);
   assert.equal(objective.status,'NEEDS_HUMAN',kind);
   assert.equal(objective.tasks[0].stop_reason,'scoped_authority_not_verified',kind);
+  assert.equal(objective.stop_reason,'scoped_authority_not_verified',kind);
  }
 });
