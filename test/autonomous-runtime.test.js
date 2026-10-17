@@ -100,3 +100,16 @@ test('controlled delegated and internal actions never dispatch without scoped au
   assert.equal(objective.stop_reason,'scoped_authority_not_verified',kind);
  }
 });
+
+test('independent pending tasks remain sequential while previous handler is in flight',async()=>{
+ const file=tempFile();let release;
+ const gate=new Promise(resolve=>{release=resolve;});const called=[];
+ const handler=async({task})=>{called.push(task.id);if(task.id==='a')await gate;return{validated:true,evidence:{ok:true}};};
+ const first=new AutonomousRuntime({file,handlers:{run_diagnostics:handler},leaseMs:60000});
+ const second=new AutonomousRuntime({file,handlers:{run_diagnostics:handler},leaseMs:60000});
+ first.submit({id:'sequential',objective:'sequential',tasks:[{id:'a',kind:'run_diagnostics'},{id:'b',kind:'run_diagnostics'}]});
+ const inflight=first.tick();await new Promise(resolve=>setImmediate(resolve));
+ await second.tick();assert.deepEqual(called,['a']);
+ const state=readState(file);assert.equal(state.objectives[0].tasks[1].status,'PENDING');
+ release();await inflight;await second.tick();assert.deepEqual(called,['a','b']);
+});
