@@ -159,6 +159,8 @@ test('scheduler conflicting objective ID blocks reconciliation with durable NEED
  assert.ok(after.audit.some(entry=>entry.event==='scheduler_replay_blocked'));
  assert.equal(scheduler.snapshot().reconciliation_blockers[0].status,'NEEDS_HUMAN');
  scheduler.tick();assert.equal(submits,1);
+ const nextDay=new RecurringObjectiveScheduler({runtime,file,now:()=>now+24*60*60*1000,maxRecoveryMinutes:10});
+ nextDay.tick();assert.equal(submits,1,'conflicted schedule must not emit future slots');
 });
 
 test('scheduler duplicate lookup unavailable fails closed without claiming recovery',()=>{
