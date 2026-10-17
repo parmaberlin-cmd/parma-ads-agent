@@ -5,6 +5,7 @@ const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
 const {read,write,RecurringObjectiveScheduler}=require('../recurring-objective-scheduler');
+const {normalizeObjective}=require('../autonomous-runtime');
 const {reconcileRecurringBootstrap,desiredSchedule}=require('../recurring-objective-bootstrap');
 
 function temp(){return path.join(fs.mkdtempSync(path.join(os.tmpdir(),'parma-recurring-bootstrap-')),'recurring.json');}
@@ -133,7 +134,7 @@ test('restart reconciles objective already submitted before emission marker was 
  const schedule={id:'replay',enabled:true,timezone:'Europe/Berlin',cadence:{type:'daily',hour:8,minute:0},objective_template:{objective:'offline',tasks:[{id:'a',kind:'run_diagnostics'}]}};
  const state=read(file);state.schedules.push(schedule);state.last_scan_at='2026-09-06T05:58:00.000Z';write(state,file);
  let submissions=0;
- const runtime={submit:()=>{submissions++;const error=new Error('already submitted');error.code='OBJECTIVE_DUPLICATE';throw error;}};
+ const runtime={submit:()=>{submissions++;const error=new Error('already submitted');error.code='OBJECTIVE_DUPLICATE';throw error;},getObjective:id=>normalizeObjective({id,objective:schedule.objective_template.objective,tasks:schedule.objective_template.tasks})};
  const scheduler=new RecurringObjectiveScheduler({runtime,file,now:()=>now,maxRecoveryMinutes:10});
  assert.deepEqual(scheduler.tick(),[]);
  const recovered=read(file);
@@ -141,4 +142,29 @@ test('restart reconciles objective already submitted before emission marker was 
  assert.equal(Object.keys(recovered.emitted).length,1);
  assert.equal(Object.values(recovered.emitted)[0].recovered_duplicate,true);
  scheduler.tick();assert.equal(submissions,1);
+});
+
+test('scheduler conflicting objective ID blocks reconciliation with durable NEEDS_HUMAN audit',()=>{
+ const file=temp(),now=Date.parse('2026-09-06T06:01:00.000Z');
+ const schedule={id:'conflict',enabled:true,timezone:'Europe/Berlin',cadence:{type:'daily',hour:8,minute:0},objective_template:{objective:'expected',tasks:[{id:'a',kind:'run_diagnostics'}]}};
+ const state=read(file);state.schedules.push(schedule);state.last_scan_at='2026-09-06T05:58:00.000Z';write(state,file);
+ let submits=0;
+ const runtime={submit:()=>{submits++;const e=new Error('duplicate');e.code='OBJECTIVE_DUPLICATE';throw e;},getObjective:id=>normalizeObjective({id,objective:'different',tasks:[{id:'a',kind:'run_diagnostics'}]})};
+ const scheduler=new RecurringObjectiveScheduler({runtime,file,now:()=>now,maxRecoveryMinutes:10});
+ assert.deepEqual(scheduler.tick(),[]);
+ const after=read(file),marker=Object.values(after.emitted)[0];
+ assert.equal(marker.status,'NEEDS_HUMAN');
+ assert.equal(marker.reason,'scheduler_objective_payload_unverified');
+ assert.equal(marker.recovered_duplicate,undefined);
+ assert.ok(after.audit.some(entry=>entry.event==='scheduler_replay_blocked'));
+ scheduler.tick();assert.equal(submits,1);
+});
+
+test('scheduler duplicate lookup unavailable fails closed without claiming recovery',()=>{
+ const file=temp(),now=Date.parse('2026-09-06T06:01:00.000Z');
+ const schedule={id:'unverified',enabled:true,cadence:{type:'daily',hour:8,minute:0},objective_template:{objective:'expected',tasks:[{id:'a',kind:'run_diagnostics'}]}};
+ const state=read(file);state.schedules.push(schedule);state.last_scan_at='2026-09-06T05:58:00.000Z';write(state,file);
+ const runtime={submit:()=>{const e=new Error('duplicate');e.code='OBJECTIVE_DUPLICATE';throw e;}};
+ new RecurringObjectiveScheduler({runtime,file,now:()=>now,maxRecoveryMinutes:10}).tick();
+ assert.equal(Object.values(read(file).emitted)[0].status,'NEEDS_HUMAN');
 });
