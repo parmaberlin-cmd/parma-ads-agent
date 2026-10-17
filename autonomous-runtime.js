@@ -83,6 +83,8 @@ class AutonomousRuntime {
     const claim=withLockedState(this.file,s=>{
       recoverExpiredLeases(s,this.now); s.runner.heartbeat_at=nowIso(this.now); if(s.runner.kill_switch){s.runner.status='STOPPED'; return null;} s.runner.status='RUNNING';
       const obj=s.objectives.find(o=>ACTIVE.has(o.status)); if(!obj) return null;
+      // Exactly one in-flight task per objective; another tick must not claim the next task.
+      if(obj.tasks.some(t=>t.status==='RUNNING'))return null;
       let task=selectTask(obj,this.now); if(!task){ if(obj.tasks.every(t=>t.status==='DONE')){obj.status='DONE';obj.stop_reason='objective_verified';obj.completed_at=nowIso(this.now);obj.updated_at=nowIso(this.now);obj.current_task_id=null;obj.next_action=null;audit(s,'objective_done',{objective_id:obj.id},this.now);} return null; }
       const auth=authorizeAutonomy({name:task.kind},{kill_switch:s.runner.kill_switch,human_approved:false});
       audit(s,'delegation_decision',{objective_id:obj.id,task_id:task.id,allowed:auth.allowed,reason:auth.reason,action_class:auth.action_class},this.now);
