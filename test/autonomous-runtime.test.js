@@ -19,6 +19,10 @@ test('expired in-flight lease is recovered after crash',async()=>{
  const recovered=new AutonomousRuntime({file,now,handlers:{run_diagnostics:async()=>({validated:true,evidence:{recovered:true}})}}); await drain(recovered,2); const out=readState(file,now); assert.equal(out.objectives[0].status,'DONE'); assert.ok(out.audit.some(x=>x.type==='task_lease_recovered'));
 });
 
+test('unknown expired in-flight lease fails closed after crash',async()=>{
+ const file=tempFile();const now=()=>1700000000000;const seed=new AutonomousRuntime({file,now});seed.submit({id:'unknown-crash',objective:'unknown crash',tasks:[{id:'a',kind:'not_registered'}]});const state=readState(file,now);const task=state.objectives[0].tasks[0];task.status='RUNNING';task.lease={owner:'dead-worker',expires_at:new Date(now()-1).toISOString()};state.objectives[0].status='RUNNING';state.objectives[0].current_task_id='a';writeState(state,file,now);let called=0;const restarted=new AutonomousRuntime({file,now,handlers:{not_registered:async()=>{called++;return{validated:true};}}});await restarted.tick();const out=readState(file,now);assert.equal(called,0);assert.equal(out.objectives[0].status,'NEEDS_HUMAN');assert.equal(out.objectives[0].tasks[0].stop_reason,'ambiguous_execution_after_crash');assert.ok(out.audit.some(x=>x.type==='task_lease_recovery_blocked'));
+});
+
 test('transient error persists retry/backoff then succeeds',async()=>{
  const file=tempFile(); let ms=1_700_000_000_000; let calls=0; const now=()=>ms;
  const r=new AutonomousRuntime({file,now,handlers:{run_diagnostics:async()=>{calls++;if(calls===1){const e=new Error('temporary');e.status=503;throw e;}return{validated:true,evidence:{ok:true}};}}});
