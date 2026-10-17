@@ -157,6 +157,7 @@ test('scheduler conflicting objective ID blocks reconciliation with durable NEED
  assert.equal(marker.reason,'scheduler_objective_payload_unverified');
  assert.equal(marker.recovered_duplicate,undefined);
  assert.ok(after.audit.some(entry=>entry.event==='scheduler_replay_blocked'));
+ assert.equal(scheduler.snapshot().reconciliation_blockers[0].status,'NEEDS_HUMAN');
  scheduler.tick();assert.equal(submits,1);
 });
 
