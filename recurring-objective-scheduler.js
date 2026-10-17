@@ -41,7 +41,7 @@ class RecurringObjectiveScheduler{
  state.emitted[key]={objective_id:objectiveId,emitted_at:new Date(nowMs).toISOString(),recovered_duplicate:true};
  state.audit=(state.audit||[]).slice(-999);state.audit.push({at:new Date(nowMs).toISOString(),event:'scheduler_duplicate_reconciled',objective_id:objectiveId,slot:key});
  schedule.last_slot=local;continue;
-}if(e.code!=='STATE_LOCK_BUSY')throw e;}}}state.last_scan_at=new Date(current).toISOString();const keys=Object.keys(state.emitted).sort();if(keys.length>1000)for(const k of keys.slice(0,keys.length-1000))delete state.emitted[k];write(state,this.file);return emitted;}
+}throw e;}}}state.last_scan_at=new Date(current).toISOString();const keys=Object.keys(state.emitted).sort();if(keys.length>1000)for(const k of keys.slice(0,keys.length-1000))delete state.emitted[k];write(state,this.file);return emitted;}
  start(){if(this.timer)return;try{this.tick();this.state_error=null;}catch(error){this.state_error=String(error?.message||'recurring_tick_failed').slice(0,120);}this.timer=setInterval(()=>{try{this.tick();this.state_error=null;}catch(error){this.state_error=String(error?.message||'recurring_tick_failed').slice(0,120);}},this.scanMs);if(this.timer.unref)this.timer.unref();}
  stop(){if(this.timer)clearInterval(this.timer);this.timer=null;}
 }
