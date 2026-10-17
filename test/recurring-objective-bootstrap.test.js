@@ -168,3 +168,16 @@ test('scheduler duplicate lookup unavailable fails closed without claiming recov
  new RecurringObjectiveScheduler({runtime,file,now:()=>now,maxRecoveryMinutes:10}).tick();
  assert.equal(Object.values(read(file).emitted)[0].status,'NEEDS_HUMAN');
 });
+
+test('scheduler lock contention does not advance scan cursor or drop scheduled task',()=>{
+ const file=temp(),now=Date.parse('2026-09-06T06:01:00.000Z');
+ const schedule={id:'lock-busy',enabled:true,cadence:{type:'daily',hour:8,minute:0},objective_template:{objective:'lock test',tasks:[{id:'a',kind:'run_diagnostics'}]}};
+ const state=read(file);state.schedules.push(schedule);state.last_scan_at='2026-09-06T05:58:00.000Z';write(state,file);
+ let calls=0;
+ const runtime={submit:()=>{calls++;if(calls===1){const e=new Error('lock busy');e.code='STATE_LOCK_BUSY';throw e;}return{status:'READY'};}};
+ const scheduler=new RecurringObjectiveScheduler({runtime,file,now:()=>now,maxRecoveryMinutes:10});
+ assert.throws(()=>scheduler.tick(),{code:'STATE_LOCK_BUSY'});
+ assert.equal(read(file).last_scan_at,'2026-09-06T05:58:00.000Z');
+ const emitted=scheduler.tick();assert.equal(calls,2);assert.equal(emitted.length,1);
+ assert.equal(Object.keys(read(file).emitted).length,1);
+});
