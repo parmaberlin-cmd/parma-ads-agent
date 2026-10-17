@@ -126,3 +126,19 @@ test('restart continuity keeps one managed schedule and avoids duplicate emissio
   assert.equal(state.schedules.length,1);
   assert.equal(submitted.length,1);
 });
+
+test('restart reconciles objective already submitted before emission marker was persisted',()=>{
+ const file=temp();
+ const now=Date.parse('2026-09-06T06:01:00.000Z');
+ const schedule={id:'replay',enabled:true,timezone:'Europe/Berlin',cadence:{type:'daily',hour:8,minute:0},objective_template:{objective:'offline',tasks:[{id:'a',kind:'run_diagnostics'}]}};
+ const state=read(file);state.schedules.push(schedule);state.last_scan_at='2026-09-06T05:58:00.000Z';write(state,file);
+ let submissions=0;
+ const runtime={submit:()=>{submissions++;const error=new Error('already submitted');error.code='OBJECTIVE_DUPLICATE';throw error;}};
+ const scheduler=new RecurringObjectiveScheduler({runtime,file,now:()=>now,maxRecoveryMinutes:10});
+ assert.deepEqual(scheduler.tick(),[]);
+ const recovered=read(file);
+ assert.equal(submissions,1);
+ assert.equal(Object.keys(recovered.emitted).length,1);
+ assert.equal(Object.values(recovered.emitted)[0].recovered_duplicate,true);
+ scheduler.tick();assert.equal(submissions,1);
+});
