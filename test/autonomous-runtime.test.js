@@ -19,6 +19,10 @@ test('expired in-flight lease is recovered after crash',async()=>{
  const recovered=new AutonomousRuntime({file,now,handlers:{run_diagnostics:async()=>({validated:true,evidence:{recovered:true}})}}); await drain(recovered,2); const out=readState(file,now); assert.equal(out.objectives[0].status,'DONE'); assert.ok(out.audit.some(x=>x.type==='task_lease_recovered'));
 });
 
+test('unknown expired in-flight lease fails closed after crash',async()=>{
+ const file=tempFile();const now=()=>1700000000000;const seed=new AutonomousRuntime({file,now});seed.submit({id:'unknown-crash',objective:'unknown crash',tasks:[{id:'a',kind:'not_registered'}]});const state=readState(file,now);const task=state.objectives[0].tasks[0];task.status='RUNNING';task.lease={owner:'dead-worker',expires_at:new Date(now()-1).toISOString()};state.objectives[0].status='RUNNING';state.objectives[0].current_task_id='a';writeState(state,file,now);let called=0;const restarted=new AutonomousRuntime({file,now,handlers:{not_registered:async()=>{called++;return{validated:true};}}});await restarted.tick();const out=readState(file,now);assert.equal(called,0);assert.equal(out.objectives[0].status,'NEEDS_HUMAN');assert.equal(out.objectives[0].tasks[0].stop_reason,'ambiguous_execution_after_crash');assert.ok(out.audit.some(x=>x.type==='task_lease_recovery_blocked'));
+});
+
 test('transient error persists retry/backoff then succeeds',async()=>{
  const file=tempFile(); let ms=1_700_000_000_000; let calls=0; const now=()=>ms;
  const r=new AutonomousRuntime({file,now,handlers:{run_diagnostics:async()=>{calls++;if(calls===1){const e=new Error('temporary');e.status=503;throw e;}return{validated:true,evidence:{ok:true}};}}});
@@ -59,4 +63,53 @@ test('kill switch prevents claims',async()=>{
 
 test('persisted evidence redacts secret-shaped fields',async()=>{
  const file=tempFile(); const r=new AutonomousRuntime({file,handlers:{run_diagnostics:async()=>({validated:true,evidence:{api_key:'do-not-store',note:'ok'}})}}); r.submit({objective:'redact',tasks:[{id:'a',kind:'run_diagnostics'}]}); await r.tick(); const e=readState(file).objectives[0].tasks[0].evidence[0]; assert.equal(e.api_key,'[redacted]'); assert.equal(e.note,'ok');
+});
+
+test('duplicate objective IDs are rejected without altering state',()=>{
+ const file=tempFile();
+ const first=new AutonomousRuntime({file});
+ first.submit({id:'stable-id',objective:'first',tasks:[{id:'a',kind:'run_diagnostics'}]});
+ const before=readState(file);
+ const second=new AutonomousRuntime({file});
+ assert.throws(()=>second.submit({id:'stable-id',objective:'second',tasks:[{id:'b',kind:'generate_report'}]}),{code:'OBJECTIVE_DUPLICATE'});
+ assert.deepEqual(readState(file),before);
+});
+
+test('expired lease on delegated write stops for human review',async()=>{
+ const file=tempFile();const now=()=>1700000000000;
+ const r=new AutonomousRuntime({file,now});
+ r.submit({id:'ambiguous',objective:'crash',tasks:[{id:'a',kind:'instagram.publish'}]});
+ const state=readState(file);const task=state.objectives[0].tasks[0];
+ task.status='RUNNING';task.lease={owner:'dead',expires_at:new Date(now()-1).toISOString()};state.objectives[0].status='RUNNING';writeState(state,file,now);
+ let called=0;const restarted=new AutonomousRuntime({file,now,handlers:{'instagram.publish':async()=>{called++;return{validated:true};}}});
+ await restarted.tick();const after=readState(file);
+ assert.equal(called,0);assert.equal(after.objectives[0].status,'NEEDS_HUMAN');
+ assert.equal(after.objectives[0].tasks[0].stop_reason,'ambiguous_execution_after_crash');
+});
+
+test('controlled delegated and internal actions never dispatch without scoped authority',async()=>{
+ for(const kind of ['instagram.publish','google_ads.execute_authorized','runtime.register_recurring']){
+  const file=tempFile();let calls=0;
+  const runtime=new AutonomousRuntime({file,handlers:{[kind]:async()=>{calls++;return{validated:true};}}});
+  runtime.submit({objective:'authority gate',tasks:[{id:'a',kind}]});
+  await runtime.tick();
+  const objective=readState(file).objectives[0];
+  assert.equal(calls,0,kind);
+  assert.equal(objective.status,'NEEDS_HUMAN',kind);
+  assert.equal(objective.tasks[0].stop_reason,'scoped_authority_not_verified',kind);
+  assert.equal(objective.stop_reason,'scoped_authority_not_verified',kind);
+ }
+});
+
+test('independent pending tasks remain sequential while previous handler is in flight',async()=>{
+ const file=tempFile();let release;
+ const gate=new Promise(resolve=>{release=resolve;});const called=[];
+ const handler=async({task})=>{called.push(task.id);if(task.id==='a')await gate;return{validated:true,evidence:{ok:true}};};
+ const first=new AutonomousRuntime({file,handlers:{run_diagnostics:handler},leaseMs:60000});
+ const second=new AutonomousRuntime({file,handlers:{run_diagnostics:handler},leaseMs:60000});
+ first.submit({id:'sequential',objective:'sequential',tasks:[{id:'a',kind:'run_diagnostics'},{id:'b',kind:'run_diagnostics'}]});
+ const inflight=first.tick();await new Promise(resolve=>setImmediate(resolve));
+ await second.tick();assert.deepEqual(called,['a']);
+ const state=readState(file);assert.equal(state.objectives[0].tasks[1].status,'PENDING');
+ release();await inflight;await second.tick();assert.deepEqual(called,['a','b']);
 });

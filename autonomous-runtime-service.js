@@ -12,7 +12,7 @@ const { resolveStandingAuthorizations, summary:standingDelegationSummary } = req
 const { executeAuthorized } = require('./google-ads-controlled-gateway');
 const { planNext } = require('./autonomous-cycle-planner');
 const { spawnTasks } = require('./runtime-task-spawner');
-const {RecurringObjectiveScheduler,filePath:recurringFilePath,upsertSchedule}=require('./recurring-objective-scheduler');
+const {RecurringObjectiveScheduler,filePath:recurringFilePath,upsertSchedule,matchesSubmittedObjective}=require('./recurring-objective-scheduler');
 const {reconcileRecurringBootstrap}=require('./recurring-objective-bootstrap');
 const {buildControlTower}=require('./control-tower');
 const {listSpecialists}=require('./specialist-registry');
@@ -73,13 +73,14 @@ const scheduler=new RecurringObjectiveScheduler({runtime,file:recurringFilePath(
 const parseJson = express.json({limit:'64kb'});
 async function oidcReadable(req){try{await verifyIngress(req);return true;}catch{return false;}}
 function validObjective(body){return String(body.objective||'').trim()&&String(body.id||'').trim()&&Array.isArray(body.tasks)&&body.tasks.length>0;}
+function ingressReplayVerified(body,store=runtime){try{return matchesSubmittedObjective(store.getObjective(body.id),{id:body.id,objective:body.objective,tasks:body.tasks});}catch{return false;}}
 function registerAutonomousRuntimeRoutes(app,{authorized}={}){
   app.get('/health/autonomous-runner',(req,res)=>res.json({success:true,...runtime.snapshot(),recurring:scheduler.snapshot()}));
   app.get('/tools/agent/objectives/status',async(req,res)=>{if(!authorized?.(req)&&!(await oidcReadable(req)))return res.status(401).json({success:false,error:'Unauthorized'});return res.json({success:true,...runtime.snapshot(),ingress:ingressSummary(),standing_delegation:standingDelegationSummary(),recurring:scheduler.snapshot()});});
   app.get('/tools/agent/control-tower',async(req,res)=>{if(!authorized?.(req)&&!(await oidcReadable(req)))return res.status(401).json({success:false,error:'Unauthorized'});return res.json({success:true,...buildControlTower({runtimeState:readState(statePath(process.env)),schedulerSnapshot:scheduler.snapshot(),env:process.env})});});
   app.get('/tools/agent/recurring',async(req,res)=>{if(!authorized?.(req)&&!(await oidcReadable(req)))return res.status(401).json({success:false,error:'Unauthorized'});return res.json({success:true,...scheduler.snapshot()});});
   app.post('/tools/agent/objectives',parseJson,(req,res)=>{if(!authorized?.(req))return res.status(401).json({success:false,error:'Unauthorized'});const body=req.body||{};if(!String(body.objective||'').trim()||!Array.isArray(body.tasks)||body.tasks.length===0)return res.status(400).json({success:false,error:'objective_and_tasks_required'});const objective=runtime.submit({objective:body.objective,tasks:body.tasks});return res.status(202).json({success:true,objective_id:objective.id,status:objective.status,task_count:objective.tasks.length});});
-  app.post('/internal/objective-ingress',parseJson,async(req,res)=>{const body=req.body||{};if(!validObjective(body))return res.status(400).json({success:false,error:'id_objective_and_tasks_required'});const gate=await authorizeIngress(req,body,{consume:true});if(!gate.ok)return res.status(gate.status||401).json({success:false,error:gate.error});if(gate.idempotent)return res.status(200).json({success:true,objective_id:body.id,status:'EXISTING',idempotent:true});const objective=runtime.submit({id:body.id,objective:body.objective,tasks:body.tasks});return res.status(202).json({success:true,objective_id:objective.id,status:objective.status,task_count:objective.tasks.length,issuer:'github-actions-oidc'});});
+  app.post('/internal/objective-ingress',parseJson,async(req,res)=>{const body=req.body||{};if(!validObjective(body))return res.status(400).json({success:false,error:'id_objective_and_tasks_required'});const gate=await authorizeIngress(req,body,{consume:true});if(!gate.ok)return res.status(gate.status||401).json({success:false,error:gate.error});if(gate.idempotent){if(!ingressReplayVerified(body))return res.status(409).json({success:false,status:'NEEDS_HUMAN',error:'ingress_objective_replay_unverified'});return res.status(200).json({success:true,objective_id:body.id,status:'EXISTING',idempotent:true});}try{const objective=runtime.submit({id:body.id,objective:body.objective,tasks:body.tasks});return res.status(202).json({success:true,objective_id:objective.id,status:objective.status,task_count:objective.tasks.length,issuer:'github-actions-oidc'});}catch(error){if(error?.code==='OBJECTIVE_DUPLICATE')return res.status(409).json({success:false,status:'NEEDS_HUMAN',error:'ingress_objective_id_conflict'});if(error?.code==='STATE_LOCK_BUSY')return res.status(503).json({success:false,error:'runtime_state_lock_busy'});throw error;}});
   app.post('/tools/agent/objectives/kill-switch',parseJson,(req,res)=>{if(!authorized?.(req))return res.status(401).json({success:false,error:'Unauthorized'});if(typeof req.body?.active!=='boolean')return res.status(400).json({success:false,error:'boolean_active_required'});runtime.setKillSwitch(req.body.active);return res.json({success:true,active:req.body.active});});
 }
 function startAutonomousRuntime(){
@@ -92,4 +93,4 @@ function startAutonomousRuntime(){
   scheduler.start();
   return runtime;
 }
-module.exports={runtime,scheduler,registerAutonomousRuntimeRoutes,startAutonomousRuntime,localHandlers,taskDateRange};
+module.exports={runtime,scheduler,registerAutonomousRuntimeRoutes,startAutonomousRuntime,localHandlers,taskDateRange,ingressReplayVerified};

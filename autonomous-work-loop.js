@@ -10,13 +10,15 @@ function dependenciesMet(task, tasks){ return task.depends_on.every(id=>tasks.so
 function nextTask(state={}) { const tasks=(state.tasks||[]).map(normalizeTask); return tasks.find(t=>t.status==='pending'&&dependenciesMet(t,tasks))||null; }
 function decisionQuestions({task,context={}}={}){
  const authorization=authorizeAutonomy({name:task?.kind},{...context,human_approved:false});
+ const scopedAuthorityMissing=authorization.standing_delegation_required===true||authorization.action_class==='controlled_internal';
  return {
   data_sufficient: context.data_sufficient!==false,
   fresh_enough: context.fresh_enough!==false,
   source_healthy: context.source_healthy!==false,
   safe_kind: SAFE_KINDS.has(task?.kind),
   authorization,
-  needs_human: !authorization.allowed,
+  scoped_authority_missing:scopedAuthorityMissing,
+  needs_human: !authorization.allowed||scopedAuthorityMissing,
   external_blocker: Boolean(context.external_blocker),
  };
 }
@@ -24,7 +26,7 @@ function decide(state={},context={}){
  const task=nextTask(state); if(!task)return{state:STATES.DONE,task:null,reason:'no_runnable_tasks'};
  const q=decisionQuestions({task,context});
  if(q.external_blocker)return{state:STATES.BLOCKED_EXTERNAL,task,reason:'external_blocker',questions:q};
- if(q.needs_human)return{state:STATES.NEEDS_HUMAN,task,reason:q.authorization.reason,questions:q};
+ if(q.needs_human)return{state:STATES.NEEDS_HUMAN,task,reason:q.scoped_authority_missing?'scoped_authority_not_verified':q.authorization.reason,questions:q};
  if(!q.data_sufficient||!q.fresh_enough||!q.source_healthy)return{state:STATES.VALIDATE_L2,task,reason:'live_evidence_required',questions:q};
  return{state:STATES.EXECUTE,task,reason:'safe_autonomous_task',questions:q};
 }
